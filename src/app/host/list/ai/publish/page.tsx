@@ -46,7 +46,9 @@ function toCreateListingPayload(userId: string, g: AiGeneratedListing) {
     state: g.state,
     postalCode: g.postalCode,
     propertyType: (g.propertyType || '').toLowerCase().trim() || 'apartment',
-    stayType: 'entire',
+    stayType: g.stayType || 'entire',
+    houseRules: g.houseRules,
+    requireMinimumPhotos: true,
   };
 }
 
