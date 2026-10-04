@@ -7,6 +7,8 @@ import { Toaster } from 'sonner';
 import { NotificationProvider } from '@/context/NotificationContext';
 // import { Analytics } from '@vercel/analytics/next';
 
+const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.hostiggo.com').replace(/\/$/, '');
+
 // Figma "Website Guest UI/UX" uses Poppins (Regular/Medium/SemiBold/Bold)
 // throughout -- this replaces the never-actually-loaded "Inter" fallback.
 const poppins = Poppins({
@@ -17,8 +19,71 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: 'Hostiggo - Find Your Perfect Stay',
-  description: 'Discover unique homestays and stays across India',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: 'Hostiggo | Homestays & Unique Stays in India',
+    template: '%s | Hostiggo',
+  },
+  description:
+    'Book verified homestays, family-friendly stays, and unique properties across India with transparent pricing, secure payments, and easy host support.',
+  applicationName: 'Hostiggo',
+  keywords: [
+    'homestays in India',
+    'holiday homes',
+    'vacation rentals India',
+    'hostiggo',
+    'book stay India',
+    'verified homestays',
+    'rental properties India',
+  ],
+  alternates: {
+    canonical: '/',
+    languages: {
+      'en-IN': '/',
+    },
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_IN',
+    url: siteUrl,
+    siteName: 'Hostiggo',
+    title: 'Hostiggo | Homestays & Unique Stays in India',
+    description:
+      'Discover verified stays, vacation homes, and local experiences across India with secure booking and transparent policies.',
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'Hostiggo home page preview',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    site: '@hostiggo',
+    creator: '@hostiggo',
+    title: 'Hostiggo | Homestays & Unique Stays in India',
+    description:
+      'Discover verified stays, vacation homes, and local experiences across India with secure booking and transparent policies.',
+    images: ['/twitter-image'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+    apple: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({
