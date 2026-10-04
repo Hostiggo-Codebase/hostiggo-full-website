@@ -4,7 +4,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 
 export const metadata = {
-  title: "Help Centre · Hostiggo",
+  title: "Help Centre",
   description:
     "Guides for hosts and guests: payouts, identity verification, removing a listing, chat guidelines, add-ons and refunds.",
 };

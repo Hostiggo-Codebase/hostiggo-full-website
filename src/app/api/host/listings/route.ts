@@ -61,6 +61,9 @@ function validateListingDraft(d: Record<string, any>): string | null {
   if (!description || description.length > 5000) {
     return "Add a description (up to 5000 characters).";
   }
+  if (d.requireMinimumPhotos && (!Array.isArray(d.photoUrls) || d.photoUrls.length < 3)) {
+    return "Add at least 3 photos before publishing.";
+  }
   for (const [label, value] of [["Weekday price", d.priceWeekday], ["Weekend price", d.priceWeekend]] as const) {
     if (value == null || value === "") continue;
     const n = Number(value);

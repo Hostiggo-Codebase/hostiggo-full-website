@@ -52,11 +52,12 @@ describe("detectContactSharing -- keeps bookings on-platform", () => {
 });
 
 describe("formatters", () => {
-  it("shows two decimals only when there are paise (audit BUG-022)", () => {
+  it("always shows two decimals", () => {
     expect(formatINR(57.6)).toBe("₹57.60");
     expect(formatINR(4577.6)).toBe("₹4,577.60");
-    expect(formatINR(4000)).toBe("₹4,000");
-    expect(formatINR(125000)).toBe("₹1,25,000");
+    expect(formatINR(4000)).toBe("₹4,000.00");
+    expect(formatINR(125000)).toBe("₹1,25,000.00");
+    expect(formatINR(-12.5)).toBe("-₹12.50");
   });
   it("formats check-in times", () => {
     expect(formatTime12h("14:00:00")).toBe("2:00 PM");

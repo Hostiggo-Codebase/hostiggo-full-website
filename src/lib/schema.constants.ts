@@ -1,5 +1,7 @@
 export const SCHEMA = {
-    testingSchema: 'hostiggo_testing_schema',
+    // Single source of truth for the Postgres schema name. Override with
+    // NEXT_PUBLIC_DB_SCHEMA when the database schema is renamed for production.
+    testingSchema: process.env.NEXT_PUBLIC_DB_SCHEMA || 'hostiggo_testing_schema',
     tables: {
         listings: {
             tableName: "listings",

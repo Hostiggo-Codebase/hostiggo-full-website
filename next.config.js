@@ -1,8 +1,46 @@
 /** @type {import('next').NextConfig} */
-// Baseline security headers for every response. No CSP yet: Google Maps,
-// Razorpay Checkout and Supabase need a carefully tuned policy, and a wrong
-// one breaks payments -- add it with a report-only rollout first.
+// Content-Security-Policy, shipped REPORT-ONLY first: Google Maps, Razorpay
+// Checkout and Supabase need a carefully tuned policy and an enforced wrong
+// one breaks payments. Violations are POSTed to /api/csp-report (see server
+// logs). Once a week of real traffic is clean, rename the header below to
+// `Content-Security-Policy` to enforce it.
+const isDev = process.env.NODE_ENV !== 'production';
+const CSP = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://checkout.razorpay.com https://maps.googleapis.com https://va.vercel-scripts.com https://www.googletagmanager.com https://connect.facebook.net`,
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.razorpay.com https://lumberjack.razorpay.com https://vitals.vercel-insights.com https://www.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://www.facebook.com https://connect.facebook.net",
+  "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+  'report-uri /api/csp-report',
+].join('; ');
+
+const PRIVATE_PATHS = [
+  '/api/:path*',
+  '/host/:path*',
+  '/account/:path*',
+  '/kyc/:path*',
+  '/my-memories/:path*',
+  '/wishlist/:path*',
+  '/notifications/:path*',
+  '/chat/:path*',
+  '/onboarding/:path*',
+  '/otp/:path*',
+  '/signin/:path*',
+  '/auth/:path*',
+  '/booking-confirmation/:path*',
+  '/selected-addons/:path*',
+  '/refer/dashboard/:path*',
+];
+
+// Baseline security headers for every response.
 const SECURITY_HEADERS = [
+  { key: 'Content-Security-Policy-Report-Only', value: CSP },
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -15,7 +53,15 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {
-    return [{ source: '/:path*', headers: SECURITY_HEADERS }];
+    return [
+      { source: '/:path*', headers: SECURITY_HEADERS },
+      // Private, transactional and machine-facing areas must never be indexed,
+      // even if something links to them (robots.txt alone only stops crawling).
+      ...PRIVATE_PATHS.map((source) => ({
+        source,
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      })),
+    ];
   },
   images: {
     remotePatterns: [

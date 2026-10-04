@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyRazorpayPayment } from "@/lib/billing/razorpay";
-import { finalizeBookingFromRazorpayOrder } from "@/lib/services/admin-writes";
-import { PAYMENTS_ENABLED } from "@/lib/booking-config";
+import { finalizeBookingFromRazorpayOrder, PaymentRefundedError } from "@/lib/services/admin-writes";
+
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +16,10 @@ export const dynamic = "force-dynamic";
 // the tab right after paying and this callback never fires.
 export async function POST(req: NextRequest) {
   try {
-    if (!PAYMENTS_ENABLED) {
-      return NextResponse.json({ error: "Payments are currently disabled." }, { status: 503 });
-    }
+    // Deliberately NOT gated on PAYMENTS_ENABLED: a guest who already paid
+    // (signature verified below) must still get their booking even if bookings
+    // were switched off while they were in the checkout window. New payments
+    // are stopped earlier, in /api/bookings/reserve.
 
     const body = await req.json().catch(() => null);
     const razorpayOrderId = body?.razorpayOrderId;
@@ -52,6 +53,9 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ data: booking });
   } catch (err: any) {
+    if (err instanceof PaymentRefundedError) {
+      return NextResponse.json({ error: err.message, code: "PAYMENT_REFUNDED" }, { status: 409 });
+    }
     console.error(
       "[/api/bookings/confirm-payment] error:",
       err?.message,

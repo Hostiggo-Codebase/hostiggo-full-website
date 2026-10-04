@@ -28,7 +28,7 @@ const pillars = [
 ];
 
 export const metadata = {
-  title: "Safety Information · Hostiggo",
+  title: "Safety Information",
   description:
     "How Hostiggo keeps guests and hosts safe — identity verification, secure payments, and how to report a concern.",
 };

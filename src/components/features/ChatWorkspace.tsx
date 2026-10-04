@@ -1,5 +1,6 @@
 'use client';
 
+import { SCHEMA } from "@/lib/schema.constants";
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -51,17 +52,10 @@ type Conversation = {
   messages: Message[];
 };
 
-const DEFAULT_PROPERTY_IMAGES = [
-  'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=300&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=300&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=300&auto=format&fit=crop&q=80',
-];
+// Local placeholders only: no stock photos standing in for real people or properties.
+const DEFAULT_PROPERTY_IMAGES = ['/placeholder.svg'];
 
-const DEFAULT_AVATARS = [
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-];
+const DEFAULT_AVATARS = ['/placeholder.svg'];
 
 // NOTE: There used to be hardcoded "sample" conversations here (fake hosts
 // "Sarah Jenkins" / "Michael Chang" and a canned "Hostiggo Support" thread
@@ -751,7 +745,7 @@ export default function ChatWorkspace({
         'postgres_changes',
         {
           event: 'INSERT',
-          schema: 'hostiggo_testing_schema',
+          schema: SCHEMA.testingSchema,
           table: 'chat_messages',
           filter: `user_id=eq.${userId}`,
         },
@@ -761,7 +755,7 @@ export default function ChatWorkspace({
         'postgres_changes',
         {
           event: 'INSERT',
-          schema: 'hostiggo_testing_schema',
+          schema: SCHEMA.testingSchema,
           table: 'chat_messages',
           filter: `host_id=eq.${userId}`,
         },

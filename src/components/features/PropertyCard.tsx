@@ -1,5 +1,6 @@
 "use client";
 
+import { formatINR } from '@/lib/format';
 import { allInNightlyPrice } from "@/lib/billing/invoice";
 import { useAuth } from "@/context/AuthContext";
 import { useWishlist } from "@/hooks/useWishlist";
@@ -112,7 +113,7 @@ export default function PropertyCard({ property }: PropertyCardProps) {
             2-night total nor tax-inclusive. */}
         <div className="-ml-5 flex w-fit items-baseline gap-1.5 bg-white border border-figma-navy/30 border-l-0 pl-4 pr-4 py-2 rounded-r-2xl">
           <span className="text-[18px] font-semibold leading-[1.28] tracking-[0.003em] text-figma-ink whitespace-nowrap">
-            ₹{allInNightlyPrice(property.price).toLocaleString("en-IN")}
+            {formatINR(allInNightlyPrice(property.price))}
           </span>
           <span className="text-[12px] font-normal leading-[1.4] tracking-[0.003em] text-figma-ink/60 whitespace-nowrap">
             / night incl. taxes

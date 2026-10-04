@@ -48,7 +48,7 @@ export default function CapacityPage() {
               className="absolute inset-0 bg-cover bg-center"
               style={{
                 backgroundImage:
-                  "url('https://images.unsplash.com/photo-1600210492493-0946911123ea?w=900&h=600&fit=crop&q=80')",
+                  "url('/images/empty-states/sample-bedroom.jpg')",
               }}
             />
             <div className="absolute bottom-4 left-4 px-4 py-2 rounded-full flex items-center gap-2 bg-white/80 backdrop-blur-md">

@@ -18,15 +18,15 @@ const CHART_BARS = [35, 60, 45, 88, 62, 75, 50, 92];
 // Target of the hero's "Learn More" button (href="#why-hostiggo"), which
 // previously pointed at an anchor that didn't exist on the page, so the
 // button did nothing. Every point here restates something the product
-// already offers/states elsewhere (CTABanner commission offer, the listing
+// already offers/states elsewhere (CTABanner commission line, the listing
 // wizard's Add-ons / Cancellation policy steps, calendar, payouts) -- no
 // new claims.
 const WHY_HOSTIGGO = [
   {
     id: 'commission',
     icon: Percent,
-    title: '0% commission to start',
-    body: 'Your first 10 bookings are commission-free. After that, a low 2% platform commission applies.',
+    title: 'One simple 5% commission',
+    body: 'No listing fee and no monthly charges. Hostiggo keeps 5% of the stay price, and you see your exact payout for every booking before you publish.',
   },
   {
     id: 'add-on-services',

@@ -1,3 +1,4 @@
+import { formatINR } from '@/lib/format';
 import { useAuth } from "@/context/AuthContext";
 import { useListingState } from "@/context/ListingFilterContext";
 import { useWishlist } from "@/hooks/useWishlist";
@@ -34,7 +35,7 @@ export default function PropertyCardList({ property }: PropertyCardListProps) {
   const totalGuests = guests.adults + guests.children;
   // All-in price for one night, same math as the checkout invoice.
   const allInPerNight = allInNightlyPrice(property.price);
-  const feesAndTaxes = Math.max(0, allInPerNight - Math.round(property.price));
+  const feesAndTaxes = Math.max(0, Math.round((allInPerNight - property.price) * 100) / 100);
   const { isAuthenticated, userId } = useAuth();
   const { isSaved } = useWishlist(userId);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -204,7 +205,7 @@ export default function PropertyCardList({ property }: PropertyCardListProps) {
             )}
             {property.originalPrice && (
               <p className="text-[13px] text-figma-ink/40 font-medium line-through mb-0.5">
-                ₹ {allInNightlyPrice(property.originalPrice).toLocaleString("en-IN")}
+                {formatINR(allInNightlyPrice(property.originalPrice))}
               </p>
             )}
             <p
@@ -216,10 +217,10 @@ export default function PropertyCardList({ property }: PropertyCardListProps) {
                 letterSpacing: "0.075px",
               }}
             >
-              ₹ {allInPerNight.toLocaleString("en-IN")}
+              {formatINR(allInPerNight)}
             </p>
             <p className="text-[11px] text-figma-ink/50">
-              per night, incl. ₹ {feesAndTaxes.toLocaleString("en-IN")} taxes &amp; fees
+              per night, incl. {formatINR(feesAndTaxes)} taxes &amp; fees
             </p>
           </div>
         </div>

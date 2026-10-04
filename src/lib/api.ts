@@ -21,7 +21,18 @@ export const AUTH_EMAIL_KEY = "hostiggo:email";
 export const AUTH_ACCESS_TOKEN_KEY = "hostiggo:access-token";
 export const AUTH_REFRESH_TOKEN_KEY = "hostiggo:refresh-token";
 
-type ApiResult<T> = { data?: T; error?: string };
+type ApiResult<T> = { data?: T; error?: string; code?: string };
+
+/** An API error that keeps the server's machine-readable `code` (e.g. PAYMENT_REFUNDED). */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 
 export const getStoredAccessToken = () =>
   typeof window === "undefined" ? null : window.localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
@@ -64,7 +75,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const payload = (await res.json().catch(() => ({}))) as ApiResult<T>;
   if (!res.ok || payload.error) {
-    throw new Error(payload.error || `Request failed: ${res.status}`);
+    throw new ApiError(payload.error || `Request failed: ${res.status}`, payload.code, res.status);
   }
   return payload.data as T;
 }
@@ -516,7 +527,13 @@ export const api = {
       body: JSON.stringify({ action: "deactivate-account", userId }),
     }),
   createListing: (draft: Record<string, any>) =>
-    request<{ listing_id: number; title: string; warnings?: string[] }>(`/api/host/listings`, {
+    request<{
+      listing_id: number;
+      title: string;
+      warnings?: string[];
+      live?: boolean;
+      payoutBlockers?: Array<"kyc" | "bank" | "payout">;
+    }>(`/api/host/listings`, {
       method: "POST",
       body: JSON.stringify(draft),
     }),
@@ -564,6 +581,16 @@ export const api = {
     request<import("@/app/api/host/payment-history/route").PaymentHistoryRow[]>(
       `/api/host/payment-history`,
     ),
+  // Whether the host may have live listings (PAN + bank verified, payout
+  // account created). See src/app/api/host/payout-readiness/route.ts.
+  getPayoutReadiness: () =>
+    request<{
+      ready: boolean;
+      blockers: Array<"kyc" | "bank" | "payout">;
+      kycVerified: boolean;
+      bankVerified: boolean;
+      payoutCreated: boolean;
+    }>(`/api/host/payout-readiness`),
   // Live Razorpay Route onboarding state for the signed-in host. See
   // src/app/api/host/onboarding-status/route.ts.
   getOnboardingStatus: () =>
@@ -616,11 +643,6 @@ export const api = {
     }>(`/api/verify/bank`, {
       method: "POST",
       body: JSON.stringify(payload),
-    }),
-  cancelBooking: (bookingId: string | number, userId: string, reason?: string) =>
-    request<any>(`/api/bookings/cancel`, {
-      method: "POST",
-      body: JSON.stringify({ bookingId, userId, reason }),
     }),
   createReview: (payload: {
     listingId: string | number;
@@ -923,16 +945,6 @@ export const api = {
         pets: guests.pets ?? 0,
       }),
     }),
-  updateBookingStatus: (
-    bookingId: string,
-    status: "pending" | "confirmed" | "cancelled",
-    reason: string | undefined,
-    userId: string,
-  ) =>
-    request<any>("/api/bookings", {
-      method: "PATCH",
-      body: JSON.stringify({ action: "status", bookingId, status, reason, userId }),
-    }),
   getRefundPreview: (bookingId: string | number, userId: string) =>
     request<any>(
       `/api/bookings/refund-preview?bookingId=${encodeURIComponent(String(bookingId))}&userId=${encodeURIComponent(userId)}`,
@@ -941,6 +953,12 @@ export const api = {
     request<any>("/api/bookings/cancel-with-refund", {
       method: "POST",
       body: JSON.stringify({ bookingId, userId, reason }),
+    }),
+  // Re-attempts a refund that failed when the booking was cancelled.
+  retryRefund: (bookingId: string | number) =>
+    request<any>("/api/bookings/cancel-with-refund", {
+      method: "POST",
+      body: JSON.stringify({ bookingId, action: "retry-refund" }),
     }),
   // iCal integration
   registerICalFeed: (payload: { listingId: string | number; icalUrl: string; action: "add" | "update" | "deactivate"; userId: string }) =>

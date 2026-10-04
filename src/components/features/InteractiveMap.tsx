@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { StarIcon, X, CheckCircle, Navigation } from 'lucide-react';
@@ -348,11 +349,11 @@ export default function InteractiveMap({
               <div className="text-right flex-shrink-0">
                 {selectedProperty.originalPrice && (
                   <p className="text-[10px] text-gray-400 line-through">
-                    ₹{selectedProperty.originalPrice.toLocaleString('en-IN')}
+                    {formatINR(selectedProperty.originalPrice)}
                   </p>
                 )}
                 <p className="text-[16px] font-extrabold text-figma-navy/90 leading-none">
-                  ₹{selectedProperty.price.toLocaleString('en-IN')}
+                  {formatINR(selectedProperty.price)}
                 </p>
                 <p className="text-[9px] text-gray-400 font-medium">
                   per night

@@ -1,3 +1,4 @@
+import { formatINR } from '@/lib/format';
 import { supabase, supabaseCacheable } from '../supabase';
 import { todayInIndia } from "@/lib/booking-config";
 import { supabaseAdmin } from '../supabase-admin';
@@ -490,7 +491,7 @@ export const HotelServiceApi = {
   },
 
   formatPrice: (price: number): string => {
-    return `₹${price.toLocaleString('en-IN')}`;
+    return `${formatINR(price)}`;
   },
 
   getHotelDetail: async (id: string) => {

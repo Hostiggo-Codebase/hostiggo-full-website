@@ -125,8 +125,10 @@ export function ListingDraftProvider({ children }: { children: ReactNode }) {
       if (result.warnings?.length) {
         toast.success('Listing created, but with some issues.');
         result.warnings.forEach((w) => toast.error(w));
+      } else if (result.live === false) {
+        toast.success('Listing saved. It goes live once your payout setup is complete.');
       } else {
-        toast.success('Listing created! It will appear once reviewed.');
+        toast.success('Your listing is live!');
       }
       router.push('/host/listings?created=1');
     } catch (err) {

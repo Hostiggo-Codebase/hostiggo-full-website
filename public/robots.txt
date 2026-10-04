@@ -1,16 +1,21 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
+# Public pages (home, search, listings, help, legal) are crawlable. Everything
+# private, transactional or machine-facing is not.
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /host/
+Disallow: /account/
+Disallow: /kyc
+Disallow: /my-memories
+Disallow: /wishlist
+Disallow: /notifications
+Disallow: /chat
+Disallow: /onboarding
+Disallow: /otp
+Disallow: /signin
+Disallow: /auth/
+Disallow: /booking-confirmation/
+Disallow: /selected-addons
+Disallow: /refer/dashboard
 
 Sitemap: https://www.hostiggo.com/sitemap.xml

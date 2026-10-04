@@ -1,7 +1,7 @@
 import HelpArticle, { A, List, Note, P } from "@/components/help/HelpArticle";
 
 export const metadata = {
-  title: "Cancellations & Refunds · Hostiggo Help",
+  title: "Cancellations & Refunds · Help",
   description: "Exactly how Hostiggo calculates refunds under the Flexible, Moderate and Strict cancellation policies.",
 };
 

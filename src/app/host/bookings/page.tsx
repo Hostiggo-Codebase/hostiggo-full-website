@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
@@ -198,7 +199,7 @@ export default function BookingsPage() {
                 </div>
                 <div className="flex items-center gap-3 text-gray-700 font-semibold">
                   <IndianRupee className="w-5 h-5 shrink-0 text-gray-500" />
-                  <span className="text-sm">₹{b.amount.toLocaleString('en-IN')}</span>
+                  <span className="text-sm">{formatINR(b.amount)}</span>
                 </div>
               </div>
               <Link

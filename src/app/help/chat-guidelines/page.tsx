@@ -1,7 +1,7 @@
 import HelpArticle, { A, List, Note, P } from "@/components/help/HelpArticle";
 
 export const metadata = {
-  title: "Chat Guidelines · Hostiggo Help",
+  title: "Chat Guidelines · Help",
   description: "How guest and host messaging works on Hostiggo, and the rules for using it.",
 };
 

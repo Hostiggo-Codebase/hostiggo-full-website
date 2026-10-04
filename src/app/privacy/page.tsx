@@ -89,7 +89,7 @@ Hostiggo will make reasonable efforts to address grievances and data-related req
 ];
 
 export const metadata = {
-  title: "Privacy Policy · Hostiggo",
+  title: "Privacy Policy",
   description:
     "How Hostiggo collects, uses, stores, and protects your personal data in accordance with applicable Indian laws.",
 };

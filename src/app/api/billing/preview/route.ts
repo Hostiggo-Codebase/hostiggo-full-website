@@ -1,3 +1,4 @@
+import { formatINR } from '@/lib/format';
 import { NextRequest, NextResponse } from "next/server";
 import { calculateBookingInvoice } from "@/lib/billing/invoice";
 import { calculateHostPayout } from "@/lib/billing/payout";
@@ -27,18 +28,18 @@ export async function GET(req: NextRequest) {
       guestInvoice: {
         lineItems: invoice.lineItems.map((li) => ({
           label: li.label,
-          amount: `₹${(li.amountPaise / 100).toLocaleString("en-IN")}`,
+          amount: `${formatINR((li.amountPaise / 100))}`,
           gstRate: `${(li.gstRate * 100).toFixed(0)}%`,
-          gst: `₹${(li.gstAmountPaise / 100).toLocaleString("en-IN")}`,
+          gst: `${formatINR((li.gstAmountPaise / 100))}`,
         })),
-        grandTotal: `₹${invoice.grandTotalRupees.toLocaleString("en-IN")}`,
+        grandTotal: `${formatINR(invoice.grandTotalRupees)}`,
       },
       hostPayout: {
-        payoutBase: `₹${(payout.payoutBasePaise / 100).toLocaleString("en-IN")}`,
-        commission: `₹${(payout.commissionPaise / 100).toLocaleString("en-IN")} (5%)`,
-        tcs: `₹${(payout.tcsPaise / 100).toLocaleString("en-IN")} (1%)`,
-        tds: `₹${(payout.tdsPaise / 100).toLocaleString("en-IN")} (1%)`,
-        netHostPayout: `₹${payout.netHostPayoutRupees.toLocaleString("en-IN")}`,
+        payoutBase: `${formatINR((payout.payoutBasePaise / 100))}`,
+        commission: `${formatINR((payout.commissionPaise / 100))} (5%)`,
+        tcs: `${formatINR((payout.tcsPaise / 100))} (1%)`,
+        tds: `${formatINR((payout.tdsPaise / 100))} (1%)`,
+        netHostPayout: `${formatINR(payout.netHostPayoutRupees)}`,
         note:
           "Implements the spec's formula exactly (payoutBase - 5% - 1% - 1%). Flagged: this does NOT reproduce the source doc's ₹10,788 example for a ₹10,000 property -- see src/lib/billing/README.md.",
       },

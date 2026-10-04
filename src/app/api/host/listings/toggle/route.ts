@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { assertListingOwnedBy } from "@/lib/services/admin-writes";
+import { getHostPayoutReadiness, PayoutNotReadyError } from "@/lib/services/hostPayoutReadiness";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,17 @@ export async function PATCH(req: NextRequest) {
     // A listing that has been delisted (see ../[listingId]/delist) must not
     // be switched back on from the pause toggle.
     if (isActive) {
+      // Going live needs a verified PAN, verified bank account and a created
+      // payout account -- otherwise bookings could be paid for with no way to
+      // pay the host.
+      const readiness = await getHostPayoutReadiness(authedUserId);
+      if (!readiness.ready) {
+        const err = new PayoutNotReadyError(readiness.blockers);
+        return NextResponse.json(
+          { error: err.message, code: "PAYOUT_NOT_READY", blockers: readiness.blockers },
+          { status: 403 },
+        );
+      }
       const { data: row, error: rowErr } = await supabaseAdmin
         .from("listings")
         .select("delisted_at")

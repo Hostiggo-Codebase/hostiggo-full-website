@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { retryFailedWhatsAppMessages } from "@/lib/services/whatsappRetry";
 
+// Vercel Cron calls GET (with `Authorization: Bearer $CRON_SECRET`); POST is
+// kept for manual triggers.
+export async function GET(request: NextRequest) {
+  return POST(request);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");

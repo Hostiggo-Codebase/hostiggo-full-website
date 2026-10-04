@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cancelBookingWithRefund, CancellationValidationError } from "@/lib/billing/cancelBooking";
+import { cancelBookingWithRefund, retryFailedRefund, CancellationValidationError } from "@/lib/billing/cancelBooking";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +17,14 @@ export async function POST(req: NextRequest) {
     // or crafting a raw request.
     const requestingUserId = await getAuthenticatedUserId(req);
 
-    const { bookingId, reason } = (await req.json()) ?? {};
+    const { bookingId, reason, action } = (await req.json()) ?? {};
     if (!bookingId) {
       return NextResponse.json({ error: "bookingId is required" }, { status: 400 });
+    }
+    // A cancelled booking whose refund failed at Razorpay is retried here.
+    if (action === "retry-refund") {
+      const retried = await retryFailedRefund({ bookingId: Number(bookingId), requestingUserId });
+      return NextResponse.json({ data: retried });
     }
     const result = await cancelBookingWithRefund({
       bookingId: Number(bookingId),

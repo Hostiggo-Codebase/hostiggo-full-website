@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createBookingWithoutPayment, validateAndPriceBooking } from "@/lib/services/admin-writes";
 import { createRazorpayOrder } from "@/lib/billing/razorpay";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
+import { GUEST_ID_REQUIRED, guestHasVerifiedId } from "@/lib/services/guestVerification";
+import { rateLimit } from "@/lib/rateLimit";
 import {
   BOOKINGS_DISABLED,
   PAYMENTS_ENABLED,
   UNPAID_BOOKINGS_ALLOWED,
+  razorpayKeysConfigured,
   todayInIndia,
 } from "@/lib/booking-config";
 
@@ -24,10 +27,28 @@ export async function POST(req: NextRequest) {
     // that never checked it.
     const userId = await getAuthenticatedUserId(req);
 
-    if (BOOKINGS_DISABLED || (!PAYMENTS_ENABLED && !UNPAID_BOOKINGS_ALLOWED)) {
+    if (
+      BOOKINGS_DISABLED ||
+      (!PAYMENTS_ENABLED && !UNPAID_BOOKINGS_ALLOWED) ||
+      (PAYMENTS_ENABLED && !razorpayKeysConfigured())
+    ) {
       return NextResponse.json(
         { error: "Bookings are paused for a short while. Please try again later.", code: "BOOKINGS_PAUSED" },
         { status: 503 },
+      );
+    }
+
+    // Opening an order is cheap for us and creates a Razorpay record each time.
+    const limited = await rateLimit(`reserve:${userId}`, 20, 10 * 60_000);
+    if (limited) return limited;
+
+    if (GUEST_ID_REQUIRED && !(await guestHasVerifiedId(userId))) {
+      return NextResponse.json(
+        {
+          error: "Please verify your ID (PAN, Aadhaar or passport) before booking. It only takes a minute.",
+          code: "GUEST_ID_REQUIRED",
+        },
+        { status: 403 },
       );
     }
 

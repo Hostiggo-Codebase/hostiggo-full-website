@@ -250,6 +250,8 @@ export type CreateTransferParams = {
   linkedAccountId: string;
   amountPaise: number;
   notes?: Record<string, string>;
+  /** Hold the money in the linked account until this moment (Razorpay `on_hold_until`). */
+  onHoldUntil?: Date | null;
   /**
    * REQUIRED in practice, not just in the type: without this, a retried
    * call (finalizeBookingFromRazorpayOrder's own idempotency-on-payment_id
@@ -284,7 +286,8 @@ export async function createTransferForPayment(
           amount: params.amountPaise,
           currency: "INR",
           notes: params.notes,
-          on_hold: false,
+          on_hold: !!params.onHoldUntil,
+          ...(params.onHoldUntil && { on_hold_until: Math.floor(params.onHoldUntil.getTime() / 1000) }),
         },
       ],
     },

@@ -85,7 +85,7 @@ Registered office: C-72, Plot H-584, Shivaji Park, Punjabi Bagh, West Delhi, New
 ];
 
 export const metadata = {
-  title: "Terms & Conditions · Hostiggo",
+  title: "Terms & Conditions",
   description:
     "The Terms and Conditions governing use of the Hostiggo platform by hosts, guests, and service providers.",
 };

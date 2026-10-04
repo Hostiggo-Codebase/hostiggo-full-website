@@ -142,7 +142,62 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
     .update({ status: finalStatus, updated_at: new Date().toISOString() })
     .eq("host_uuid", hostUuid);
 
+  await transferPendingBookings(hostUuid, accountId).catch((err) =>
+    console.error(`[runRouteOnboarding] could not back-fill transfers for host ${hostUuid}:`, err),
+  );
+
+  const { notify } = await import("@/lib/services/notifications");
+  await notify({
+    userId,
+    type: "booking_host",
+    category: "account",
+    title: "Payouts are set up",
+    message: "Your payout account is ready. You can now take your listings live from Your Listings.",
+    metadata: { role: "host" },
+  });
+
   return { razorpayAccountId: accountId, status: finalStatus };
+}
+
+/**
+ * Bookings paid before the host had a Route account were never split off
+ * (createHostTransferForBooking skips hosts without one, leaving
+ * transfer_status null), so those earnings would sit with Hostiggo forever.
+ * Once the host is onboarded this sends the share frozen on each such
+ * upcoming, still-confirmed booking (host_payout_paise), and retries earlier
+ * failures. Per-booking idempotency keys match the original path, so a
+ * repeat run cannot double-pay.
+ */
+async function transferPendingBookings(hostUuid: string, linkedAccountId: string) {
+  const { data: bookings, error } = await supabaseAdmin
+    .from("bookings")
+    .select("booking_id, start_date, razorpay_payment_id, host_payout_paise, listings(check_in_time)")
+    .eq("host_uuid", hostUuid)
+    .eq("status_id", 2)
+    .not("razorpay_payment_id", "is", null)
+    .gt("host_payout_paise", 0)
+    .or("transfer_status.is.null,transfer_status.eq.failed");
+  if (error) throw error;
+
+  const { createTransferForPayment } = await import("@/lib/billing/razorpayRoute");
+  const { payoutReleaseMoment } = await import("@/lib/billing/policyTimeline");
+  for (const b of (bookings ?? []) as any[]) {
+    try {
+      const result = await createTransferForPayment(b.razorpay_payment_id, {
+        linkedAccountId,
+        amountPaise: Number(b.host_payout_paise),
+        notes: { bookingId: String(b.booking_id) },
+        onHoldUntil: payoutReleaseMoment(b.start_date, b.listings?.check_in_time),
+        idempotencyKey: `transfer:${b.booking_id}`,
+      });
+      await supabaseAdmin
+        .from("bookings")
+        .update({ razorpay_transfer_id: result.items?.[0]?.id ?? null, transfer_status: "created" })
+        .eq("booking_id", b.booking_id);
+    } catch (err) {
+      console.error(`[transferPendingBookings] booking ${b.booking_id} failed:`, err);
+    }
+  }
 }
 
 export type VerifiedPayoutFields = {

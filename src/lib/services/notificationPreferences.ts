@@ -115,14 +115,3 @@ export async function isCategoryEnabled(
   return prefs.categories[category] ?? DEFAULT_PREFERENCES.categories[category];
 }
 
-export async function isNotificationAllowed(
-  userId: string,
-  channel: NotificationChannel,
-  category: NotificationCategory
-): Promise<boolean> {
-  const [channelEnabled, categoryEnabled] = await Promise.all([
-    isChannelEnabled(userId, channel),
-    isCategoryEnabled(userId, category),
-  ]);
-  return channelEnabled && categoryEnabled;
-}

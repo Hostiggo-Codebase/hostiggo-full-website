@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR, REFUND_ARRIVAL_NOTE } from '@/lib/format';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import BackButton from '@/components/ui/back-button';
@@ -223,7 +224,7 @@ function PriceBreakdown({ booking }: { booking: Booking }) {
         </span>
         <span className="flex items-center gap-2">
           <span className="text-[13px] font-bold text-gray-800">
-            ₹{(booking.amount ?? invoice.grandTotalRupees).toLocaleString('en-IN')}
+            {formatINR((booking.amount ?? invoice.grandTotalRupees))}
           </span>
           <ChevronDown
             className={cn('w-4 h-4 text-gray-400 transition-transform', open && 'rotate-180')}
@@ -237,31 +238,31 @@ function PriceBreakdown({ booking }: { booking: Booking }) {
             <span>
               {weekendNights === 0 || weekdayNights === 0 ? (
                 <>
-                  ₹{(weekendNights > 0 ? priceWeekend : booking.priceWeekday!).toLocaleString('en-IN')} × {weekdayNights + weekendNights} night{weekdayNights + weekendNights > 1 ? 's' : ''}
+                  {formatINR((weekendNights > 0 ? priceWeekend : booking.priceWeekday!))} × {weekdayNights + weekendNights} night{weekdayNights + weekendNights > 1 ? 's' : ''}
                 </>
               ) : (
                 <>
-                  ₹{booking.priceWeekday!.toLocaleString('en-IN')} × {weekdayNights} night{weekdayNights > 1 ? 's' : ''} + ₹{priceWeekend.toLocaleString('en-IN')} × {weekendNights} night{weekendNights > 1 ? 's' : ''}
+                  {formatINR(booking.priceWeekday!)} × {weekdayNights} night{weekdayNights > 1 ? 's' : ''} + {formatINR(priceWeekend)} × {weekendNights} night{weekendNights > 1 ? 's' : ''}
                 </>
               )}
             </span>
-            <span className="font-semibold">₹{(invoice.propertyPricePaise / 100).toLocaleString('en-IN')}</span>
+            <span className="font-semibold">{formatINR((invoice.propertyPricePaise / 100))}</span>
           </div>
           <div className="flex justify-between text-gray-600">
             <span>GST on property ({(invoice.propertyGstRate * 100).toFixed(0)}%)</span>
-            <span className="font-semibold">₹{(invoice.gstOnPropertyPaise / 100).toLocaleString('en-IN')}</span>
+            <span className="font-semibold">{formatINR((invoice.gstOnPropertyPaise / 100))}</span>
           </div>
           <div className="flex justify-between text-gray-600">
             <span>Hostiggo service fee ({(invoice.hostiggoServiceFeeRate * 100).toFixed(0)}%)</span>
-            <span className="font-semibold">₹{(invoice.hostiggoServiceFeePaise / 100).toLocaleString('en-IN')}</span>
+            <span className="font-semibold">{formatINR((invoice.hostiggoServiceFeePaise / 100))}</span>
           </div>
           <div className="flex justify-between text-gray-600">
             <span>GST on service fee (18%)</span>
-            <span className="font-semibold">₹{(invoice.gstOnHostiggoServiceFeePaise / 100).toLocaleString('en-IN')}</span>
+            <span className="font-semibold">{formatINR((invoice.gstOnHostiggoServiceFeePaise / 100))}</span>
           </div>
           <div className="flex justify-between font-bold text-gray-900 pt-2 border-t border-gray-200">
             <span>Total</span>
-            <span>₹{(booking.amount ?? invoice.grandTotalRupees).toLocaleString('en-IN')}</span>
+            <span>{formatINR((booking.amount ?? invoice.grandTotalRupees))}</span>
           </div>
           {booking.amount != null && (
             <p className="text-[10px] text-gray-400 pt-1">
@@ -782,7 +783,7 @@ function ManageBookingModal({
       onClose();
       toast.success(
         refundPreview && refundPreview.refundAmountRupees > 0
-          ? `Booking cancelled. ₹${refundPreview.refundAmountRupees.toLocaleString('en-IN')} will be refunded.`
+          ? `Booking cancelled. ${formatINR(refundPreview.refundAmountRupees)} will be refunded. ${REFUND_ARRIVAL_NOTE}`
           : 'Booking cancelled.',
       );
     } catch (error) {
@@ -1075,18 +1076,21 @@ function ManageBookingModal({
                   <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
                     <div className="flex justify-between text-[13px] text-gray-600">
                       <span>Total paid</span>
-                      <span>₹{refundPreview.grandTotalRupees.toLocaleString('en-IN')}</span>
+                      <span>{formatINR(refundPreview.grandTotalRupees)}</span>
                     </div>
                     <div className="flex justify-between text-[15px] font-bold text-gray-900 pt-1 border-t border-gray-200">
                       <span>You&apos;ll be refunded</span>
                       <span className={refundPreview.refundAmountRupees > 0 ? 'text-green-600' : 'text-red-500'}>
-                        ₹{refundPreview.refundAmountRupees.toLocaleString('en-IN')}
+                        {formatINR(refundPreview.refundAmountRupees)}
                       </span>
                     </div>
                   </div>
 
                   {refundPreview.refundPercent === 1 && (
                     <p className="text-[12px] text-gray-500">{refundPreview.reason}</p>
+                  )}
+                  {refundPreview.refundAmountRupees > 0 && (
+                    <p className="text-[12px] text-gray-500">{REFUND_ARRIVAL_NOTE}</p>
                   )}
                 </>
               )}
@@ -1623,7 +1627,7 @@ function BookingCard({
             <div className="w-full flex items-center justify-end gap-6 pt-7 pb-4 px-8 sm:px-14">
               <div className="text-center">
                 <div className="text-[24px] font-semibold text-black leading-none font-['Poppins']">
-                  ₹{200 * breakfastQty * (breakfastSelected ? 2 : 0) + (car1Added ? 1300 : 0) || 400}
+                  {formatINR(200 * breakfastQty * (breakfastSelected ? 2 : 0) + (car1Added ? 1300 : 0) || 400)}
                 </div>
                 <div className="text-[16px] font-semibold text-black underline underline-offset-4 mt-1.5 font-['Poppins']">
                   {(breakfastSelected ? 1 : 0) + (car1Added ? 1 : 0) || 1} add on added

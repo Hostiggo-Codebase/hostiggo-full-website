@@ -1,8 +1,10 @@
+import { formatINR, REFUND_ARRIVAL_NOTE } from '@/lib/format';
 import { supabaseAdmin } from "../supabase-admin";
 import { todayInIndia } from "@/lib/booking-config";
 import { SCHEMA } from "../schema.constants";
 import { canonicalPlaceName } from "../destinationAliases";
 import { calculateBookingInvoice } from "../billing/invoice";
+import { getHostPayoutReadiness } from "./hostPayoutReadiness";
 
 const DB_SCHEMA = SCHEMA.testingSchema;
 
@@ -262,11 +264,16 @@ export async function validateAndPriceBooking(input: BookingInput) {
   // never trust client-supplied price or guest-count data for the charge.
   const { data: listing, error: lerr } = await supabaseAdmin
     .from("listings")
-    .select("host_uuid, price_weekday, price_weekend, num_guests")
+    .select("host_uuid, price_weekday, price_weekend, num_guests, is_active, delisted_at")
     .eq("listing_id", input.listingId)
     .maybeSingle();
   if (lerr) throw lerr;
   if (!listing?.host_uuid) throw new Error("Listing not found");
+  // Paused, delisted and not-yet-published (payout not set up) listings can't
+  // be booked, even by someone holding a direct link.
+  if (!listing.is_active || listing.delisted_at) {
+    throw new Error("This property isn't available for booking right now.");
+  }
 
   const numAdults = input.numAdults ?? 1;
   const numChildren = input.numChildren ?? 0;
@@ -458,7 +465,9 @@ async function insertConfirmedBooking(
           refundErr,
         );
       }
-      throw new Error("These dates were just booked by someone else. Your payment has been refunded.");
+      throw new PaymentRefundedError(
+        "These dates were just booked by someone else. Your payment has been refunded.",
+      );
     }
     throw new Error("These dates were just booked by someone else. Please choose different dates.");
   }
@@ -509,6 +518,65 @@ export async function createBookingWithoutPayment(input: BookingInput) {
 }
 
 /**
+ * A payment was captured but no booking can be made for it (dates taken
+ * meanwhile, price changed). Refunds the guest in full and tells them, so they
+ * are never left charged with nothing to show. A failed refund raises a
+ * critical admin alert for a manual refund. Returns the error to throw.
+ */
+export class PaymentRefundedError extends Error {}
+
+async function refundUnfulfillablePayment(
+  params: { orderId: string; paymentId: string },
+  order: { amount: number | string; notes?: unknown },
+  reason: string,
+): Promise<PaymentRefundedError> {
+  const amountPaise = Number(order.amount);
+  const notes = (order.notes ?? {}) as Record<string, string>;
+  let refunded = false;
+  try {
+    const { createRazorpayRefund } = await import("../billing/razorpay");
+    await createRazorpayRefund({
+      razorpayPaymentId: params.paymentId,
+      amountPaise,
+      idempotencyKey: `refund:unfulfilled:${params.paymentId}`,
+      notes: { reason, orderId: params.orderId },
+    });
+    refunded = true;
+  } catch (refundErr) {
+    const { sendAdminAlert } = await import("./adminAlerts");
+    await sendAdminAlert({
+      severity: "critical",
+      category: "payment",
+      message: `Payment ${params.paymentId} has no booking and the automatic refund failed -- refund manually.`,
+      details: { orderId: params.orderId, amountPaise, reason, error: String(refundErr) },
+    });
+  }
+
+  if (notes.userId) {
+    try {
+      const { notify } = await import("./notifications");
+      await notify({
+        userId: notes.userId,
+        type: "booking_guest",
+        category: "bookings",
+        title: "Booking not completed",
+        message: `${reason} ${
+          refunded
+            ? `Your payment of ₹${amountPaise / 100} is being refunded in full. ${REFUND_ARRIVAL_NOTE}`
+            : "Our team will refund your payment shortly."
+        }`,
+        metadata: { order_id: params.orderId, listing_id: notes.listingId, role: "guest" },
+      });
+    } catch (notifyErr) {
+      console.error("[refundUnfulfillablePayment] notification failed:", notifyErr);
+    }
+  }
+  return new PaymentRefundedError(
+    `${reason} ${refunded ? "Your payment has been refunded." : "We'll refund your payment shortly."}`,
+  );
+}
+
+/**
  * The only place a booking is ever inserted: called once a Razorpay
  * payment's signature has already been verified by the caller (either the
  * checkout-callback route or the webhook route -- see
@@ -556,7 +624,16 @@ export async function finalizeBookingFromRazorpayOrder(params: {
   // else in the time it took this guest to pay, and prices are only ever
   // trusted from this recomputation, never from the (already-verified, but
   // now potentially stale) order amount.
-  const priced = await validateAndPriceBooking(input);
+  let priced: Awaited<ReturnType<typeof validateAndPriceBooking>>;
+  try {
+    priced = await validateAndPriceBooking(input);
+  } catch (err: any) {
+    // A database error (has a Postgres/PostgREST code) is transient: rethrow so
+    // the webhook is retried. Anything else is a business rejection, e.g. the
+    // dates were taken while this guest was paying, and no retry can fix it.
+    if (err?.code) throw err;
+    throw await refundUnfulfillablePayment(params, order, err?.message ?? "The booking could not be completed.");
+  }
 
   // The order was created for a specific amount; if the recomputed price
   // has since drifted (e.g. the host changed nightly rates mid-checkout),
@@ -567,8 +644,10 @@ export async function finalizeBookingFromRazorpayOrder(params: {
     console.error(
       `[finalizeBookingFromRazorpayOrder] price drift for order ${params.orderId}: paid ${order.amount}, now prices at ${priced.amountPaise}`,
     );
-    throw new Error(
-      "The price for these dates changed after payment. Contact support with your payment ID for a refund.",
+    throw await refundUnfulfillablePayment(
+      params,
+      order,
+      "The price for these dates changed while you were paying.",
     );
   }
 
@@ -798,7 +877,7 @@ async function notifyBookingConfirmed(
     end_date: booking.end_date,
   };
   const paymentText = paymentReceived
-    ? ` Paid ₹${(grandTotalPaise / 100).toLocaleString("en-IN")}.`
+    ? ` Paid ${formatINR((grandTotalPaise / 100))}.`
     : " Payment is currently disabled.";
   const guestCount = String((booking.num_adults ?? 0) + (booking.num_children ?? 0));
   const formatBookingDate = (value: string) =>
@@ -831,6 +910,20 @@ async function notifyBookingConfirmed(
     metadata: { ...metadata, role: "guest" },
   });
   
+  const { emailUser } = await import("./email");
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.hostiggo.com").replace(/\/+$/, "");
+  await emailUser(booking.user_id, {
+    subject: `Booking confirmed: ${title}`,
+    heading: "Your booking is confirmed",
+    lines: [
+      `${title}`,
+      `Check-in ${checkIn} · Check-out ${checkOut} · ${guestCount} guest(s)`,
+      paymentReceived ? `Total paid: ${formatINR(grandTotalPaise / 100)}.` : "No payment was taken for this booking.",
+      `Booking reference: #${booking.booking_id}`,
+    ],
+    cta: { label: "View booking & receipt", url: `${site}/booking-confirmation/${booking.booking_id}` },
+  }).catch((err) => console.error("[notifyBookingConfirmed] guest email failed:", err));
+
   console.log(`[notifyBookingConfirmed] Sending guest WhatsApp notification`);
   
   await notifyWhatsApp({
@@ -874,6 +967,17 @@ async function notifyBookingConfirmed(
       metadata: { ...metadata, role: "host" },
     });
     
+    await emailUser(hostUser, {
+      subject: `New booking: ${title}`,
+      heading: "You have a new booking",
+      lines: [
+        `${title} was booked by ${guest?.name ?? "a guest"}.`,
+        `Check-in ${checkIn} · Check-out ${checkOut} · ${guestCount} guest(s)`,
+        `Booking reference: #${booking.booking_id}`,
+      ],
+      cta: { label: "View booking", url: `${site}/host/bookings` },
+    }).catch((err) => console.error("[notifyBookingConfirmed] host email failed:", err));
+
     console.log(`[notifyBookingConfirmed] Sending host WhatsApp notification`);
     
     await notifyWhatsApp({
@@ -916,6 +1020,18 @@ async function createHostTransferForBooking(
 
   const { calculateHostPayout } = await import("../billing/payout");
   const { createTransferForPayment } = await import("../billing/razorpayRoute");
+  const { payoutReleaseMoment } = await import("../billing/policyTimeline");
+
+  // The host's share is held until 24h after check-in, so cancelling or a
+  // failed stay never has to claw money back from an already-settled host.
+  const { data: bookingRow } = await supabaseAdmin
+    .from("bookings")
+    .select("start_date, listings(check_in_time)")
+    .eq("booking_id", booking.booking_id)
+    .maybeSingle();
+  const onHoldUntil = bookingRow
+    ? payoutReleaseMoment(bookingRow.start_date, (bookingRow as any).listings?.check_in_time)
+    : null;
 
   const { getPricingRules } = await import("./pricingRules");
   const { invoice } = priced;
@@ -931,6 +1047,7 @@ async function createHostTransferForBooking(
       linkedAccountId: payout.razorpay_account_id,
       amountPaise: hostPayout.netHostPayoutPaise,
       notes: { bookingId: String(booking.booking_id) },
+      onHoldUntil,
       idempotencyKey: `transfer:${booking.booking_id}`,
     });
     const transferId = result.items?.[0]?.id ?? null;
@@ -964,103 +1081,6 @@ function eachDateInRange(startDate: string, endDate: string): string[] {
 }
 
 // ── Booking cancellation ─────────────────────────────────────────────────────
-export async function cancelBooking(
-  bookingId: number,
-  reason: string | null | undefined,
-  requestingUserId: string,
-) {
-  // Ownership check: only the guest who made the booking or the host of the
-  // listing may cancel it. Without this, any client that guessed a booking_id
-  // integer could cancel someone else's stay.
-  const { data: booking, error: fetchError } = await supabaseAdmin
-    .from("bookings")
-    .select("booking_id, user_id, listing_id")
-    .eq("booking_id", bookingId)
-    .maybeSingle();
-  if (fetchError) throw fetchError;
-  if (!booking) throw new Error("Booking not found");
-
-  if (booking.user_id !== requestingUserId) {
-    const { data: listing, error: listingError } = await supabaseAdmin
-      .from("listings")
-      .select("host_uuid")
-      .eq("listing_id", booking.listing_id)
-      .maybeSingle();
-    if (listingError) throw listingError;
-
-    const { data: host, error: hostError } = await supabaseAdmin
-      .from("host")
-      .select("user_id")
-      .eq("host_uuid", listing?.host_uuid ?? "")
-      .maybeSingle();
-    if (hostError) throw hostError;
-
-    if (host?.user_id !== requestingUserId) {
-      throw new Error("You don't have permission to cancel this booking.");
-    }
-  }
-
-  const patch: Record<string, any> = { status_id: 3 }; // 3 = CANCELLED
-  if (reason) patch.cancellation_reason = reason;
-  const { data, error } = await supabaseAdmin
-    .from("bookings")
-    .update(patch)
-    .eq("booking_id", bookingId)
-    .select("booking_id, status_id, cancellation_reason, listing_id, start_date, end_date")
-    .single();
-  if (error) throw error;
-
-  // Release the calendar nights createBooking blocked for this reservation,
-  // otherwise a cancelled booking's dates stay marked unavailable forever.
-  if (data?.listing_id && data.start_date && data.end_date) {
-    const nights = eachDateInRange(data.start_date, data.end_date);
-    if (nights.length) {
-      await supabaseAdmin
-        .from("listing_calendar")
-        .update({ is_available: true, updated_at: new Date().toISOString() })
-        .eq("listing_id", data.listing_id)
-        .in("date", nights);
-    }
-  }
-
-  // Tell both sides, wherever they are signed in (app + website).
-  try {
-    const { notify, hostUserId } = await import("./notifications");
-    const { data: row } = await supabaseAdmin
-      .from("bookings")
-      .select("host_uuid")
-      .eq("booking_id", bookingId)
-      .maybeSingle();
-    const hostUser = row?.host_uuid ? await hostUserId(row.host_uuid) : null;
-    const cancelledByHost = hostUser != null && hostUser === requestingUserId && requestingUserId !== booking.user_id;
-    const metadata = { booking_id: bookingId, listing_id: booking.listing_id };
-    await notify({
-      userId: booking.user_id,
-      type: "booking_guest",
-      category: "bookings",
-      templateId: "booking_cancelled_guest",
-      title: cancelledByHost ? "Booking cancelled by host" : "Booking cancelled",
-      message: `Booking #${bookingId} was cancelled.`,
-      metadata: { ...metadata, role: "guest" },
-    });
-    if (hostUser && hostUser !== booking.user_id) {
-      await notify({
-        userId: hostUser,
-        type: "booking_host",
-        category: "bookings",
-        templateId: "booking_cancelled_host",
-        title: "Booking cancelled",
-        message: `Booking #${bookingId} was cancelled${cancelledByHost ? " by you" : " by the guest"}.`,
-        metadata: { ...metadata, role: "host" },
-      });
-    }
-  } catch (notifyErr) {
-    console.error("[cancelBooking] notification failed:", notifyErr);
-  }
-
-  return data;
-}
-
 // ── Reviews ──────────────────────────────────────────────────────────────────
 export class ReviewNotAllowedError extends Error {}
 
@@ -1243,6 +1263,11 @@ export async function createListing(draft: ListingDraft) {
   // Ensure the user has a host profile (auto-create if needed)
   const hostUuid = await ensureHostProfile(draft.userId);
 
+  // A listing only goes live once the host can actually be paid: verified PAN,
+  // verified bank account, then a created payout account. Until then it is
+  // saved as a (hidden) draft and the host publishes it from Listings.
+  const readiness = await getHostPayoutReadiness(draft.userId);
+
   const now = new Date().toISOString();
   const row: Record<string, any> = {
     title: draft.title?.trim() || "Untitled listing",
@@ -1255,7 +1280,7 @@ export async function createListing(draft: ListingDraft) {
     num_beds: draft.numBeds ?? 1,
     num_bathrooms: draft.numBathrooms ?? 1,
     host_uuid: hostUuid,
-    is_active: true, // new listings start active (visible)
+    is_active: readiness.ready, // hidden until payouts are set up
     check_in_time: draft.checkInTime ?? "14:00:00",
     check_out_time: draft.checkOutTime ?? "11:00:00",
     address_line1: draft.addressLine1 ?? null,
@@ -1388,7 +1413,13 @@ export async function createListing(draft: ListingDraft) {
     }
   }
 
-  return { listing_id: listingId, title: listing.title, warnings };
+  return {
+    listing_id: listingId,
+    title: listing.title,
+    warnings,
+    live: readiness.ready,
+    payoutBlockers: readiness.blockers,
+  };
 }
 
 // ── Cover photo ──────────────────────────────────────────────────────────────

@@ -1,10 +1,10 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Download,
   LayoutGrid,
-  List,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -46,7 +46,7 @@ type DayInfo = {
 const pad = (n: number) => String(n).padStart(2, '0');
 const toDateStr = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
 const inr = (n: number, currency: string) =>
-  currency === 'INR' || !currency ? `₹${Math.round(n).toLocaleString('en-IN')}` : `${currency} ${n}`;
+  currency === 'INR' || !currency ? formatINR(n) : `${currency} ${n}`;
 
 const STATUS_META: Record<DayStatus, { label: string; dot: string; cell: string; text: string }> = {
   available: { label: 'Available', dot: 'bg-green-500', cell: 'hover:bg-gray-50', text: 'text-green-600' },
@@ -472,9 +472,6 @@ export default function CalendarPage() {
               <div className="flex bg-gray-100 rounded-lg p-1">
                 <button className="p-2 bg-white shadow-sm rounded-md text-figma-navy" aria-label="Grid view">
                   <LayoutGrid className="w-5 h-5" />
-                </button>
-                <button disabled title="Coming soon" className={cn('p-2 text-gray-400', disabledBtn)} aria-label="List view">
-                  <List className="w-5 h-5" />
                 </button>
               </div>
               <div className="flex items-center border border-gray-200 rounded-lg">

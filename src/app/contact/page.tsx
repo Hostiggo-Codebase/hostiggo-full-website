@@ -25,7 +25,7 @@ const channels = [
 ];
 
 export const metadata = {
-  title: "Contact Us · Hostiggo",
+  title: "Contact Us",
   description: "How to reach the Hostiggo team for support, feedback, or grievances.",
 };
 

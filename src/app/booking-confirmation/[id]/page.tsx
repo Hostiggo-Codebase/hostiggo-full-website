@@ -39,7 +39,7 @@ import {
   type PolicyName,
 } from '@/lib/billing/policyTimeline';
 import { downloadBookingReceipt, type ReceiptLine } from '@/lib/bookingReceipt';
-import { formatINR, formatStayDate, formatTime12h, plural } from '@/lib/format';
+import { formatINR, formatStayDate, formatTime12h, plural, REFUND_ARRIVAL_NOTE } from '@/lib/format';
 import { todayInIndia } from '@/lib/booking-config';
 
 const STATUS_PENDING = 1;
@@ -402,9 +402,26 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
             {booking.refund_amount && Number(booking.refund_amount) > 0
               ? `Refund of ${formatINR(booking.refund_amount)} ${
                   booking.refund_status === 'processed' ? 'has been processed' : 'is on its way'
-                } to your original payment method (usually 5-7 working days).`
+                } to your original payment method. ${REFUND_ARRIVAL_NOTE}`
               : 'No refund was due under the cancellation policy.'}
           </p>
+          {booking.refund_status === 'failed' && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await api.retryRefund(booking.booking_id);
+                  toast.success('Refund initiated.');
+                  window.location.reload();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Couldn't retry the refund.");
+                }
+              }}
+              className="mt-2 text-[13px] font-semibold text-[#BC0024] underline"
+            >
+              Retry refund
+            </button>
+          )}
         </div>
       </div>
     ) : (

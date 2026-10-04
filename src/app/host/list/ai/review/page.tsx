@@ -35,10 +35,10 @@ type Section = (typeof SECTIONS)[number];
 // (and localStorage) on every keystroke -- edits are committed back into
 // the array on tab switch and on Continue.
 type EditableFields = {
-  titleA: string;
-  titleB: string;
-  titleC: string;
+  title: string;
   description: string;
+  propertyType: string;
+  stayType: 'entire' | 'private' | 'shared';
   numGuests: number;
   numBedrooms: number;
   numBeds: number;
@@ -54,14 +54,22 @@ type EditableFields = {
   city: string | undefined;
   stateName: string | undefined;
   postalCode: string | undefined;
+  houseRules: {
+    check_in_time: string;
+    check_out_time: string;
+    smoking_allowed: boolean;
+    pets_allowed: boolean;
+    parties_allowed: boolean;
+    quiet_hours: boolean;
+  };
 };
 
 function toEditable(g: AiGeneratedListing): EditableFields {
   return {
-    titleA: g.title,
-    titleB: g.title,
-    titleC: g.title,
+    title: g.title,
     description: g.description,
+    propertyType: g.propertyType || 'apartment',
+    stayType: g.stayType || 'entire',
     numGuests: g.numGuests,
     numBedrooms: g.numBedrooms,
     numBeds: g.numBeds,
@@ -77,14 +85,24 @@ function toEditable(g: AiGeneratedListing): EditableFields {
     city: g.city,
     stateName: g.state,
     postalCode: g.postalCode,
+    houseRules: {
+      check_in_time: g.houseRules?.check_in_time || '15:00',
+      check_out_time: g.houseRules?.check_out_time || '11:00',
+      smoking_allowed: g.houseRules?.smoking_allowed ?? false,
+      pets_allowed: g.houseRules?.pets_allowed ?? false,
+      parties_allowed: g.houseRules?.parties_allowed ?? false,
+      quiet_hours: g.houseRules?.quiet_hours ?? true,
+    },
   };
 }
 
 function commitEditable(base: AiGeneratedListing, e: EditableFields): AiGeneratedListing {
   return {
     ...base,
-    title: e.titleA,
+    title: e.title,
     description: e.description,
+    propertyType: e.propertyType,
+    stayType: e.stayType,
     numGuests: e.numGuests,
     numBedrooms: e.numBedrooms,
     numBeds: e.numBeds,
@@ -100,6 +118,7 @@ function commitEditable(base: AiGeneratedListing, e: EditableFields): AiGenerate
     city: e.city,
     state: e.stateName,
     postalCode: e.postalCode,
+    houseRules: e.houseRules,
   };
 }
 
@@ -178,13 +197,23 @@ export default function AiReviewPage() {
     updateEdit({ photos: [url, ...edit.photos.filter((p) => p !== url)] });
 
   const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!file) return;
+    if (files.length === 0) return;
     setUploadingPhoto(true);
     try {
-      const url = await api.uploadPhoto(file);
-      updateEdit({ photos: [...edit.photos, url] });
+      const uploaded: string[] = [];
+      for (const file of files) {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+          throw new Error(`${file.name}: only JPG, PNG and WEBP images are allowed.`);
+        }
+        if (file.size > 8 * 1024 * 1024) {
+          throw new Error(`${file.name}: image must be smaller than 8MB.`);
+        }
+        uploaded.push(await api.uploadPhoto(file));
+      }
+      updateEdit({ photos: [...edit.photos, ...uploaded] });
+      toast.success(`${uploaded.length} photo${uploaded.length === 1 ? '' : 's'} added.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not upload photo.');
     } finally {
@@ -193,6 +222,16 @@ export default function AiReviewPage() {
   };
 
   const handleContinue = () => {
+    if (edit.photos.length < 3) {
+      toast.error('Add at least 3 photos before continuing.');
+      setActiveSection('Photos');
+      return;
+    }
+    if (!edit.title.trim() || !edit.description.trim()) {
+      toast.error('Add a title and description before continuing.');
+      setActiveSection(!edit.title.trim() ? 'Basic Information' : 'Description');
+      return;
+    }
     const updated = listings.map((l, i) => (i === activeIndex ? commitEditable(l, edit) : l));
     saveGeneratedListings(updated);
     setReviewedIndices((prev) => new Set(prev).add(activeIndex));
@@ -252,23 +291,17 @@ export default function AiReviewPage() {
                 <span className="w-5 h-5 rounded-full bg-figma-navy/10 text-figma-navy text-xs flex items-center justify-center">1</span>
                 Basic Information
               </p>
-              {[
-                { value: edit.titleA, set: (v: string) => updateEdit({ titleA: v }) },
-                { value: edit.titleB, set: (v: string) => updateEdit({ titleB: v }) },
-                { value: edit.titleC, set: (v: string) => updateEdit({ titleC: v }) },
-              ].map((f, i) => (
-                <div key={i} className="mb-3">
-                  <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-1.5">
-                    Listing Title<span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={f.value}
-                    onChange={(e) => f.set(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-figma-navy focus:ring-1 focus:ring-figma-navy transition-all"
-                  />
-                </div>
-              ))}
+              <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-1.5">
+                Listing Title<span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={edit.title}
+                maxLength={120}
+                onChange={(e) => updateEdit({ title: e.target.value })}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-figma-navy focus:ring-1 focus:ring-figma-navy transition-all"
+              />
+              <p className="text-xs text-gray-500 mt-1">{edit.title.length}/120 characters</p>
             </div>
           )}
 
@@ -290,6 +323,40 @@ export default function AiReviewPage() {
           {activeSection === 'Property Details' && (
             <div>
               <p className="text-sm font-bold text-gray-900 mb-4">Property Details</p>
+              <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                <label className="block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Property type
+                  <select
+                    value={edit.propertyType}
+                    onChange={(e) => updateEdit({ propertyType: e.target.value })}
+                    className="mt-1.5 w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 bg-white outline-none focus:border-figma-navy focus:ring-1 focus:ring-figma-navy"
+                  >
+                    {[
+                      ['house', 'House'],
+                      ['apartment', 'Apartment / Flat'],
+                      ['guest-house', 'Guest House'],
+                      ['hotel', 'Hotel'],
+                      ['cabin', 'Cabin'],
+                      ['villa', 'Villa'],
+                      ['tree-house', 'Treehouse'],
+                      ['tiny-home', 'Tiny Home'],
+                      ['farm-stay', 'Farm Stay'],
+                    ].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Stay type
+                  <select
+                    value={edit.stayType}
+                    onChange={(e) => updateEdit({ stayType: e.target.value as EditableFields['stayType'] })}
+                    className="mt-1.5 w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 bg-white outline-none focus:border-figma-navy focus:ring-1 focus:ring-figma-navy"
+                  >
+                    <option value="entire">Entire property</option>
+                    <option value="private">Private room</option>
+                    <option value="shared">Shared space</option>
+                  </select>
+                </label>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { label: 'Guests', value: edit.numGuests, set: (v: number) => updateEdit({ numGuests: v }) },
@@ -317,13 +384,21 @@ export default function AiReviewPage() {
           {activeSection === 'Photos' && (
             <div>
               <div className="flex items-center justify-between mb-4">
-                <p className="text-sm font-bold text-gray-900">Photos ({edit.photos.length})</p>
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Photos ({edit.photos.length})</p>
+                  <p className={cn('text-xs mt-1', edit.photos.length < 3 ? 'text-amber-700' : 'text-emerald-700')}>
+                    {edit.photos.length < 3
+                      ? `Add ${3 - edit.photos.length} more photo${3 - edit.photos.length === 1 ? '' : 's'} to publish.`
+                      : 'Minimum reached. Add more photos or change the cover.'}
+                  </p>
+                </div>
                 <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-figma-navy cursor-pointer hover:underline">
                   {uploadingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                  {uploadingPhoto ? 'Uploading…' : 'Add photo'}
+                  {uploadingPhoto ? 'Uploading…' : 'Add photos'}
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
+                    multiple
                     className="hidden"
                     disabled={uploadingPhoto}
                     onChange={handleAddPhoto}
@@ -406,12 +481,46 @@ export default function AiReviewPage() {
           )}
 
           {activeSection === 'House Rules' && (
-            <div>
-              <p className="text-sm font-bold text-gray-900 mb-4">House Rules</p>
-              <p className="text-sm text-gray-500">
-                Default house rules will be applied. Edit house rules from your listing once
-                it&apos;s published.
-              </p>
+            <div className="space-y-5">
+              <p className="text-sm font-bold text-gray-900">House Rules</p>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <label className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Check-in time
+                  <input
+                    type="time"
+                    value={edit.houseRules.check_in_time}
+                    onChange={(e) => updateEdit({ houseRules: { ...edit.houseRules, check_in_time: e.target.value } })}
+                    className="mt-1.5 w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900"
+                  />
+                </label>
+                <label className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Check-out time
+                  <input
+                    type="time"
+                    value={edit.houseRules.check_out_time}
+                    onChange={(e) => updateEdit({ houseRules: { ...edit.houseRules, check_out_time: e.target.value } })}
+                    className="mt-1.5 w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900"
+                  />
+                </label>
+              </div>
+              <div className="space-y-2">
+                {([
+                  ['smoking_allowed', 'Smoking allowed'],
+                  ['pets_allowed', 'Pets allowed'],
+                  ['parties_allowed', 'Parties or events allowed'],
+                  ['quiet_hours', 'Quiet hours enforced (10 PM - 8 AM)'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700">
+                    {label}
+                    <input
+                      type="checkbox"
+                      checked={edit.houseRules[key]}
+                      onChange={(e) => updateEdit({ houseRules: { ...edit.houseRules, [key]: e.target.checked } })}
+                      className="h-4 w-4 accent-figma-navy"
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
           )}
 

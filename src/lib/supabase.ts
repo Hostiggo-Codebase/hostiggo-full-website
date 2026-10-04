@@ -1,3 +1,4 @@
+import { SCHEMA } from "@/lib/schema.constants";
 import { createClient } from "@supabase/supabase-js";
 
 // No hardcoded fallback here on purpose -- these used to have a literal
@@ -63,7 +64,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   global: { fetch: customFetch },
   auth: authOptions,
   db: {
-    schema: "hostiggo_testing_schema",
+    schema: SCHEMA.testingSchema,
   },
 });
 
@@ -92,7 +93,7 @@ export const supabaseCacheable = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     storageKey: "sb-hostiggo-cacheable-noop",
   },
   db: {
-    schema: "hostiggo_testing_schema",
+    schema: SCHEMA.testingSchema,
   },
 });
 

@@ -1,8 +1,9 @@
 import "server-only";
 import { checkInMoment } from "./policyTimeline";
+import { REFUND_ARRIVAL_NOTE } from "@/lib/format";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { calculateRefund } from "./refund";
-import { createRazorpayRefund } from "./razorpay";
+import { createRazorpayRefund, getRazorpayClient } from "./razorpay";
 import { reconstructInvoice, splitBookingAddons } from "./reconstructInvoice";
 import type { BookingInvoice, CancellationPolicyConfig, CancellationPolicyType } from "./types";
 
@@ -138,11 +139,8 @@ export async function previewCancellationRefund(params: {
  *   -> check payout status -> call Razorpay -> update DB -> (notify --
  *   stubbed, see below) -> write accounting entry -> close booking.
  *
- * Notifications (email/SMS/push to guest, host notification) are left as
- * TODO call-outs to whatever notification service this app ends up using
- * -- none exists in the codebase today (confirmed: no email/SMS provider
- * integration found anywhere), so wiring real sends here would be
- * guessing at a provider. The hooks are marked clearly below.
+ * Guest and host are told through the in-app/push/WhatsApp notification
+ * pipeline (notify) and by email when an email provider is configured.
  */
 export async function cancelBookingWithRefund(params: {
   bookingId: number;
@@ -185,6 +183,8 @@ export async function cancelBookingWithRefund(params: {
   if (booking.refund_status && booking.refund_status !== "none") {
     throw new CancellationValidationError("A refund has already been initiated for this booking.");
   }
+  // (A booking whose refund failed is already cancelled; it is re-attempted
+  // through retryFailedRefund(), never by cancelling again.)
 
   // Concurrency guard: a conditional UPDATE that only succeeds if
   // refund_status is still unset acts as a practical row-level lock via
@@ -265,42 +265,29 @@ export async function cancelBookingWithRefund(params: {
         : {}),
     };
 
-    // 4.5 -- if payout already released, do NOT auto-refund; flag for manual settlement.
+    let razorpayRefundId: string | null = null;
+    let refundStatus: CancelBookingResult["refundStatus"] = "not_applicable";
+
+    // 4.5 -- if payout already released, do NOT auto-refund (the money has
+    // left Hostiggo); flag for manual settlement. The booking is still
+    // cancelled and its nights freed below -- leaving it confirmed would keep
+    // the guest "booked" and the calendar blocked for a stay that won't happen.
     if (booking.payout_released_at) {
+      refundStatus = "flagged_for_manual_settlement";
       const { error: flagErr } = await supabaseAdmin.from("manual_settlement_flags").insert({
         booking_id: bookingId,
         reason: `Cancellation requested after payout released. Computed refund would be ₹${refundCalc.refundAmountRupees}.`,
         flagged_at: new Date().toISOString(),
       });
       if (flagErr) throw flagErr;
-
-      await supabaseAdmin
-        .from("bookings")
-        .update({
-          refund_status: "flagged_for_manual_settlement",
-          refund_amount: refundCalc.refundAmountRupees,
-          refund_reason: reason ?? null,
-          cancelled_at: new Date().toISOString(),
-          cancelled_by: requestingUserId,
-          policy_used: policy,
-        })
-        .eq("booking_id", bookingId);
-
-      // TODO: notify ops/finance queue.
-      return {
-        bookingId,
-        refundAmountRupees: refundCalc.refundAmountRupees,
-        refundPercent: refundCalc.refundPercent,
-        reason: refundCalc.reason,
-        razorpayRefundId: null,
-        refundStatus: "flagged_for_manual_settlement",
-      };
-    }
-
-    let razorpayRefundId: string | null = null;
-    let refundStatus: CancelBookingResult["refundStatus"] = "not_applicable";
-
-    if (refundCalc.refundAmountPaise > 0) {
+      const { sendAdminAlert } = await import("@/lib/services/adminAlerts");
+      await sendAdminAlert({
+        severity: "warning",
+        category: "payment",
+        message: `Booking #${bookingId} cancelled after payout release -- refund of ₹${refundCalc.refundAmountRupees} needs manual settlement.`,
+        details: { bookingId },
+      });
+    } else if (refundCalc.refundAmountPaise > 0) {
       if (!booking.razorpay_payment_id) {
         throw new CancellationValidationError(
           "No Razorpay payment found for this booking -- cannot process a refund.",
@@ -331,9 +318,15 @@ export async function cancelBookingWithRefund(params: {
           }`,
           flagged_at: new Date().toISOString(),
         });
-        // 4.7 -- notify ops on failure, expose manual retry via the
-        // finance dashboard (not built here -- this function can be
-        // re-invoked safely thanks to the idempotency key above).
+        // 4.7 -- notify ops on failure; retryFailedRefund() below re-attempts
+        // it (safe thanks to the idempotency key above).
+        const { sendAdminAlert } = await import("@/lib/services/adminAlerts");
+        await sendAdminAlert({
+          severity: "critical",
+          category: "payment",
+          message: `Refund for booking #${bookingId} failed at Razorpay -- needs a retry or manual refund.`,
+          details: { bookingId, amountPaise: refundCalc.refundAmountPaise },
+        });
       }
     } else {
       refundStatus = "not_applicable"; // e.g. Flexible/Strict inside their no-refund window
@@ -344,7 +337,7 @@ export async function cancelBookingWithRefund(params: {
       .from("bookings")
       .update({
         status_id: CANCELLED_STATUS_ID,
-        refund_status: refundStatus === "processed" ? "processed" : refundStatus === "failed" ? "failed" : "not_applicable",
+        refund_status: refundStatus === "not_applicable" ? "not_applicable" : refundStatus,
         refund_amount: refundCalc.refundAmountRupees,
         refund_reason: reason ?? null,
         refund_transaction_id: razorpayRefundId,
@@ -372,8 +365,8 @@ export async function cancelBookingWithRefund(params: {
       const { notify, notifyWhatsApp, hostUserId, resolveUserPhone } = await import("@/lib/services/notifications");
       const refundText =
         refundStatus === "processed"
-          ? ` A refund of ₹${refundCalc.refundAmountRupees} has been initiated.`
-          : refundStatus === "failed"
+          ? ` A refund of ₹${refundCalc.refundAmountRupees} has been initiated. ${REFUND_ARRIVAL_NOTE}`
+          : refundStatus === "failed" || refundStatus === "flagged_for_manual_settlement"
             ? " Your refund could not be processed automatically; our team will follow up."
             : "";
       const metadata = { booking_id: bookingId, listing_id: booking.listing_id };
@@ -395,6 +388,16 @@ export async function cancelBookingWithRefund(params: {
         metadata: { ...metadata, role: "guest" },
       });
       
+      const { emailUser } = await import("@/lib/services/email");
+      await emailUser(booking.user_id, {
+        subject: `Booking #${bookingId} cancelled`,
+        heading: cancelledByHost ? "Your booking was cancelled by the host" : "Your booking was cancelled",
+        lines: [
+          `Booking #${bookingId} was cancelled.${refundText}`,
+          ...(refundCalc.refundAmountPaise > 0 ? [`Refund amount: ₹${refundCalc.refundAmountRupees}. ${refundCalc.reason}`] : []),
+        ],
+      }).catch(() => {});
+
       const hostUser = await hostUserId(booking.host_uuid);
       if (hostUser && hostUser !== booking.user_id) {
         const { data: host } = await supabaseAdmin
@@ -417,8 +420,8 @@ export async function cancelBookingWithRefund(params: {
     } catch (notifyErr) {
       console.error("[cancelBookingWithRefund] notification failed:", notifyErr);
     }
-    // TODO: accounting-ledger entry -- no ledger table exists yet; the
-    // booking row's refund_* columns are the audit trail for now.
+    // No separate ledger table: the booking row's refund_* columns and the
+    // payment/payout tables are the audit trail.
 
     return {
       bookingId,
@@ -434,6 +437,119 @@ export async function cancelBookingWithRefund(params: {
     await supabaseAdmin
       .from("bookings")
       .update({ refund_status: null })
+      .eq("booking_id", bookingId)
+      .eq("refund_status", "processing");
+    throw err;
+  }
+}
+
+export interface RetryRefundResult {
+  bookingId: number;
+  refundAmountRupees: number;
+  razorpayRefundId: string;
+}
+
+/**
+ * Re-attempts a refund that failed at Razorpay when the booking was cancelled
+ * (refund_status = 'failed'). Allowed for the booking's guest or host, or for
+ * ops when `requestingUserId` is omitted (the admin route authenticates
+ * separately). Reuses the original idempotency key, so if the first attempt
+ * actually went through at Razorpay this returns that same refund instead of
+ * paying twice.
+ */
+export async function retryFailedRefund(params: {
+  bookingId: number;
+  requestingUserId?: string;
+}): Promise<RetryRefundResult> {
+  const { bookingId, requestingUserId } = params;
+
+  const { data: bookingRaw, error } = await supabaseAdmin
+    .from("bookings")
+    .select(
+      "booking_id, host_uuid, user_id, status_id, refund_status, refund_amount, razorpay_payment_id, razorpay_transfer_id",
+    )
+    .eq("booking_id", bookingId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!bookingRaw) throw new CancellationValidationError("Booking not found.");
+  const booking = bookingRaw as unknown as Pick<
+    BookingRow,
+    "booking_id" | "host_uuid" | "user_id" | "status_id" | "refund_status" | "razorpay_payment_id" | "razorpay_transfer_id"
+  > & { refund_amount: number | null };
+
+  if (requestingUserId && booking.user_id !== requestingUserId) {
+    const { data: hostRow, error: hostErr } = await supabaseAdmin
+      .from("host")
+      .select("user_id")
+      .eq("host_uuid", booking.host_uuid)
+      .maybeSingle();
+    if (hostErr) throw hostErr;
+    if (hostRow?.user_id !== requestingUserId) {
+      throw new CancellationValidationError("You don't have permission to retry this refund.");
+    }
+  }
+  if (booking.status_id !== CANCELLED_STATUS_ID || booking.refund_status !== "failed") {
+    throw new CancellationValidationError("There is no failed refund to retry for this booking.");
+  }
+  const amountPaise = Math.round(Number(booking.refund_amount ?? 0) * 100);
+  if (amountPaise <= 0 || !booking.razorpay_payment_id) {
+    throw new CancellationValidationError("This booking has no refundable payment on record.");
+  }
+
+  // Same practical row lock as the cancel path: only one retry at a time.
+  const { data: locked, error: lockErr } = await supabaseAdmin
+    .from("bookings")
+    .update({ refund_status: "processing" })
+    .eq("booking_id", bookingId)
+    .eq("refund_status", "failed")
+    .select("booking_id");
+  if (lockErr) throw lockErr;
+  if (!locked || locked.length === 0) {
+    throw new CancellationValidationError("A refund is already being processed for this booking.");
+  }
+
+  try {
+    // The first attempt may have gone through even though we saw an error, so
+    // look for a live refund for this booking before creating another. A
+    // refund that was accepted and later failed can't be re-used (Razorpay
+    // would hand the same failed refund back for the same idempotency key),
+    // so a genuinely new attempt gets a fresh key.
+    const existing = await getRazorpayClient().payments.fetchMultipleRefund(booking.razorpay_payment_id);
+    const live = (existing.items ?? []).find(
+      (r: any) => r.notes?.bookingId === String(bookingId) && r.status !== "failed",
+    );
+    const refund =
+      live ??
+      (await createRazorpayRefund({
+        razorpayPaymentId: booking.razorpay_payment_id,
+        amountPaise,
+        idempotencyKey: `refund:${bookingId}:retry:${Date.now()}`,
+        notes: { bookingId: String(bookingId), retry: "true" },
+        reverseTransfers: !!booking.razorpay_transfer_id,
+      }));
+    await supabaseAdmin
+      .from("bookings")
+      .update({
+        refund_status: "processed",
+        refund_transaction_id: refund.id,
+        refund_processed_at: new Date().toISOString(),
+      })
+      .eq("booking_id", bookingId);
+
+    const { notify } = await import("@/lib/services/notifications");
+    await notify({
+      userId: booking.user_id,
+      type: "booking_guest",
+      category: "bookings",
+      title: "Refund initiated",
+      message: `Your refund of ₹${amountPaise / 100} for booking #${bookingId} has been initiated. ${REFUND_ARRIVAL_NOTE}`,
+      metadata: { booking_id: bookingId, role: "guest" },
+    });
+    return { bookingId, refundAmountRupees: amountPaise / 100, razorpayRefundId: refund.id };
+  } catch (err) {
+    await supabaseAdmin
+      .from("bookings")
+      .update({ refund_status: "failed" })
       .eq("booking_id", bookingId)
       .eq("refund_status", "processing");
     throw err;

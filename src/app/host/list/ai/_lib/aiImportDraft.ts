@@ -98,6 +98,15 @@ export type AiGeneratedListing = {
   // Source property/room type strings (mapped to our enums at publish).
   propertyType?: string;
   roomType?: string;
+  stayType?: 'entire' | 'private' | 'shared';
+  houseRules?: {
+    check_in_time?: string;
+    check_out_time?: string;
+    smoking_allowed?: boolean;
+    pets_allowed?: boolean;
+    parties_allowed?: boolean;
+    quiet_hours?: boolean;
+  };
 };
 
 // A source URL that failed to import -- kept alongside the successful ones

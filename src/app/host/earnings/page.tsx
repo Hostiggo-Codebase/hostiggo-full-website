@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
@@ -86,8 +87,7 @@ const mapEarn = (row: any): Earn => {
   };
 };
 
-const inr = (n: number) =>
-  `₹${Math.round(n).toLocaleString('en-IN')}`;
+const inr = (n: number) => formatINR(n);
 
 const fmtDate = (d: Date | null) =>
   d ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';

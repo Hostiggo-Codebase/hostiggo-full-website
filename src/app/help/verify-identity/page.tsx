@@ -1,7 +1,7 @@
 import HelpArticle, { A, List, Note, P } from "@/components/help/HelpArticle";
 
 export const metadata = {
-  title: "Verify Your Identity · Hostiggo Help",
+  title: "Verify Your Identity · Help",
   description: "How Aadhaar identity verification works for Hostiggo hosts.",
 };
 

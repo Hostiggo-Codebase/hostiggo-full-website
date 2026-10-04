@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const limited = rateLimit(`feedback:${clientIp(req)}`, 5, 10 * 60_000);
+    const limited = await rateLimit(`feedback:${clientIp(req)}`, 5, 10 * 60_000);
     if (limited) return limited;
     const body = await readJsonBody(req);
     if (body instanceof NextResponse) return body;
