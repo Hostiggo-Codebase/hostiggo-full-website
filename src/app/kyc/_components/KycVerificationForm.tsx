@@ -17,6 +17,7 @@ type BankResult =
   | { verified: true; accountHolderName: string | null; bankName: string | null }
   | { verified: false; reason: string | null }
   | null;
+type KycAudience = 'host' | 'guest';
 
 // Any one of these verifies identity (KYC). Payouts additionally need a
 // verified PAN -- Razorpay Route requires one to open the host's account.
@@ -77,6 +78,7 @@ const PAYOUT_SETTINGS_HREF = '/host/settings?tab=payouts';
 export function KycVerificationForm({
   userId,
   defaultName = '',
+  audience = 'host',
   onCompleted,
   onSkipped,
   showSkip = true,
@@ -84,6 +86,7 @@ export function KycVerificationForm({
 }: {
   userId: string;
   defaultName?: string;
+  audience?: KycAudience;
   onCompleted: () => void;
   onSkipped: () => void;
   showSkip?: boolean;
@@ -91,7 +94,8 @@ export function KycVerificationForm({
   onSetupPayouts?: () => void;
 }) {
   const router = useRouter();
-  const { status: serverKycStatus } = useKycStatus();
+  const { status: serverKycStatus, refresh: refreshKycStatus } = useKycStatus();
+  const isHost = audience === 'host';
   const [fullName, setFullName] = useState(defaultName);
   const [idMethod, setIdMethod] = useState<IdMethod>('pan');
   const [pan, setPan] = useState('');
@@ -132,10 +136,8 @@ export function KycVerificationForm({
   const isBankValid = ACCOUNT_RE.test(accountNumber) && IFSC_RE.test(ifsc);
   const canSubmitBank = hasName && isBankValid && !bankSubmitting;
 
-  // KYC is optional. Deferring is a permanent choice -- the listing flow
-  // won't prompt again. The host can come back and finish verification
-  // anytime from Host Settings -> Identity Verification, and the dashboard
-  // banner keeps nudging them until it's done.
+  // KYC can be deferred from host onboarding and from optional guest profile
+  // prompts. Booking-time guest verification can hide the skip action.
   const handleSkip = () => {
     deferKyc(userId);
     onSkipped();
@@ -163,6 +165,7 @@ export function KycVerificationForm({
       } else if (status === 'rejected') toast.error(body?.reason || `${label} verification failed.`);
       else toast.success(`${label} details received -- verification is in progress.`);
       markKycSubmitted(userId);
+      refreshKycStatus();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -200,11 +203,8 @@ export function KycVerificationForm({
     }
   };
 
-  // Bank verification is mandatory once id proof is verified -- a hard
-  // requirement from the business (payouts need both), not just a UI nudge.
-  // So once idVerified flips true, the quick "Done for now" exit disappears
-  // until bank is verified too; the host can still bail out entirely via
-  // the modal's X (top right), same as before id verification ever ran.
+  // Bank verification is mandatory for hosts once ID proof is verified
+  // because payouts need both. Guests stop after government ID verification.
   const idVerified = idResult?.status === 'verified';
   const idAlreadyVerified = serverKycStatus === 'verified';
   const showIdForm = !idAlreadyVerified || reverifyId || Boolean(idResult);
@@ -212,15 +212,16 @@ export function KycVerificationForm({
   const bankUnlocked = idVerified || idAlreadyVerified;
   const bankVerified = bankResult?.verified === true;
   const somethingSubmitted = Boolean(idResult || bankResult);
-  const canFinish = !idVerified || bankVerified;
+  const canFinish = isHost ? !idVerified || bankVerified : idVerified || idAlreadyVerified;
+  const canCompleteNow = (somethingSubmitted && canFinish) || (!isHost && idAlreadyVerified);
 
   return (
     <div className="space-y-6">
-      <BankDetailsNotice />
+      {isHost && <BankDetailsNotice />}
 
       <div>
         <label htmlFor="fullName" className="block text-xs font-semibold text-gray-600 mb-1.5">
-          Full name (as on your ID and bank account)
+          {isHost ? 'Full name (as on your ID and bank account)' : 'Full name (as on your ID)'}
         </label>
         <input
           id="fullName"
@@ -235,7 +236,7 @@ export function KycVerificationForm({
 
       {/* Step 1: ID verification */}
       <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 -mb-2">
-        Step 1 · Identity
+        {isHost ? 'Step 1 - Identity' : 'Identity verification'}
       </p>
       {!showIdForm ? (
         <div className="flex items-start justify-between gap-3 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
@@ -282,7 +283,7 @@ export function KycVerificationForm({
                 );
               })}
             </div>
-            {idMethod !== 'pan' && (
+            {isHost && idMethod !== 'pan' && (
               <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
                 {ID_METHODS[idMethod].label} verifies your identity, but a PAN is still required to receive
                 payouts -- you can add it later in Settings → Payouts.
@@ -453,101 +454,107 @@ export function KycVerificationForm({
         </form>
       )}
 
-      <div className="h-px bg-gray-100" />
+      {isHost && (
+        <>
+          <div className="h-px bg-gray-100" />
 
-      {/* Step 2: Bank verification */}
-      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 -mb-2">
-        Step 2 · Bank account
-      </p>
-      {!bankUnlocked ? (
-        <div className="flex items-start gap-2 rounded-xl border border-dashed border-gray-200 px-3 py-3 text-xs text-gray-500">
-          <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-          Verify your identity above first -- then add the bank account your payouts should go to.
-        </div>
-      ) : (
-        <form onSubmit={handleSubmitBank} className="space-y-4">
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
-            <Landmark className="w-3.5 h-3.5" />
-            Bank account verification
+          {/* Step 2: Bank verification */}
+          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 -mb-2">
+            Step 2 - Bank account
           </p>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="bankAccount" className="block text-xs font-semibold text-gray-600 mb-1.5">
-                Account number
-              </label>
-              <input
-                id="bankAccount"
-                type="text"
-                inputMode="numeric"
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 18))}
-                placeholder="219101000000000"
-                maxLength={18}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
-              />
+          {!bankUnlocked ? (
+            <div className="flex items-start gap-2 rounded-xl border border-dashed border-gray-200 px-3 py-3 text-xs text-gray-500">
+              <Lock className="w-4 h-4 shrink-0 mt-0.5" />
+              Verify your identity above first -- then add the bank account your payouts should go to.
             </div>
-            <div>
-              <label htmlFor="bankIfsc" className="block text-xs font-semibold text-gray-600 mb-1.5">
-                IFSC code
-              </label>
-              <input
-                id="bankIfsc"
-                type="text"
-                value={ifsc}
-                onChange={(e) => setIfsc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
-                placeholder="HDFC0001234"
-                maxLength={11}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm uppercase outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
-              />
-            </div>
-          </div>
-          <p className="text-[11px] text-gray-400">
-            We verify the account is real without moving any money -- no OTP needed.
-          </p>
+          ) : (
+            <form onSubmit={handleSubmitBank} className="space-y-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                <Landmark className="w-3.5 h-3.5" />
+                Bank account verification
+              </p>
 
-          <ResultBanner result={bankResult} />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="bankAccount" className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Account number
+                  </label>
+                  <input
+                    id="bankAccount"
+                    type="text"
+                    inputMode="numeric"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 18))}
+                    placeholder="219101000000000"
+                    maxLength={18}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="bankIfsc" className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    IFSC code
+                  </label>
+                  <input
+                    id="bankIfsc"
+                    type="text"
+                    value={ifsc}
+                    onChange={(e) => setIfsc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
+                    placeholder="HDFC0001234"
+                    maxLength={11}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm uppercase outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                We verify the account is real without moving any money -- no OTP needed.
+              </p>
 
-          <button
-            type="submit"
-            disabled={!canSubmitBank}
-            className="w-full py-3 bg-figma-navy text-white text-sm font-semibold rounded-xl hover:bg-figma-navy/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          >
-            {bankSubmitting ? 'Verifying…' : 'Verify bank account'}
-          </button>
-        </form>
+              <ResultBanner result={bankResult} />
+
+              <button
+                type="submit"
+                disabled={!canSubmitBank}
+                className="w-full py-3 bg-figma-navy text-white text-sm font-semibold rounded-xl hover:bg-figma-navy/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                {bankSubmitting ? 'Verifying…' : 'Verify bank account'}
+              </button>
+            </form>
+          )}
+        </>
       )}
 
-      {idVerified && !bankVerified ? (
+      {isHost && idVerified && !bankVerified ? (
         <p className="text-center text-xs font-medium text-gray-500">
           Bank verification is required to finish -- your{' '}
           {verifiedMethod ? ID_METHODS[verifiedMethod].label : 'ID'} is verified, now add your bank
           details above.
         </p>
       ) : (
-        (showSkip || somethingSubmitted) && (
+        (showSkip || somethingSubmitted || (!isHost && idAlreadyVerified)) && (
           <button
             type="button"
-            onClick={somethingSubmitted && canFinish ? onCompleted : handleSkip}
+            onClick={canCompleteNow ? onCompleted : handleSkip}
             className="w-full text-center text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors"
           >
-            {somethingSubmitted && canFinish ? 'Done' : "Skip for now — I'll verify later"}
+            {canCompleteNow ? 'Done' : "Skip for now - I'll verify later"}
           </button>
         )
       )}
 
-      <PayoutSetupPromptModal
-        open={payoutPromptOpen}
-        onSetupNow={() => {
-          setPayoutPromptOpen(false);
-          if (onSetupPayouts) onSetupPayouts();
-          else router.push(PAYOUT_SETTINGS_HREF);
-        }}
-        onLater={() => {
-          setPayoutPromptOpen(false);
-          onCompleted();
-        }}
-      />
+      {isHost && (
+        <PayoutSetupPromptModal
+          open={payoutPromptOpen}
+          onSetupNow={() => {
+            setPayoutPromptOpen(false);
+            if (onSetupPayouts) onSetupPayouts();
+            else router.push(PAYOUT_SETTINGS_HREF);
+          }}
+          onLater={() => {
+            setPayoutPromptOpen(false);
+            onCompleted();
+          }}
+        />
+      )}
     </div>
   );
 }
