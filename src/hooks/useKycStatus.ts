@@ -58,7 +58,7 @@ export function useKycStatus(): KycState {
         // The server is the source of truth, but if it can't be read, trust
         // the local "submitted" flag so a host who just submitted still sees
         // "pending" rather than "not started".
-        if (next === 'unknown' && hasSubmittedKyc(userId)) {
+        if ((next === 'unknown' || next === 'none') && hasSubmittedKyc(userId)) {
           next = 'pending';
         }
         // Keep the local flag in sync so offline reads stay accurate.

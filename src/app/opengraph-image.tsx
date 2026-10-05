@@ -1,30 +1,78 @@
-import { ImageResponse } from "next/og";
-import { SITE_NAME, SITE_TAGLINE } from "@/lib/site";
+import { ImageResponse } from 'next/og';
+import { SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site';
 
 // Default share card for links to the site (WhatsApp, Instagram, X, Facebook).
 export const alt = `${SITE_NAME}: ${SITE_TAGLINE}`;
 export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
+export const contentType = 'image/png';
 
-export default function OpengraphImage() {
+export default function OpenGraphImage() {
   return new ImageResponse(
     (
       <div
         style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: 80,
-          background: "linear-gradient(135deg, #0b2c4d 0%, #1e3a5f 100%)",
-          color: "white",
+          height: '100%',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          background: 'linear-gradient(135deg, #f7f3eb 0%, #ecf2ff 100%)',
+          padding: '72px 84px',
+          fontFamily: 'sans-serif',
+          color: '#0f172a',
         }}
       >
-        <div style={{ fontSize: 96, fontWeight: 800, letterSpacing: -2 }}>{SITE_NAME}</div>
-        <div style={{ fontSize: 44, marginTop: 24, opacity: 0.92 }}>{SITE_TAGLINE}</div>
-        <div style={{ fontSize: 30, marginTop: 48, color: "#f5c542" }}>
-          All-in prices · Exact refund dates · Verified stays
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div
+            style={{
+              width: '54px',
+              height: '54px',
+              borderRadius: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#0f172a',
+              color: '#ffffff',
+              fontSize: '28px',
+              fontWeight: 700,
+            }}
+          >
+            H
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 700 }}>{SITE_NAME}</div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div style={{ fontSize: '64px', fontWeight: 800, lineHeight: 1.02 }}>
+            {SITE_TAGLINE}
+          </div>
+          <div style={{ fontSize: '30px', color: '#374151', lineHeight: 1.25 }}>
+            Verified homestays and unique stays across India.
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: '#ffffff',
+            borderRadius: '24px',
+            padding: '20px 28px',
+            boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <div style={{ fontSize: '15px', color: '#475569', textTransform: 'uppercase' }}>
+              Book with confidence
+            </div>
+            <div style={{ fontSize: '28px', fontWeight: 700, color: '#0f172a' }}>
+              Secure - Transparent - Local
+            </div>
+          </div>
+          <div style={{ fontSize: '22px', fontWeight: 600, color: '#0f172a' }}>
+            {SITE_URL.replace(/^https?:\/\//, '')}
+          </div>
         </div>
       </div>
     ),

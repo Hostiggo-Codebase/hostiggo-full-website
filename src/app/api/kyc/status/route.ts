@@ -6,6 +6,13 @@ export const dynamic = 'force-dynamic';
 
 const ID_PROOF_TYPES = ['pan', 'aadhaar', 'passport'];
 
+const normalizeKycStatus = (status: unknown) => {
+  if (status === 'verified' || status === 'success') return 'verified';
+  if (status === 'pending') return 'pending';
+  if (status === 'rejected' || status === 'failed') return 'rejected';
+  return 'unknown';
+};
+
 // Live id-proof KYC status for a user, so the host dashboard banner and
 // Settings -> Identity Verification reflect the real verification state
 // instead of a client-only "I submitted once" localStorage flag. Follows
@@ -35,7 +42,7 @@ export async function GET(req: NextRequest) {
         .select('created_at, service_type')
         .eq('user_id', userId)
         .in('service_type', ID_PROOF_TYPES)
-        .eq('status', 'verified')
+        .in('status', ['verified', 'success'])
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
@@ -69,7 +76,7 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({
       data: {
-        status: 'rejected',
+        status: normalizeKycStatus(latest.data.status),
         submittedAt: latest.data.created_at,
         reason: latest.data.error_message ?? null,
       },

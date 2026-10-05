@@ -14,7 +14,7 @@ export async function guestHasVerifiedId(userId: string): Promise<boolean> {
     .select("id")
     .eq("user_id", userId)
     .in("service_type", ["pan", "aadhaar", "passport"])
-    .eq("status", "verified")
+    .in("status", ["verified", "success"])
     .limit(1)
     .maybeSingle();
   if (error) throw error;
