@@ -4,6 +4,7 @@ import { createRazorpayOrder } from "@/lib/billing/razorpay";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { GUEST_ID_REQUIRED, guestHasVerifiedId } from "@/lib/services/guestVerification";
 import { rateLimit } from "@/lib/rateLimit";
+import { DatesUnavailableError, isDatabaseAvailabilityError } from "@/lib/stayDates";
 import {
   BOOKINGS_DISABLED,
   PAYMENTS_ENABLED,
@@ -150,6 +151,9 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err: any) {
+    if (err instanceof DatesUnavailableError || isDatabaseAvailabilityError(err)) {
+      return NextResponse.json({ error: "These dates are blocked or already booked. Please choose different dates.", code: "DATES_UNAVAILABLE", blockedDates: err.blockedDates ?? [] }, { status: 409 });
+    }
     if (err instanceof UnauthorizedError) {
       return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
     }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { SCHEMA } from "@/lib/schema.constants";
+import { isISODate } from "@/lib/stayDates";
 
 const DB_SCHEMA = SCHEMA.testingSchema;
 
@@ -21,10 +22,9 @@ export async function GET(req: NextRequest) {
   // string there throws at the query level, which previously surfaced as
   // the generic 500 "Could not verify availability" below instead of a
   // clear validation error.
-  const isoDay = /^\d{4}-\d{2}-\d{2}$/;
-  if (!isoDay.test(startDate) || !isoDay.test(endDate)) {
+  if (!Number.isSafeInteger(listingId) || listingId < 1 || !isISODate(startDate) || !isISODate(endDate) || endDate <= startDate) {
     return NextResponse.json(
-      { error: "startDate and endDate must be YYYY-MM-DD" },
+      { error: "Select valid YYYY-MM-DD dates with checkout after check-in." },
       { status: 400 },
     );
   }
@@ -37,8 +37,7 @@ export async function GET(req: NextRequest) {
     .eq("listing_id", listingId)
     .gte("date", startDate)
     .lt("date", endDate)
-    .eq("is_available", false)
-    .limit(1);
+    .eq("is_available", false);
 
   if (blockedErr) {
     console.error("[check-availability] blocked-days query failed:", blockedErr);
@@ -49,7 +48,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (blocked && blocked.length > 0) {
-    return NextResponse.json({ available: false, reason: "Some of the selected dates are not available." });
+    return NextResponse.json({ available: false, reason: "These dates are blocked. Please choose different dates.", blockedDates: blocked.map((row) => row.date) });
   }
 
   // Check for overlapping confirmed bookings.
