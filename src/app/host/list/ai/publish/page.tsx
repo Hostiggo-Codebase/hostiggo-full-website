@@ -46,7 +46,9 @@ function toCreateListingPayload(userId: string, g: AiGeneratedListing) {
     state: g.state,
     postalCode: g.postalCode,
     propertyType: (g.propertyType || '').toLowerCase().trim() || 'apartment',
-    stayType: 'entire',
+    stayType: g.stayType || 'entire',
+    houseRules: g.houseRules,
+    requireMinimumPhotos: true,
   };
 }
 
@@ -109,8 +111,8 @@ export default function AiPublishPage() {
       toast.success(
         successCount === outcomes.length
           ? isMulti
-            ? `${successCount} listings created! They'll appear once reviewed.`
-            : 'Listing created! It will appear once reviewed.'
+            ? `${successCount} listings created!`
+            : 'Listing created!'
           : `${successCount} of ${outcomes.length} listings created.`,
       );
     } else {

@@ -32,7 +32,7 @@ const sections = [
 ];
 
 export const metadata = {
-  title: "Shipping Policy · Hostiggo",
+  title: "Shipping Policy",
   description:
     "Hostiggo does not ship physical goods -- this page explains how bookings are confirmed and delivered instead.",
 };

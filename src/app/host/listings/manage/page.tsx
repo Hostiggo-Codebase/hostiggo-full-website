@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
@@ -256,7 +257,15 @@ export default function ManageListingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ listingId: parseInt(listingId), isActive: !formData.is_active, userId }),
       });
-      if (!res.ok) throw new Error('Failed to update listing status');
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        if (body?.code === 'PAYOUT_NOT_READY') {
+          toast.error(body.error);
+          router.push('/host/settings?tab=payouts');
+          return;
+        }
+        throw new Error(body?.error || 'Failed to update listing status');
+      }
       const { data } = await res.json();
       setFormData((prev) => (prev ? { ...prev, is_active: data.isActive } : prev));
       setListing((prev) => (prev ? { ...prev, is_active: data.isActive } : prev));
@@ -408,13 +417,13 @@ export default function ManageListingPage() {
                   <div>
                     <p className="text-xs text-gray-600">Base Price</p>
                     <p className="text-base font-bold text-figma-navy">
-                      ₹{formData?.price_weekday?.toLocaleString()}
+                      {formatINR(formData?.price_weekday)}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-600">Weekend</p>
                     <p className="text-base font-bold text-figma-navy">
-                      ₹{formData?.price_weekend?.toLocaleString()}
+                      {formatINR(formData?.price_weekend)}
                     </p>
                   </div>
                 </div>

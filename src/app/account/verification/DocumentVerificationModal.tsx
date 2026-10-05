@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '@/lib/api';
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,9 @@ type Props = {
 export default function DocumentVerificationModal({ doc, onClose }: Props) {
   const [number, setNumber] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [fullName, setFullName] = useState('');
+  const [yob, setYob] = useState('');
+  const [password, setPassword] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -28,6 +32,9 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
   useEffect(() => {
     setNumber('');
     setFile(null);
+    setFullName('');
+    setYob('');
+    setPassword('');
     setSubmitting(false);
   }, [doc?.id]);
 
@@ -53,22 +60,47 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     if (!selected) return;
-    if (!selected.type.startsWith('image/')) {
+    if (doc.id === 'aadhaar' && selected.type !== 'application/pdf' && !selected.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Please upload the original eAadhaar PDF.');
+      return;
+    }
+    if (doc.id !== 'aadhaar' && !selected.type.startsWith('image/')) {
       toast.error('Please upload an image file.');
+      return;
+    }
+    if (doc.id === 'aadhaar' && selected.size > 5 * 1024 * 1024) {
+      toast.error('The eAadhaar PDF is too large (max 5 MB).');
       return;
     }
     setFile(selected);
   };
 
-  const canSubmit = number.trim().length > 0 && !!file && !submitting;
+  const canSubmit = doc.id === 'aadhaar'
+    ? fullName.trim().length > 1 && /^\d{4}$/.test(yob) && password.length > 0 && !!file && !submitting
+    : number.trim().length > 0 && !!file && !submitting;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) return;
+    setSubmitting(true);
+    if (doc.id === 'aadhaar') {
+      try {
+        const result = await api.verifyAadhaar({ file: file as File, yob, fullName: fullName.trim(), password });
+        if (result.status === 'verified') toast.success('Your eAadhaar has been verified.');
+        else if (result.status === 'rejected') toast.error(result.reason || 'eAadhaar verification failed.');
+        else toast.success('eAadhaar received. Verification is in progress.');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not verify your eAadhaar.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     // NOT wired to a backend yet -- there is no identity-verification
     // endpoint or KYC table for this document type. Be honest about that
     // rather than showing a fake "submitted, we'll review it" success, and
     // point the user at the Aadhaar flow that does work today.
     toast('Verification for this document type isn’t available yet — use Aadhaar verification for now.');
+    setSubmitting(false);
     onClose();
   };
 
@@ -86,40 +118,46 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
         </DialogHeader>
 
         <div className="mt-4 space-y-6">
-          {/* Document number */}
-          <div className="space-y-2">
-            <label
-              htmlFor="doc-number"
-              className="block text-[17px] font-medium text-[#151515]"
-            >
-              {doc.numberLabel}
-            </label>
-            <input
-              id="doc-number"
-              type="text"
-              inputMode={doc.inputMode}
-              maxLength={doc.maxLength}
-              autoComplete="off"
-              value={number}
-              onChange={(e) => handleNumberChange(e.target.value)}
-              placeholder={doc.numberPlaceholder}
-              className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
-            />
-          </div>
+          {doc.id === 'aadhaar' ? (
+            <>
+              <div className="space-y-2">
+                <label htmlFor="aadhaar-full-name" className="block text-[17px] font-medium text-[#151515]">Full name as on eAadhaar</label>
+                <input id="aadhaar-full-name" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter your full name" className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="aadhaar-yob" className="block text-[17px] font-medium text-[#151515]">Year of birth</label>
+                <input id="aadhaar-yob" type="text" inputMode="numeric" maxLength={4} value={yob} onChange={(e) => setYob(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="1990" className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="aadhaar-password" className="block text-[17px] font-medium text-[#151515]">eAadhaar PDF password</label>
+                <input id="aadhaar-password" type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your PDF password" className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+                <p className="text-xs leading-relaxed text-gray-500">Usually the first four letters of your name in capitals followed by your birth year.</p>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <label htmlFor="doc-number" className="block text-[17px] font-medium text-[#151515]">{doc.numberLabel}</label>
+              <input id="doc-number" type="text" inputMode={doc.inputMode} maxLength={doc.maxLength} autoComplete="off" value={number} onChange={(e) => handleNumberChange(e.target.value)} placeholder={doc.numberPlaceholder} className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+            </div>
+          )}
 
           {/* Upload image */}
           <div className="space-y-2">
-            <p className="text-[17px] font-medium text-[#151515]">Upload image</p>
+            <p className="text-[17px] font-medium text-[#151515]">{doc.id === 'aadhaar' ? 'Upload eAadhaar PDF' : 'Upload image'}</p>
             <div className="rounded-[15px] border border-[#a1a1a1] p-4">
               {previewUrl ? (
                 <div className="flex flex-col items-center gap-3">
-                  <div className="relative h-40 w-full overflow-hidden rounded-lg bg-gray-50">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={previewUrl}
-                      alt={`${doc.label} preview`}
-                      className="h-full w-full object-contain"
-                    />
+                  <div className="relative flex h-40 w-full items-center justify-center overflow-hidden rounded-lg bg-gray-50">
+                    {doc.id === 'aadhaar' ? (
+                      <p className="px-4 text-center text-sm font-medium text-gray-600">eAadhaar PDF selected</p>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={previewUrl}
+                        alt={`${doc.label} preview`}
+                        className="h-full w-full object-contain"
+                      />
+                    )}
                     <button
                       type="button"
                       onClick={() => setFile(null)}
@@ -158,7 +196,7 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept={doc.id === 'aadhaar' ? 'application/pdf,.pdf' : 'image/*'}
                 className="hidden"
                 onChange={handleFileChange}
               />

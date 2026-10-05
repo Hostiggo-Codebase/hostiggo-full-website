@@ -77,7 +77,7 @@ Hostiggo will make reasonable efforts to address cookie-related inquiries and pr
 ];
 
 export const metadata = {
-  title: "Cookie Policy · Hostiggo",
+  title: "Cookie Policy",
   description:
     "How Hostiggo uses cookies and similar tracking technologies to improve user experience, security, and platform functionality.",
 };

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -25,15 +26,14 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { calculateHostPayout } from '@/lib/billing/payout';
 
-const FALLBACK_PROPERTY =
-  'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=200&h=200&fit=crop&q=80';
+const FALLBACK_PROPERTY = '/placeholder.svg';
 
 // Bookings are instant-confirmed on creation, booking_status only ever
 // defines 2 (CONFIRMED) and 3 (CANCELLED), there is no pending/approval step.
 const STATUS_LABEL: Record<number, string> = { 2: 'Confirmed', 3: 'Cancelled' };
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+const inr = (n: number) => formatINR(n);
 const fmtDate = (d: Date | null) =>
   d ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : '');
@@ -271,13 +271,12 @@ function DetailsInner() {
                   )}
                 </div>
                 <div className="flex flex-wrap gap-3 mt-6">
-                  <button
-                    disabled
-                    title="Messaging coming soon"
-                    className="flex items-center gap-2 px-5 py-2.5 bg-figma-navy/60 text-white rounded-xl font-bold cursor-not-allowed"
+                  <Link
+                    href="/host/chat"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90"
                   >
                     <MessageSquare className="w-5 h-5" /> Contact Guest
-                  </button>
+                  </Link>
                 </div>
               </div>
             </div>

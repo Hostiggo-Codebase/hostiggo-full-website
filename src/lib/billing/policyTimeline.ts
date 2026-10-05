@@ -29,6 +29,22 @@ export function checkInMoment(startDate: string, checkInTime?: string | null): D
   return new Date(`${startDate.slice(0, 10)}T${time}:00+05:30`);
 }
 
+/** Hosts are paid this long after check-in, so a stay that falls through can still be refunded in full. */
+const PAYOUT_HOLD_AFTER_CHECK_IN_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * When a booking's host transfer may be released: 24h after check-in (the
+ * Airbnb model). Null when that moment has already passed, i.e. nothing to hold.
+ */
+export function payoutReleaseMoment(
+  startDate: string,
+  checkInTime?: string | null,
+  now: Date = new Date(),
+): Date | null {
+  const release = new Date(checkInMoment(startDate, checkInTime).getTime() + PAYOUT_HOLD_AFTER_CHECK_IN_MS);
+  return release.getTime() > now.getTime() + 60_000 ? release : null;
+}
+
 /**
  * The concrete, dated refund schedule for a booking, mirroring
  * calculateRefund() in ./refund.ts -- so what the guest reads is exactly what

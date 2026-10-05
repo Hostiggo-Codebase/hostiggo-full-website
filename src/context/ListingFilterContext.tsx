@@ -21,6 +21,9 @@ interface ListingState {
   filters: SearchFilters;
   location: {
     query: string;
+    // State of a place picked from the destination dropdown (not set for
+    // typed text), so the search can tell same-named places apart.
+    state?: string;
     latitude?: number;
     longitude?: number;
   };
@@ -62,6 +65,7 @@ interface ListingActions {
   clearFilters: () => void;
   setLocation: (loc: {
     query: string;
+    state?: string;
     latitude?: number;
     longitude?: number;
   }) => void;
@@ -150,6 +154,7 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
   const [location, setLocationState] = useState<{
     query: string;
+    state?: string;
     latitude?: number;
     longitude?: number;
   }>({ query: '' });
@@ -223,6 +228,7 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
             endDate: toISODate(dates.checkOut),
             totalGuests: guests.adults + guests.children,
             amenities: resolveAmenityIds(filters.amenities, amenityCatalogue),
+            state: location.state,
             sort,
           },
         );
@@ -243,8 +249,11 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
         setHasMore(response.hasMore);
         // Only the first page (cursor === null) carries the true total; later
         // pages return null so we keep the count already shown rather than
-        // overwriting it with a per-page number.
+        // overwriting it with a per-page number. A null on the first page
+        // means the total isn't known (filters narrowed a multi-page result),
+        // so drop the previous search's count and count what's loaded.
         if (response.totalCount != null) setTotalCount(response.totalCount);
+        else if (cursorVal === null) setTotalCount(null);
         if (response.stateBounds) {
           setStateBounds(response.stateBounds);
         }
@@ -256,7 +265,7 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
         if (mountedRef.current && !isStale()) setLoading(false);
       }
     },
-    [filters, location.query, dates, guests, amenityCatalogue, sort],
+    [filters, location.query, location.state, dates, guests, amenityCatalogue, sort],
   );
 
   const refresh = useCallback(async () => {
@@ -347,7 +356,7 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const initializedRef = useRef(false);
-  const prevLocationRef = useRef(location.query);
+  const prevLocationRef = useRef(`${location.query}|${location.state ?? ''}`);
   const prevFiltersRef = useRef(JSON.stringify(filters));
   const prevDatesRef = useRef(JSON.stringify(dates));
   const prevGuestsRef = useRef(JSON.stringify(guests));
@@ -357,13 +366,14 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const datesKey = JSON.stringify(dates);
     const guestsKey = JSON.stringify(guests);
-    const locationChanged = prevLocationRef.current !== location.query;
+    const locationKey = `${location.query}|${location.state ?? ''}`;
+    const locationChanged = prevLocationRef.current !== locationKey;
     const filtersChanged = prevFiltersRef.current !== JSON.stringify(filters);
     const datesChanged = prevDatesRef.current !== datesKey;
     const guestsChanged = prevGuestsRef.current !== guestsKey;
     const sortChanged = prevSortRef.current !== sort;
 
-    prevLocationRef.current = location.query;
+    prevLocationRef.current = locationKey;
     prevFiltersRef.current = JSON.stringify(filters);
     prevDatesRef.current = datesKey;
     prevGuestsRef.current = guestsKey;
@@ -392,7 +402,7 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
     if (locationChanged || filtersChanged || datesChanged || guestsChanged || sortChanged) {
       fetchResults(null, true);
     }
-  }, [location.query, filters, dates, guests, sort]); // fetchResults intentionally omitted
+  }, [location.query, location.state, filters, dates, guests, sort]); // fetchResults intentionally omitted
 
   useEffect(() => {
     mountedRef.current = true;
@@ -423,7 +433,7 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
       totalCount,
     },
     counts: {
-      total: totalCount || 0,
+      total: totalCount ?? properties.length,
     },
     stateBounds,
     allProperties,

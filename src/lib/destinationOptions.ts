@@ -26,6 +26,34 @@ export function normalizePlaceName(name?: string | null): string {
 
 const isPlainAscii = (name: string) => normalizePlaceName(name) === name.trim().toLowerCase();
 
+// Same as normalizePlaceName but keeps the capitalisation, for names we send
+// to the search ("Haryāna" -> "Haryana", which is how the listings spell it).
+const stripAccents = (name: string) => name.normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+type StayRow = { locations?: { state?: string | null; district?: string | null } | null };
+
+// How many active listings a search for `name` will match. Mirrors the order
+// the search resolves a destination in (alias, then state, then district), so
+// the "(N stays)" label agrees with the results instead of showing the state
+// total for a single city.
+export function countStaysFor(name: string, rows: StayRow[]): number {
+  const alias = resolveDestinationAlias(name);
+  const norm = (v?: string | null) => normalizePlaceName(v);
+  const stateOf = (r: StayRow) => norm(r.locations?.state);
+  const districtOf = (r: StayRow) => norm(r.locations?.district);
+
+  if (alias?.state) {
+    const state = norm(alias.state);
+    return rows.filter((r) => stateOf(r) === state).length;
+  }
+  const target = norm(alias?.district ?? name);
+  if (!target) return 0;
+  if (rows.some((r) => stateOf(r) === target)) {
+    return rows.filter((r) => stateOf(r) === target).length;
+  }
+  return rows.filter((r) => districtOf(r) === target).length;
+}
+
 // Turns raw `locations` rows from the destination search into the options the
 // dropdown shows. The rows are one per saved locality, so the same city can
 // come back several times (five "Faridabad"s) or under an old name
@@ -59,7 +87,7 @@ export function buildDestinationOptions(
     const nameKey = normalizePlaceName(name);
     if (!nameKey) continue;
     const key = `${nameKey}|${stateKey}`;
-    if (!places.has(key)) places.set(key, { key, name, state, wholeState: false });
+    if (!places.has(key)) places.set(key, { key, name, state: stripAccents(state), wholeState: false });
   }
 
   // A place named after its own state (Delhi, Goa) is the whole-state option.

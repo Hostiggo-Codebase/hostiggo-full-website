@@ -58,6 +58,9 @@ export interface Property {
   propertyType: string;
   images: string[];
   maxGuests: number;
+  beds?: number;
+  bedrooms?: number;
+  bathrooms?: number;
   isFavorite?: boolean;
   isNew?: boolean;
   distanceFromCenter?: string;

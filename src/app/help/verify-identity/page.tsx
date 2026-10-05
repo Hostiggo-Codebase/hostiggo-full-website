@@ -1,7 +1,7 @@
 import HelpArticle, { A, List, Note, P } from "@/components/help/HelpArticle";
 
 export const metadata = {
-  title: "Verify Your Identity · Hostiggo Help",
+  title: "Verify Your Identity · Help",
   description: "How Aadhaar identity verification works for Hostiggo hosts.",
 };
 
@@ -12,7 +12,7 @@ export default function VerifyIdentityHelpPage() {
       updated="September 26, 2026"
       intro={
         <p>
-          Hostiggo verifies hosts using their Aadhaar card. Verification is <strong>optional</strong>:
+          Hostiggo verifies hosts using an eAadhaar PDF. Verification is <strong>optional</strong>:
           you can list and host without it, but verified hosts earn more guest trust and bookings.
         </p>
       }
@@ -42,11 +42,11 @@ export default function VerifyIdentityHelpPage() {
             <List
               ordered
               items={[
-                <>Upload a photo of the <strong>front</strong> and the <strong>back</strong> of your Aadhaar card (JPG, PNG or WEBP, up to 8 MB each). Make sure all four corners are visible and the details are readable.</>,
-                <>Enter your <strong>full name</strong> exactly as it appears on your Aadhaar.</>,
-                <>Enter your 12-digit <strong>Aadhaar number</strong>. We check it&apos;s a valid Aadhaar number as you type, so typos are caught straight away.</>,
-                <>Tick the consent box allowing Hostiggo to use your Aadhaar photo and details for identity verification, in line with our <A href="/privacy">Privacy policy</A>.</>,
-                <>Submit. You&apos;ll see &ldquo;Aadhaar details received — verification is in progress.&rdquo;</>,
+                <>Download your digitally signed <strong>eAadhaar PDF</strong> from UIDAI and upload the original file. A scan or photo will not work.</>,
+                <>Enter the <strong>PDF password</strong>. UIDAI usually uses the first four letters of your name in capitals followed by your birth year.</>,
+                <>Enter your <strong>full name</strong> and <strong>year of birth</strong> exactly as they appear on the eAadhaar.</>,
+                <>Tick the consent box allowing Hostiggo to use the eAadhaar details for identity verification, in line with our <A href="/privacy">Privacy policy</A>.</>,
+                <>Submit. You&apos;ll see &ldquo;eAadhaar details received — verification is in progress.&rdquo;</>,
               ]}
             />
           ),
@@ -73,8 +73,8 @@ export default function VerifyIdentityHelpPage() {
           body: (
             <>
               <P>
-                Aadhaar photos are stored in a private storage bucket that is never reachable by a public
-                link, separate from listing photos. They are used only for identity verification.
+                Hostiggo does not store the eAadhaar PDF or its password. The document is sent securely to
+                the verification provider, and only the minimum masked verification details are retained.
               </P>
               <Note>
                 Verification currently uses Aadhaar only. Bank and PAN details for payouts are collected

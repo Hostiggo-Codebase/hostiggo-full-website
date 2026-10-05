@@ -1,7 +1,15 @@
+import { formatINR } from '@/lib/format';
 import { supabase, supabaseCacheable } from '../supabase';
 import { todayInIndia } from "@/lib/booking-config";
 import { supabaseAdmin } from '../supabase-admin';
 import { resolveDestinationAlias } from '../destinationAliases';
+import {
+  MIN_FUZZY_TERM_LENGTH,
+  mergeScopePages,
+  sanitizeSearchTerm,
+  scopesFromLocations,
+  type SearchScope,
+} from '../destinationScopes';
 import {
   SearchFilters,
   GuestlistingSearchResults,
@@ -247,6 +255,112 @@ export const HotelServiceApi = {
     return (data || []) as SearchListingRpcRow[];
   },
 
+  // Turns the search box text into the state/district scopes to search.
+  // Listings are stored per state + district, and the RPC matches both
+  // exactly, so free text has to be mapped onto names the `locations` table
+  // really uses. In order: an explicit state (picked from the dropdown) wins;
+  // then known aliases ("New Delhi", "Gurgaon"); then a state name; then an
+  // exact district that has active listings; and finally a partial match on
+  // the district / locality name of active listings ("Shim" -> Shimla). A
+  // "Place, State" string is retried on just the place. Anything that still
+  // matches nothing is searched as typed (and so returns no results).
+  resolveSearchScopes: async (filters: SearchFilters): Promise<SearchScope[]> => {
+    let state: string | null = filters.state?.trim() || null;
+    let district: string | null = filters.district?.trim() || null;
+
+    if (district) {
+      const alias = resolveDestinationAlias(district);
+      if (alias) {
+        const typedName = district;
+        state = alias.state ?? state;
+        district = alias.district ?? null;
+        // A renamed city ("Gurgaon" -> "Gurugram"): search both spellings, so
+        // a listing still filed under the old name isn't lost.
+        if (district && district.toLowerCase() !== typedName.toLowerCase()) {
+          return [
+            { state, district },
+            { state, district: typedName },
+          ];
+        }
+      }
+    }
+
+    if (!district) return [{ state, district: null }];
+    if (state) return [{ state, district }];
+
+    const typed = district;
+    const terms = [
+      ...new Set(
+        [typed, typed.split(',')[0]]
+          .map(sanitizeSearchTerm)
+          .filter((t) => t.length > 0),
+      ),
+    ];
+
+    // A typed STATE name (e.g. "Uttarakhand") matches no district, so search
+    // the whole state. (A city that shares its name with its state still
+    // works: every listing in that state includes it.)
+    for (const term of terms) {
+      const { data: stateMatch } = await supabase
+        .from('locations')
+        .select('state')
+        .ilike('state', term)
+        .limit(1)
+        .maybeSingle();
+      if (stateMatch?.state) return [{ state: stateMatch.state, district: null }];
+    }
+
+    for (const term of terms) {
+      const { data: exact } = await supabase
+        .from('listings')
+        .select('listing_id, locations!inner(district)')
+        .eq('is_active', true)
+        .ilike('locations.district', term)
+        .limit(1);
+      if (exact?.length) return [{ state: null, district: term }];
+    }
+
+    for (const term of terms) {
+      if (term.length < MIN_FUZZY_TERM_LENGTH) continue;
+      const { data: fuzzy, error } = await supabase
+        .from('listings')
+        .select('locations!inner(state, district)')
+        .eq('is_active', true)
+        .or(`district.ilike.%${term}%,lower_division_name.ilike.%${term}%`, {
+          referencedTable: 'locations',
+        })
+        .limit(200);
+      if (error) {
+        console.error('[resolveSearchScopes] fuzzy lookup failed:', error.message);
+        continue;
+      }
+      const scopes = scopesFromLocations(
+        (fuzzy || []).map((r: any) => (Array.isArray(r.locations) ? r.locations[0] : r.locations)),
+      );
+      if (scopes.length) return scopes;
+    }
+
+    // Last resort: part of a state name ("Himachal" -> Himachal Pradesh)
+    // searches the whole of each state it matches.
+    for (const term of terms) {
+      if (term.length < MIN_FUZZY_TERM_LENGTH) continue;
+      const { data: states } = await supabase
+        .from('listings')
+        .select('locations!inner(state)')
+        .eq('is_active', true)
+        .ilike('locations.state', `%${term}%`)
+        .limit(200);
+      const matched = scopesFromLocations(
+        (states || []).map((r: any) => ({
+          state: (Array.isArray(r.locations) ? r.locations[0] : r.locations)?.state,
+        })),
+      );
+      if (matched.length) return matched;
+    }
+
+    return [{ state: null, district: typed }];
+  },
+
   filterHotelsByState: async (
     filters: SearchFilters,
     cursor: number | null = null,
@@ -260,58 +374,35 @@ export const HotelServiceApi = {
     const amenityIds = filters.amenities ? filters.amenities.map(Number) : [];
     const selectedRatings = filters.ratings || [];
 
-    // Determine search scope: use state if provided, otherwise use district (location)
-    let searchState = filters.state;
-    let searchDistrict = filters.district;
+    const scopes = await HotelServiceApi.resolveSearchScopes(filters);
+    // The first scope's state, when it names one, is also where the map bounds
+    // come from below.
+    const searchState = scopes[0]?.state ?? undefined;
 
-    // Map names the stored locations don't use ("New Delhi", "Gurgaon") onto
-    // ones they do, before the exact state/district matching below.
-    if (!searchState && searchDistrict) {
-      const alias = resolveDestinationAlias(searchDistrict);
-      if (alias) {
-        searchState = alias.state;
-        searchDistrict = alias.district;
-      }
-    }
-
-    // The destination box always sends the typed text as `district`. Listings
-    // are stored per city/district, so typing a STATE name (e.g. "Uttarakhand")
-    // matches no district and returns nothing. Detect that: if the typed value
-    // is actually a state, search the whole state instead of a same-named
-    // district. (A city that shares its name with its state still works, since
-    // we then match every listing in that state, which includes it.)
-    if (!searchState && searchDistrict) {
-      const { data: stateMatch } = await supabase
-        .from('locations')
-        .select('state')
-        .ilike('state', searchDistrict.trim())
-        .limit(1)
-        .maybeSingle();
-      if (stateMatch?.state) {
-        searchState = stateMatch.state;
-        searchDistrict = undefined; // match the whole state, not a district
-      }
-    }
-
-    const { data, error } = await supabase.rpc('search_listings_by_state', {
-      p_state: searchState || null,
-      p_district: searchDistrict || null,
-      p_cursor: cursor,
-      p_start_date: filters.startDate,
-      p_end_date: filters.endDate,
-      p_min_price: filters.minPrice,
-      p_max_price: filters.maxPrice,
-      p_total_guests: filters.totalGuests,
-      p_ratings: selectedRatings,
-      p_amenities: amenityIds,
-      p_roomtypes: filters.roomTypes,
-      p_limit: pageSize,
-    });
-
-    if (error) {
-      console.error('[filterHotelsByState] RPC error:', JSON.stringify(error, null, 2));
-      throw error;
-    }
+    const pages = await Promise.all(
+      scopes.map(async (scope) => {
+        const { data, error } = await supabase.rpc('search_listings_by_state', {
+          p_state: scope.state,
+          p_district: scope.district,
+          p_cursor: cursor,
+          p_start_date: filters.startDate,
+          p_end_date: filters.endDate,
+          p_min_price: filters.minPrice,
+          p_max_price: filters.maxPrice,
+          p_total_guests: filters.totalGuests,
+          p_ratings: selectedRatings,
+          p_amenities: amenityIds,
+          p_roomtypes: filters.roomTypes,
+          p_limit: pageSize,
+        });
+        if (error) {
+          console.error('[filterHotelsByState] RPC error:', JSON.stringify(error, null, 2));
+          throw error;
+        }
+        return (data || []) as SearchListingRpcRow[];
+      }),
+    );
+    const { rows: data, more } = mergeScopePages(pages, pageSize);
 
     // True match count, independent of p_limit. search_listings_by_state ends
     // with `LIMIT p_limit`, so a PostgREST `count: 'exact'` on it only ever
@@ -322,27 +413,33 @@ export const HotelServiceApi = {
     // it already has instead of overwriting it with a per-page number.
     let totalCount: number | null = null;
     if (cursor === null) {
-      const { data: cnt, error: cntErr } = await supabase.rpc(
-        'search_listings_by_state_count',
-        {
-          p_state: searchState || null,
-          p_district: searchDistrict || null,
-          p_start_date: filters.startDate,
-          p_end_date: filters.endDate,
-          p_min_price: filters.minPrice,
-          p_max_price: filters.maxPrice,
-          p_total_guests: filters.totalGuests,
-          p_ratings: selectedRatings,
-          p_amenities: amenityIds,
-          p_roomtypes: filters.roomTypes,
-        },
-      );
-      if (cntErr) {
+      try {
+        const counts = await Promise.all(
+          scopes.map(async (scope) => {
+            const { data: cnt, error: cntErr } = await supabase.rpc(
+              'search_listings_by_state_count',
+              {
+                p_state: scope.state,
+                p_district: scope.district,
+                p_start_date: filters.startDate,
+                p_end_date: filters.endDate,
+                p_min_price: filters.minPrice,
+                p_max_price: filters.maxPrice,
+                p_total_guests: filters.totalGuests,
+                p_ratings: selectedRatings,
+                p_amenities: amenityIds,
+                p_roomtypes: filters.roomTypes,
+              },
+            );
+            if (cntErr) throw cntErr;
+            return Number(cnt ?? 0);
+          }),
+        );
+        totalCount = counts.reduce((sum, n) => sum + n, 0);
+      } catch (cntErr) {
         console.error('[filterHotelsByState] count RPC error:', JSON.stringify(cntErr, null, 2));
         // Fall back to the loaded page size so the header still shows a number.
-        totalCount = data?.length ?? 0;
-      } else {
-        totalCount = Number(cnt ?? 0);
+        totalCount = data.length;
       }
     }
 
@@ -385,18 +482,16 @@ export const HotelServiceApi = {
       }
     }
 
-    const hasMore = (data?.length || 0) === pageSize;
-
     return {
-      data: (data || []) as SearchListingRpcRow[],
-      hasMore,
+      data,
+      hasMore: more,
       totalCount,
       stateBounds,
     };
   },
 
   formatPrice: (price: number): string => {
-    return `₹${price.toLocaleString('en-IN')}`;
+    return `${formatINR(price)}`;
   },
 
   getHotelDetail: async (id: string) => {
@@ -425,7 +520,11 @@ export const HotelServiceApi = {
         listing_media (media_url, is_cover),
         review (*),
         listing_amenities (
-          amenities (name)
+          amenity_id,
+          amenities (amenity_id, name, icon, category)
+        ),
+        listing_bedrooms (
+          bedroom_index, beds, bathrooms, max_guests
         ),
         listing_discounts (
           id, discount_type, percent, enabled

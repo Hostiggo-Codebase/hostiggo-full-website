@@ -94,10 +94,10 @@ export function calculateBookingInvoice(input: BookingInvoiceInput): BookingInvo
  * service fee + GST on the service fee -- the exact same math as the
  * checkout invoice above (calculateBookingInvoice), so the number on a
  * listing card matches what a one-night booking actually costs before
- * optional add-ons. Rounded to whole rupees for display.
+ * optional add-ons. Exact to the paisa (shown with two decimals).
  */
 export function allInNightlyPrice(nightlyRupees: number): number {
   if (!Number.isFinite(nightlyRupees) || nightlyRupees <= 0) return 0;
   const invoice = calculateBookingInvoice({ basePropertyPrice: nightlyRupees });
-  return Math.round(invoice.grandTotalPaise / 100);
+  return invoice.grandTotalPaise / 100;
 }

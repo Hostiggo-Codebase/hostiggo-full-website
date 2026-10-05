@@ -1,5 +1,6 @@
 "use client";
 
+import { SCHEMA } from "@/lib/schema.constants";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -129,7 +130,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       .channel(`notifications:web:${userId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "hostiggo_testing_schema", table: "notifications", filter },
+        { event: "INSERT", schema: SCHEMA.testingSchema, table: "notifications", filter },
         (payload) => {
           const row = payload.new as NotificationRow;
           setAll((prev) =>
@@ -161,7 +162,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       )
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "hostiggo_testing_schema", table: "notifications", filter },
+        { event: "UPDATE", schema: SCHEMA.testingSchema, table: "notifications", filter },
         (payload) => {
           const row = payload.new as NotificationRow;
           setAll((prev) => (prev ?? []).map((n) => (n.id === row.id ? { ...n, ...row } : n)));

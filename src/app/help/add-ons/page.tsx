@@ -1,7 +1,7 @@
 import HelpArticle, { A, List, Note, P } from "@/components/help/HelpArticle";
 
 export const metadata = {
-  title: "Add-on Services · Hostiggo Help",
+  title: "Add-on Services · Help",
   description: "What add-on services are on Hostiggo, how hosts set them up, and how guests book them.",
 };
 

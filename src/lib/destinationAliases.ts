@@ -12,6 +12,17 @@ const DESTINATION_ALIASES: Record<string, DestinationAlias> = {
   gurgaon: { district: 'Gurugram' },
 };
 
+// The name a place should be stored and looked up under. Old/alternate city
+// names that have a canonical district ("Gurgaon" -> "Gurugram") are mapped to
+// it, so a listing created for "Gurgaon" is filed with the other Gurugram
+// stays instead of under a name search no longer matches. Names without a
+// district alias (including "New Delhi", which only widens a search) are
+// returned trimmed, otherwise unchanged.
+export function canonicalPlaceName(name: string): string {
+  const trimmed = name.trim();
+  return resolveDestinationAlias(trimmed)?.district ?? trimmed;
+}
+
 export function resolveDestinationAlias(destination?: string | null): DestinationAlias | null {
   if (!destination) return null;
   return DESTINATION_ALIASES[destination.trim().toLowerCase()] ?? null;

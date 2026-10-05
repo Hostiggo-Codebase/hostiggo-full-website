@@ -7,6 +7,7 @@
 
 import { loadGoogleMaps } from './googleMaps';
 import { api } from '../api';
+import { canonicalPlaceName } from '../destinationAliases';
 
 /**
  * Simple in-memory cache for geocoding lookups to avoid re-hitting the network
@@ -275,9 +276,12 @@ export async function resolveLocationId(city?: string, county?: string): Promise
   for (const candidate of [city, county]) {
     if (!candidate) continue;
     try {
-      const wanted = norm(candidate);
+      // Look up old city names under their current one ("Gurgaon" ->
+      // "Gurugram"), which is how the curated locations are filed.
+      const name = canonicalPlaceName(candidate);
+      const wanted = norm(name);
       if (!wanted) continue;
-      const results = await api.locations(1, candidate);
+      const results = await api.locations(1, name);
       const match = (results ?? []).find(
         (l: any) => norm(l?.district) === wanted || norm(l?.lower_division_name) === wanted,
       );

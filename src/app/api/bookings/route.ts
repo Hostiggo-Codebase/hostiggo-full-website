@@ -54,17 +54,6 @@ export async function PATCH(req: NextRequest) {
     // assertOwnsBooking for the confirmed incident this line prevents.
     const userId = await getAuthenticatedUserId(req);
 
-    // Status is never set directly: confirming happens only after payment
-    // (finalizeBookingFromRazorpayOrder) and cancelling only through
-    // /api/bookings/cancel-with-refund, so a guest can't confirm an unpaid
-    // booking or cancel without the refund policy being applied.
-    if (action === "status") {
-      return NextResponse.json(
-        { error: "Booking status can't be changed directly. Use cancel-with-refund to cancel." },
-        { status: 400 },
-      );
-    }
-
     if (action === "dates") {
       const data = await bookingsAPI.updateBookingDates(bookingId, body.checkIn, body.checkOut, userId);
       return NextResponse.json({ data });

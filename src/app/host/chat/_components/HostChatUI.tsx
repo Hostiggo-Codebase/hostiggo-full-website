@@ -1,5 +1,6 @@
 'use client';
 
+import { SCHEMA } from "@/lib/schema.constants";
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { Send, Search, ArrowLeft, Loader2, MessageSquare, MessagesSquare } from 'lucide-react';
@@ -114,7 +115,7 @@ export default function HostChatUI() {
         'postgres_changes',
         {
           event: 'INSERT',
-          schema: 'hostiggo_testing_schema',
+          schema: SCHEMA.testingSchema,
           table: 'chat_messages',
           filter: `user_id=eq.${userId}`,
         },
@@ -126,7 +127,7 @@ export default function HostChatUI() {
         'postgres_changes',
         {
           event: 'INSERT',
-          schema: 'hostiggo_testing_schema',
+          schema: SCHEMA.testingSchema,
           table: 'chat_messages',
           filter: `host_id=eq.${userId}`,
         },

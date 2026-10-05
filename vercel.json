@@ -1,3 +1,4 @@
 {
-  "regions": ["bom1"]
+  "regions": ["bom1"],
+  "crons": [{ "path": "/api/cron/retry-whatsapp", "schedule": "*/15 * * * *" }]
 }

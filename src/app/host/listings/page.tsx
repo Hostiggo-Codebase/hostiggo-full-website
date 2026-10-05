@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -9,6 +10,7 @@ import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboa
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import PayoutSetupBanner, { type PayoutBlocker } from '../_components/PayoutSetupBanner';
 
 const FALLBACK_IMAGE = '/placeholder.svg';
 
@@ -39,7 +41,7 @@ const mapListing = (row: any): Listing => {
   };
 };
 
-const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+const inr = (n: number) => formatINR(n);
 
 function ListingSkeleton() {
   return (
@@ -62,6 +64,7 @@ export default function MyListingsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [blockers, setBlockers] = useState<PayoutBlocker[]>([]);
 
   const PAGE_SIZE = 24;
 
@@ -86,6 +89,11 @@ export default function MyListingsPage() {
       const { data: rows, total: rowTotal } = await api.hostListings(userId, 0, PAGE_SIZE);
       setListings(rows.map(mapListing));
       setTotal(rowTotal);
+      // Best-effort: the banner is guidance, the server enforces the rule.
+      api
+        .getPayoutReadiness()
+        .then((r) => setBlockers(r.blockers))
+        .catch(() => setBlockers([]));
     } catch (err) {
       console.error('[host/listings] load failed:', err);
       setError(true);
@@ -115,7 +123,7 @@ export default function MyListingsPage() {
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('created') === '1') {
-      toast.success('Listing submitted! It will appear here once reviewed.');
+      toast.success('Listing created!');
     }
   }, []);
 
@@ -133,7 +141,10 @@ export default function MyListingsPage() {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to toggle listing');
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || 'Failed to toggle listing');
+      }
 
       const { data } = await response.json();
       
@@ -168,6 +179,8 @@ export default function MyListingsPage() {
           </Link>
         }
       />
+
+      {!loading && !error && <PayoutSetupBanner blockers={blockers} />}
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -235,7 +248,7 @@ export default function MyListingsPage() {
                       className={cn('w-2 h-2 rounded-full', l.active ? 'bg-green-500' : 'bg-gray-400')}
                     />
                     <span className="text-xs font-semibold text-gray-700">
-                      {l.active ? 'Live' : 'Paused'}
+                      {l.active ? 'Live' : blockers.length > 0 ? 'Not live yet' : 'Paused'}
                     </span>
                   </div>
                   <div className="absolute inset-0 bg-figma-navy/20 flex flex-col items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -264,7 +277,7 @@ export default function MyListingsPage() {
                       ) : (
                         <Play className="w-4 h-4" />
                       )}
-                      {l.active ? 'Pause' : 'Reactivate'}
+                      {l.active ? 'Pause' : blockers.length > 0 ? 'Go live' : 'Reactivate'}
                     </button>
                   </div>
                 </div>

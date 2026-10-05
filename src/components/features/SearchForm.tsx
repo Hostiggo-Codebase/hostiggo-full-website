@@ -25,13 +25,18 @@ function fmtDate(d: Date | null) {
   });
 }
 
-/** destination + dates + guests, so a refreshed or shared results URL keeps them. */
+/**
+ * destination + dates + guests, so a refreshed or shared results URL keeps them.
+ * `state` is only known for a place picked from the destination list.
+ */
 function searchQueryString(
   destination: string,
   dates: { checkIn: Date | null; checkOut: Date | null },
   guests: { adults: number; children: number },
+  state?: string,
 ) {
   const params = new URLSearchParams({ destination: destination.trim() });
+  if (state) params.set('state', state);
   const ci = toISODate(dates.checkIn);
   const co = toISODate(dates.checkOut);
   if (ci && co) {
@@ -52,6 +57,9 @@ export function CompactSearchBar() {
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  // Text typed in the destination box but not picked from the list yet. Kept
+  // in a ref (no re-render, no search) and used when Search is pressed.
+  const draftRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -73,11 +81,19 @@ export function CompactSearchBar() {
   const toggle = (p: Panel) => setActivePanel((cur) => (cur === p ? null : p));
 
   const handleSearch = () => {
-    if (!location.query.trim()) {
+    const draft = draftRef.current;
+    const query = (draft ?? location.query).trim();
+    if (!query) {
       toast.error('Please enter a destination');
       return;
     }
-    router.push(`/search?${searchQueryString(location.query, dates, guests)}`);
+    if (draft != null) {
+      setLocation({ query });
+      draftRef.current = null;
+    }
+    router.push(
+      `/search?${searchQueryString(query, dates, guests, draft != null ? undefined : location.state)}`,
+    );
     setActivePanel(null);
   };
 
@@ -127,12 +143,14 @@ export function CompactSearchBar() {
               className="ml-auto p-1 hover:bg-gray-100 rounded-full"
               onClick={(e) => {
                 e.stopPropagation();
+                draftRef.current = null;
                 setLocation({ query: '' });
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   e.stopPropagation();
+                  draftRef.current = null;
                   setLocation({ query: '' });
                 }
               }}
@@ -145,9 +163,16 @@ export function CompactSearchBar() {
           <div className="absolute top-[calc(100%+12px)] left-0 w-full min-w-[320px] z-[1100]">
             <DestinationDropdown
               value={location.query}
-              onQueryChange={(v) => setLocation({ query: v })}
-              onSelect={(v) => {
+              onQueryChange={(v) => {
+                draftRef.current = null;
                 setLocation({ query: v });
+              }}
+              onDraftChange={(v) => {
+                draftRef.current = v;
+              }}
+              onSelect={(v, state) => {
+                draftRef.current = null;
+                setLocation({ query: v, state });
                 setActivePanel(null);
               }}
               onClose={() => setActivePanel(null)}
@@ -301,6 +326,9 @@ export default function SearchForm() {
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  // Text typed in the destination box but not picked from the list yet. Kept
+  // in a ref (no re-render, no search) and used when Search is pressed.
+  const draftRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -322,11 +350,19 @@ export default function SearchForm() {
   const toggle = (p: Panel) => setActivePanel((cur) => (cur === p ? null : p));
 
   const handleSearch = () => {
-    if (!location.query.trim()) {
+    const draft = draftRef.current;
+    const query = (draft ?? location.query).trim();
+    if (!query) {
       toast.error('Please enter a destination');
       return;
     }
-    router.push(`/search?${searchQueryString(location.query, dates, guests)}`);
+    if (draft != null) {
+      setLocation({ query });
+      draftRef.current = null;
+    }
+    router.push(
+      `/search?${searchQueryString(query, dates, guests, draft != null ? undefined : location.state)}`,
+    );
     setActivePanel(null);
   };
 
@@ -370,9 +406,16 @@ export default function SearchForm() {
             <DestinationDropdown
               fullWidth
               value={location.query}
-              onQueryChange={(v) => setLocation({ query: v })}
-              onSelect={(v) => {
+              onQueryChange={(v) => {
+                draftRef.current = null;
                 setLocation({ query: v });
+              }}
+              onDraftChange={(v) => {
+                draftRef.current = v;
+              }}
+              onSelect={(v, state) => {
+                draftRef.current = null;
+                setLocation({ query: v, state });
                 setActivePanel('date');
               }}
               onClose={() => setActivePanel(null)}

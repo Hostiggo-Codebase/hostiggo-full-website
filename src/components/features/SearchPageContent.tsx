@@ -59,7 +59,10 @@ export default function SearchPageContent() {
   const hydratedRef = useRef(false);
   useEffect(() => {
     const dest = searchParams?.get('destination');
-    if (dest && dest !== location.query) setLocation({ query: dest });
+    // `state` is set when the link came from a place picked in the dropdown.
+    if (dest && dest !== location.query) {
+      setLocation({ query: dest, state: searchParams?.get('state') || undefined });
+    }
     const view = searchParams?.get('view');
     if (view === 'map' || view === 'list') setViewMode(view);
 

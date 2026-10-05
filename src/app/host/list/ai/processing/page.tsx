@@ -144,6 +144,15 @@ async function runRealImport(
       country: draft.address?.country ?? undefined,
       propertyType: draft.property_type ?? undefined,
       roomType: draft.room_type ?? undefined,
+      stayType: 'entire',
+      houseRules: {
+        check_in_time: '15:00',
+        check_out_time: '11:00',
+        smoking_allowed: false,
+        pets_allowed: false,
+        parties_allowed: false,
+        quiet_hours: true,
+      },
     },
   };
 }

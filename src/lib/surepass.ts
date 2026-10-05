@@ -86,5 +86,17 @@ export async function logKycRequest(params: {
     }
     return null;
   }
+
+  // A verified id proof is what the public "Verified host" badge
+  // (host.is_verified) stands for; without this it never turned on. Bank
+  // checks don't prove identity on their own. Best-effort, and a no-op for
+  // users who aren't hosts.
+  if (params.status === "verified" && params.serviceType !== "bank") {
+    const { error: badgeErr } = await supabaseAdmin
+      .from("host")
+      .update({ is_verified: true })
+      .eq("user_id", params.userId);
+    if (badgeErr) console.error("[surepass] failed to set host.is_verified:", badgeErr);
+  }
   return data.id as number;
 }

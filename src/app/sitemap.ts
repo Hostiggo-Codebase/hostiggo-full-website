@@ -3,7 +3,9 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 // Regenerated hourly. Listing rows come from the database; if it can't be
 // reached (e.g. during a build without credentials) the static pages still ship.
-export const revalidate = 3600;
+// Always rendered on request: the listing query uses no-store fetches, which cannot be
+// prerendered (the build was silently serving a sitemap with no listings).
+export const dynamic = "force-dynamic";
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.hostiggo.com").replace(/\/$/, "");
 

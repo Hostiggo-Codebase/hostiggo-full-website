@@ -1,5 +1,7 @@
 import Link from "next/link";
 import CopyrightBar from "./CopyrightBar";
+import CookieSettingsButton from "./CookieSettingsButton";
+import { SOCIAL_LINKS, SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, WHATSAPP_URL } from "@/lib/site";
 
 type FooterLink = { label: string; href: string; soon?: boolean };
 
@@ -44,13 +46,6 @@ const footerSections: { title: string; links: FooterLink[] }[] = [
       { label: "Cookie policy", href: "/cookies" },
     ],
   },
-  {
-    title: "Download App",
-    links: [
-      { label: "Android", href: "#", soon: true },
-      { label: "iOS", href: "#", soon: true },
-    ],
-  },
 ];
 
 
@@ -63,7 +58,7 @@ export default function Footer() {
       {/* Main footer, figma-cream background, content in a centered 1100px container */}
       <div className="bg-figma-cream">
         <div className="mx-auto max-w-[1100px] px-6 pt-10 pb-10">
-          {/* 5 columns (Company, Hosting, Support, Legal, Download App) → wraps down on smaller screens */}
+          {/* 5 columns (Company, Hosting, Support, Legal, Talk to us) → wraps down on smaller screens */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-8 text-left">
             {footerSections.map((section) => (
               <div key={section.title}>
@@ -101,6 +96,37 @@ export default function Footer() {
                 </ul>
               </div>
             ))}
+
+            <div>
+              <h3 className="text-[18px] font-bold text-[#111827] mb-4">Talk to us</h3>
+              <ul className="space-y-3 text-[14px] text-[#4B5563]">
+                <li>
+                  <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="hover:text-[#111827] transition-colors">
+                    WhatsApp support
+                  </a>
+                </li>
+                <li>
+                  <a href={`tel:${SUPPORT_PHONE_DISPLAY.replace(/\s/g, "")}`} className="hover:text-[#111827] transition-colors">
+                    {SUPPORT_PHONE_DISPLAY}
+                  </a>
+                </li>
+                <li>
+                  <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-[#111827] transition-colors">
+                    {SUPPORT_EMAIL}
+                  </a>
+                </li>
+                {SOCIAL_LINKS.map((s) => (
+                  <li key={s.label}>
+                    <a href={s.url} target="_blank" rel="noopener noreferrer me" className="hover:text-[#111827] transition-colors">
+                      {s.label}
+                    </a>
+                  </li>
+                ))}
+                <li>
+                  <CookieSettingsButton className="hover:text-[#111827] transition-colors" />
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

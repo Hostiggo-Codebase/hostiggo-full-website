@@ -157,7 +157,7 @@ export default function SupportPage() {
           <div className="lg:col-span-5 relative h-80 rounded-3xl overflow-hidden shadow-card">
             <Image
               fill
-              src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=700&h=500&fit=crop&q=80"
+              src="/images/empty-states/confirmation-room.jpg"
               alt="Support"
               sizes="(max-width: 1024px) 100vw, 40vw"
               className="object-cover"

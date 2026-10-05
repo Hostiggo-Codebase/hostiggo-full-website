@@ -21,7 +21,18 @@ export const AUTH_EMAIL_KEY = "hostiggo:email";
 export const AUTH_ACCESS_TOKEN_KEY = "hostiggo:access-token";
 export const AUTH_REFRESH_TOKEN_KEY = "hostiggo:refresh-token";
 
-type ApiResult<T> = { data?: T; error?: string };
+type ApiResult<T> = { data?: T; error?: string; code?: string };
+
+/** An API error that keeps the server's machine-readable `code` (e.g. PAYMENT_REFUNDED). */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 
 export const getStoredAccessToken = () =>
   typeof window === "undefined" ? null : window.localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
@@ -64,7 +75,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const payload = (await res.json().catch(() => ({}))) as ApiResult<T>;
   if (!res.ok || payload.error) {
-    throw new Error(payload.error || `Request failed: ${res.status}`);
+    throw new ApiError(payload.error || `Request failed: ${res.status}`, payload.code, res.status);
   }
   return payload.data as T;
 }
@@ -81,35 +92,76 @@ const mediaUrls = (row: any): string[] => {
   return [...new Set([cover, ...urls].filter(Boolean))];
 };
 
-const amenityNames = (row: any): string[] => {
-  const direct = row?.amenity_names;
-  if (Array.isArray(direct)) return direct.filter(Boolean);
-
+// The listing's own amenities as joined from listing_amenities -> amenities
+// (name + the DB's icon key). Empty when the row wasn't fetched with that join.
+const joinedAmenities = (row: any): { name: string; icon?: string }[] => {
   const joined = row?.listing_amenities;
   if (!Array.isArray(joined)) return [];
 
   return joined
-    .map((item: any) => item?.amenities?.name || item?.amenity?.name || item?.name)
-    .filter(Boolean);
+    .map((item: any) => {
+      const amenity = item?.amenities ?? item?.amenity ?? item;
+      return { name: amenity?.name, icon: amenity?.icon || undefined };
+    })
+    .filter((item: { name?: string }) => Boolean(item.name));
+};
+
+const amenityNames = (row: any): string[] => {
+  const direct = row?.amenity_names;
+  if (Array.isArray(direct)) return direct.filter(Boolean);
+
+  return joinedAmenities(row).map((item) => item.name);
 };
 
 const boolFromAmenity = (amenities: string[], needle: string) =>
   amenities.some((item) => item.toLowerCase().includes(needle));
 
-const buildAmenityDetails = (amenities: string[]): AmenityItem[] =>
-  amenities.map((name) => ({
+// Prefers the icon stored on the amenities row; only falls back to guessing
+// from the name for rows that carry just names (e.g. search RPC results).
+const buildAmenityDetails = (row: any, amenities: string[]): AmenityItem[] => {
+  const dbIcons = new Map(joinedAmenities(row).map((item) => [item.name, item.icon]));
+  return amenities.map((name) => ({
     name,
-    icon: boolFromAmenity([name], "wifi")
-      ? "wifi"
-      : boolFromAmenity([name], "parking")
-        ? "car"
-        : boolFromAmenity([name], "kitchen")
-          ? "utensils"
-          : boolFromAmenity([name], "air")
-            ? "zap"
-            : "mountain",
+    icon: dbIcons.get(name) ?? guessAmenityIcon(name),
     available: true,
   }));
+};
+
+const guessAmenityIcon = (name: string): string =>
+  boolFromAmenity([name], "wifi")
+    ? "wifi"
+    : boolFromAmenity([name], "parking")
+      ? "car"
+      : boolFromAmenity([name], "kitchen")
+        ? "utensils"
+        : boolFromAmenity([name], "air")
+          ? "zap"
+          : "check";
+
+// Capacity is the sum over the listing's listing_bedrooms rows (guests, beds,
+// bathrooms; bedrooms = row count). Listings without those rows (older ones,
+// and search RPC rows that don't embed them) fall back to listings.num_* for
+// guests/beds/bathrooms, but bedrooms is left undefined (and so not shown)
+// because listing_bedrooms is the only source for the bedroom count.
+const buildCapacity = (row: any) => {
+  const rooms = Array.isArray(row?.listing_bedrooms) ? row.listing_bedrooms : [];
+  if (rooms.length > 0) {
+    const sum = (key: string) => rooms.reduce((total: number, r: any) => total + Number(r?.[key] ?? 0), 0);
+    return {
+      guests: sum("max_guests"),
+      beds: sum("beds"),
+      bedrooms: rooms.length,
+      bathrooms: sum("bathrooms"),
+    };
+  }
+  const num = (value: unknown) => (value != null ? Number(value) : undefined);
+  return {
+    guests: num(row?.num_guests ?? row?.max_guests ?? row?.nom_guests ?? row?.total_guests),
+    beds: num(row?.num_beds),
+    bedrooms: undefined,
+    bathrooms: num(row?.num_bathrooms),
+  };
+};
 
 const buildReviews = (row: any): Review[] => {
   const reviews = row?.review ?? row?.reviews ?? [];
@@ -148,6 +200,7 @@ export function mapListingToProperty(input: any): Property {
   const images = mediaUrls(row);
   const amenities = amenityNames(row);
   const reviews = buildReviews(row);
+  const capacity = buildCapacity(row);
   // Prefer the live joined reviews over listings.avg_rating/review_count,
   // which are separately materialized columns that createReview never updates
   // and so go stale as soon as a new review is submitted.
@@ -166,10 +219,13 @@ export function mapListingToProperty(input: any): Property {
     rating,
     reviewCount: reviews.length > 0 ? reviews.length : Number(row.review_count ?? 0),
     amenities,
-    amenityDetails: buildAmenityDetails(amenities),
+    amenityDetails: buildAmenityDetails(row, amenities),
     propertyType: row.property_type ?? row.propertyType ?? "Homestay",
     images: images.length > 0 ? images : [FALLBACK_IMAGE],
-    maxGuests: Number(row.max_guests ?? row.nom_guests ?? row.total_guests ?? 2),
+    maxGuests: capacity.guests || 2,
+    beds: capacity.beds,
+    bedrooms: capacity.bedrooms,
+    bathrooms: capacity.bathrooms,
     isFavorite: Boolean(row.isFavorite),
     isNew: Boolean(row.is_new),
     distanceFromCenter:
@@ -471,7 +527,13 @@ export const api = {
       body: JSON.stringify({ action: "deactivate-account", userId }),
     }),
   createListing: (draft: Record<string, any>) =>
-    request<{ listing_id: number; title: string; warnings?: string[] }>(`/api/host/listings`, {
+    request<{
+      listing_id: number;
+      title: string;
+      warnings?: string[];
+      live?: boolean;
+      payoutBlockers?: Array<"kyc" | "bank" | "payout">;
+    }>(`/api/host/listings`, {
       method: "POST",
       body: JSON.stringify(draft),
     }),
@@ -519,6 +581,16 @@ export const api = {
     request<import("@/app/api/host/payment-history/route").PaymentHistoryRow[]>(
       `/api/host/payment-history`,
     ),
+  // Whether the host may have live listings (PAN + bank verified, payout
+  // account created). See src/app/api/host/payout-readiness/route.ts.
+  getPayoutReadiness: () =>
+    request<{
+      ready: boolean;
+      blockers: Array<"kyc" | "bank" | "payout">;
+      kycVerified: boolean;
+      bankVerified: boolean;
+      payoutCreated: boolean;
+    }>(`/api/host/payout-readiness`),
   // Live Razorpay Route onboarding state for the signed-in host. See
   // src/app/api/host/onboarding-status/route.ts.
   getOnboardingStatus: () =>
@@ -541,11 +613,12 @@ export const api = {
     }),
   // Alternatives to PAN for identity (KYC) only -- payouts still need a
   // verified PAN. See src/app/api/verify/aadhaar and /passport.
-  verifyAadhaar: (payload: { file: File; yob: string; fullName: string }) => {
+  verifyAadhaar: (payload: { file: File; yob: string; fullName: string; password: string }) => {
     const form = new FormData();
     form.append("file", payload.file);
     form.append("yob", payload.yob);
     form.append("fullName", payload.fullName);
+    form.append("password", payload.password);
     return request<{ status: "verified" | "rejected" | "pending"; reason: string | null }>(
       `/api/verify/aadhaar`,
       { method: "POST", body: form },
@@ -570,11 +643,6 @@ export const api = {
     }>(`/api/verify/bank`, {
       method: "POST",
       body: JSON.stringify(payload),
-    }),
-  cancelBooking: (bookingId: string | number, userId: string, reason?: string) =>
-    request<any>(`/api/bookings/cancel`, {
-      method: "POST",
-      body: JSON.stringify({ bookingId, userId, reason }),
     }),
   createReview: (payload: {
     listingId: string | number;
@@ -664,6 +732,9 @@ export const api = {
       endDate?: string | null;
       totalGuests?: number;
       amenities?: number[];
+      // The state of a place picked from the dropdown, so e.g. "Delhi" in Goa
+      // and "Delhi" in Delhi aren't confused. Left out for typed text.
+      state?: string;
       sort?: string;
     },
   ) => {
@@ -675,11 +746,12 @@ export const api = {
       filters: {
         startDate: extra?.startDate ?? null,
         endDate: extra?.endDate ?? null,
-        // `destination` is always city/district-level free text (the search
-        // box and map search both only ever collect a place name like
-        // "Bhopal", never an Indian state) -- sending it as `state` makes
-        // the RPC's exact state-column match fail and search silently
-        // returns zero results. `district` is what actually matches.
+        // `destination` is city/district-level free text (the search box and
+        // map search collect a place name like "Bhopal"). It is sent as
+        // `district`; the server maps it onto the state/district names the
+        // locations table really uses (see resolveSearchScopes). `state` is
+        // only sent when the user picked a specific place from the dropdown.
+        state: extra?.state?.trim() || undefined,
         district: destination?.trim() || undefined,
         minPrice: filters.priceMin > 0 ? filters.priceMin : undefined,
         maxPrice: filters.priceMax < 100000 ? filters.priceMax : undefined,
@@ -873,16 +945,6 @@ export const api = {
         pets: guests.pets ?? 0,
       }),
     }),
-  updateBookingStatus: (
-    bookingId: string,
-    status: "pending" | "confirmed" | "cancelled",
-    reason: string | undefined,
-    userId: string,
-  ) =>
-    request<any>("/api/bookings", {
-      method: "PATCH",
-      body: JSON.stringify({ action: "status", bookingId, status, reason, userId }),
-    }),
   getRefundPreview: (bookingId: string | number, userId: string) =>
     request<any>(
       `/api/bookings/refund-preview?bookingId=${encodeURIComponent(String(bookingId))}&userId=${encodeURIComponent(userId)}`,
@@ -891,6 +953,12 @@ export const api = {
     request<any>("/api/bookings/cancel-with-refund", {
       method: "POST",
       body: JSON.stringify({ bookingId, userId, reason }),
+    }),
+  // Re-attempts a refund that failed when the booking was cancelled.
+  retryRefund: (bookingId: string | number) =>
+    request<any>("/api/bookings/cancel-with-refund", {
+      method: "POST",
+      body: JSON.stringify({ bookingId, action: "retry-refund" }),
     }),
   // iCal integration
   registerICalFeed: (payload: { listingId: string | number; icalUrl: string; action: "add" | "update" | "deactivate"; userId: string }) =>

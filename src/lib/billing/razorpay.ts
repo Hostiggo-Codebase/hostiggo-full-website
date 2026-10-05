@@ -31,44 +31,6 @@ export function getRazorpayClient(): Razorpay {
 }
 
 /**
- * Razorpay's payment gateway charge (2% + GST on that 2%) is a Hostiggo-side
- * cost -- never shown to the guest, never deducted from the host payout.
- * This just computes it for internal expense recording.
- */
-export function calculateRazorpayGatewayCharge(grandTotalPaise: number): {
-  gatewayFeePaise: number;
-  gstOnGatewayFeePaise: number;
-  totalChargePaise: number;
-} {
-  const gatewayFeePaise = Math.round(grandTotalPaise * 0.02);
-  const gstOnGatewayFeePaise = Math.round(gatewayFeePaise * 0.18);
-  return {
-    gatewayFeePaise,
-    gstOnGatewayFeePaise,
-    totalChargePaise: gatewayFeePaise + gstOnGatewayFeePaise,
-  };
-}
-
-/**
- * Razorpay's payout charge (0.25% + GST) is likewise a Hostiggo-side cost,
- * recorded as an "Other Charges" expense -- never deducted from the host's
- * netHostPayout, which the host receives in full.
- */
-export function calculateRazorpayPayoutCharge(payoutAmountPaise: number): {
-  payoutFeePaise: number;
-  gstOnPayoutFeePaise: number;
-  totalChargePaise: number;
-} {
-  const payoutFeePaise = Math.round(payoutAmountPaise * 0.0025);
-  const gstOnPayoutFeePaise = Math.round(payoutFeePaise * 0.18);
-  return {
-    payoutFeePaise,
-    gstOnPayoutFeePaise,
-    totalChargePaise: payoutFeePaise + gstOnPayoutFeePaise,
-  };
-}
-
-/**
  * Verifies the signature Razorpay Checkout hands back to the browser after a
  * successful payment (razorpay_payment_id, razorpay_order_id,
  * razorpay_signature). This is the only thing standing between "the browser

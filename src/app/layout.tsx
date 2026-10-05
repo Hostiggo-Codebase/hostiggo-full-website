@@ -5,9 +5,17 @@ import { AuthProvider } from '@/context/AuthContext';
 import { ListingFilterProvider } from '@/context/ListingFilterContext';
 import { Toaster } from 'sonner';
 import { NotificationProvider } from '@/context/NotificationContext';
-// import { Analytics } from '@vercel/analytics/next';
-
-const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.hostiggo.com').replace(/\/$/, '');
+import ConsentAnalytics from '@/components/ConsentAnalytics';
+import JsonLd from '@/components/JsonLd';
+import {
+  COMPANY_LEGAL_NAME,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TAGLINE,
+  SITE_URL,
+  SOCIAL_LINKS,
+  SUPPORT_EMAIL,
+} from '@/lib/site';
 
 // Figma "Website Guest UI/UX" uses Poppins (Regular/Medium/SemiBold/Bold)
 // throughout -- this replaces the never-actually-loaded "Inter" fallback.
@@ -19,14 +27,13 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Hostiggo | Homestays & Unique Stays in India',
-    template: '%s | Hostiggo',
+    default: `${SITE_NAME}: ${SITE_TAGLINE}`,
+    template: `%s | ${SITE_NAME}`,
   },
-  description:
-    'Book verified homestays, family-friendly stays, and unique properties across India with transparent pricing, secure payments, and easy host support.',
-  applicationName: 'Hostiggo',
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
   keywords: [
     'homestays in India',
     'holiday homes',
@@ -37,25 +44,24 @@ export const metadata: Metadata = {
     'rental properties India',
   ],
   alternates: {
-    canonical: '/',
+    canonical: './',
     languages: {
-      'en-IN': '/',
+      'en-IN': './',
     },
   },
   openGraph: {
     type: 'website',
     locale: 'en_IN',
-    url: siteUrl,
-    siteName: 'Hostiggo',
-    title: 'Hostiggo | Homestays & Unique Stays in India',
-    description:
-      'Discover verified stays, vacation homes, and local experiences across India with secure booking and transparent policies.',
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: `${SITE_NAME}: ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
     images: [
       {
         url: '/opengraph-image',
         width: 1200,
         height: 630,
-        alt: 'Hostiggo home page preview',
+        alt: `${SITE_NAME} home page preview`,
       },
     ],
   },
@@ -63,9 +69,8 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     site: '@hostiggo',
     creator: '@hostiggo',
-    title: 'Hostiggo | Homestays & Unique Stays in India',
-    description:
-      'Discover verified stays, vacation homes, and local experiences across India with secure booking and transparent policies.',
+    title: `${SITE_NAME}: ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
     images: ['/twitter-image'],
   },
   robots: {
@@ -84,6 +89,31 @@ export const metadata: Metadata = {
     shortcut: '/favicon.ico',
     apple: '/favicon.ico',
   },
+  formatDetection: { telephone: false },
+};
+
+const ORGANIZATION_JSON_LD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${SITE_URL}/#organization`,
+      name: SITE_NAME,
+      legalName: COMPANY_LEGAL_NAME,
+      url: SITE_URL,
+      logo: `${SITE_URL}/logo.png`,
+      email: SUPPORT_EMAIL,
+      ...(SOCIAL_LINKS.length ? { sameAs: SOCIAL_LINKS.map((s) => s.url) } : {}),
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: SITE_NAME,
+      inLanguage: 'en-IN',
+      publisher: { '@id': `${SITE_URL}/#organization` },
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -102,7 +132,8 @@ export default function RootLayout({
             <NotificationProvider>{children}</NotificationProvider>
           </ListingFilterProvider>
         </AuthProvider>
-        {/* <Analytics /> */}
+        <JsonLd data={ORGANIZATION_JSON_LD} />
+        <ConsentAnalytics />
       </body>
     </html>
   );

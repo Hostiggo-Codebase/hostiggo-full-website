@@ -1,7 +1,7 @@
 import HelpArticle, { A, List, Note, P } from "@/components/help/HelpArticle";
 
 export const metadata = {
-  title: "Payouts & Bank Details · Hostiggo Help",
+  title: "Payouts & Bank Details · Help",
   description: "How Hostiggo hosts add bank details for payouts, what is deducted, and the current payout status.",
 };
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { useEffect, useState } from 'react';
 import { Sparkles, Loader2, Check, IndianRupee } from 'lucide-react';
 import WizardShell from '../_components/WizardShell';
@@ -183,7 +184,7 @@ export default function AddonsPage() {
                           className="flex items-center justify-between text-sm"
                         >
                           <span className="text-gray-700">{addon?.name}</span>
-                          <span className="font-semibold text-gray-800">₹{s.price}</span>
+                          <span className="font-semibold text-gray-800">{formatINR(s.price)}</span>
                         </div>
                       );
                     })}

@@ -1,7 +1,7 @@
 import HelpArticle, { A, List, Note, P } from "@/components/help/HelpArticle";
 
 export const metadata = {
-  title: "Removing a Listing · Hostiggo Help",
+  title: "Removing a Listing · Help",
   description: "How delisting works on Hostiggo: nothing is deleted instantly and upcoming bookings are always honoured.",
 };
 

@@ -38,10 +38,34 @@ export async function sendAdminAlert(input: {
     });
     if (error) console.error("[adminAlerts] Failed to store alert:", error);
 
-    // TODO: Send email/Slack notification to admin team
-    // TODO: Send SMS to on-call admin if critical
+    // Push to people, not just the table. Both channels are optional
+    // (SLACK_WEBHOOK_URL, ADMIN_ALERT_EMAIL with the email provider set up)
+    // and best-effort.
+    await pushAlertToTeam(input);
   } catch (err) {
     console.error("[adminAlerts] Failed to send alert:", err);
+  }
+}
+
+async function pushAlertToTeam(input: {
+  severity: "critical" | "warning" | "info";
+  category: string;
+  message: string;
+}): Promise<void> {
+  const text = `[${input.severity.toUpperCase()}] ${input.category}: ${input.message}`;
+  const slack = process.env.SLACK_WEBHOOK_URL;
+  if (slack && input.severity !== "info") {
+    await fetch(slack, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: `${input.severity === "critical" ? ":rotating_light: " : ""}${text}` }),
+    }).catch((err) => console.error("[adminAlerts] slack post failed:", err));
+  }
+  const to = process.env.ADMIN_ALERT_EMAIL;
+  if (to && input.severity !== "info") {
+    const { sendEmail, renderEmail } = await import("./email");
+    const { html, text: plain } = renderEmail({ heading: "Hostiggo admin alert", lines: [text] });
+    await sendEmail({ to: to.split(",").map((s) => s.trim()), subject: text.slice(0, 120), html, text: plain });
   }
 }
 

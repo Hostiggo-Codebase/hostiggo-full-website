@@ -1,5 +1,8 @@
 import { ImageResponse } from 'next/og';
+import { SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site';
 
+// Default share card for links to the site (WhatsApp, Instagram, X, Facebook).
+export const alt = `${SITE_NAME}: ${SITE_TAGLINE}`;
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -36,12 +39,12 @@ export default function OpenGraphImage() {
           >
             H
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 700, letterSpacing: '-0.04em' }}>Hostiggo</div>
+          <div style={{ fontSize: '28px', fontWeight: 700 }}>{SITE_NAME}</div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-          <div style={{ fontSize: '64px', fontWeight: 800, letterSpacing: '-0.06em', lineHeight: 1.02 }}>
-            Find your perfect stay
+          <div style={{ fontSize: '64px', fontWeight: 800, lineHeight: 1.02 }}>
+            {SITE_TAGLINE}
           </div>
           <div style={{ fontSize: '30px', color: '#374151', lineHeight: 1.25 }}>
             Verified homestays and unique stays across India.
@@ -60,18 +63,19 @@ export default function OpenGraphImage() {
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <div style={{ fontSize: '15px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.14em' }}>
+            <div style={{ fontSize: '15px', color: '#475569', textTransform: 'uppercase' }}>
               Book with confidence
             </div>
-            <div style={{ fontSize: '28px', fontWeight: 700, color: '#0f172a' }}>Secure • Transparent • Local</div>
+            <div style={{ fontSize: '28px', fontWeight: 700, color: '#0f172a' }}>
+              Secure - Transparent - Local
+            </div>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 600, color: '#0f172a' }}>hostiggo.com</div>
+          <div style={{ fontSize: '22px', fontWeight: 600, color: '#0f172a' }}>
+            {SITE_URL.replace(/^https?:\/\//, '')}
+          </div>
         </div>
       </div>
     ),
-    {
-      width: 1200,
-      height: 630,
-    },
+    size,
   );
 }

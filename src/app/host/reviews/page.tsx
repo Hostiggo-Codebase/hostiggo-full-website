@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { UserAvatar } from '@/components/ui/user-avatar';
-import { Share2, Star, Search, Reply, Flag, Loader2 } from 'lucide-react';
+import { Star, Search, Loader2 } from 'lucide-react';
 import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboardShell';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -106,17 +106,7 @@ export default function ReviewsPage() {
     <HostDashboardShell active="reviews">
       <DashboardHeading
         title="Guest Feedback"
-        subtitle="Monitor and respond to your guests' property reviews."
-        actions={
-          <button
-            disabled
-            title="Coming soon"
-            className="flex items-center gap-2 bg-white border border-gray-200 px-5 py-2.5 rounded-xl text-sm font-bold text-gray-400 cursor-not-allowed"
-          >
-            <Share2 className="w-5 h-5" />
-            Export
-          </button>
-        }
+        subtitle="See what guests say about your properties."
       />
 
       {loading ? (
@@ -235,24 +225,6 @@ export default function ReviewsPage() {
                       {r.comment && (
                         <p className="text-sm text-gray-700 leading-relaxed">{r.comment}</p>
                       )}
-                      <div className="flex items-center gap-4 pt-2">
-                        <button
-                          disabled
-                          title="Coming soon"
-                          className="flex items-center gap-2 text-gray-400 font-bold text-sm cursor-not-allowed"
-                        >
-                          <Reply className="w-4 h-4" />
-                          Reply to Guest
-                        </button>
-                        <button
-                          disabled
-                          title="Coming soon"
-                          className="flex items-center gap-2 text-gray-400 text-sm cursor-not-allowed"
-                        >
-                          <Flag className="w-4 h-4" />
-                          Report
-                        </button>
-                      </div>
                     </div>
                   </div>
                 </div>

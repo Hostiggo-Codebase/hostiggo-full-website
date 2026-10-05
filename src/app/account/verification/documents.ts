@@ -23,14 +23,14 @@ export type IdDocument = {
 export const ID_DOCUMENTS: IdDocument[] = [
   {
     id: 'aadhaar',
-    label: 'Aadhaar Card',
+    label: 'eAadhaar PDF',
     image: '/verification/aadhaar.png',
-    verificationTitle: 'Aadhaar verification',
-    numberLabel: 'Aadhaar Number',
-    numberPlaceholder: 'Enter aadhaar card number',
-    uploadPlaceholder: 'Upload your aadhaar photo',
-    inputMode: 'numeric',
-    maxLength: 12,
+    verificationTitle: 'eAadhaar verification',
+    numberLabel: '',
+    numberPlaceholder: '',
+    uploadPlaceholder: 'Upload your eAadhaar PDF',
+    inputMode: 'text',
+    maxLength: 0,
   },
   {
     id: 'pan',

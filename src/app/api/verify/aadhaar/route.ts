@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     const file = form?.get("file");
     const yob = String(form?.get("yob") ?? "").trim();
     const fullName = String(form?.get("fullName") ?? "").trim().slice(0, 100);
+    const password = String(form?.get("password") ?? "");
 
     if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json({ error: "Upload your eAadhaar PDF." }, { status: 400 });
@@ -41,6 +42,9 @@ export async function POST(req: NextRequest) {
     if (fullName.length < 2) {
       return NextResponse.json({ error: "Enter your full name as it appears on your Aadhaar." }, { status: 400 });
     }
+    if (password.length < 1 || password.length > 100) {
+      return NextResponse.json({ error: "Enter the password for your eAadhaar PDF." }, { status: 400 });
+    }
 
     if (!isSurepassConfigured()) {
       return NextResponse.json({
@@ -52,6 +56,7 @@ export async function POST(req: NextRequest) {
     upstream.append("file", file, file.name || "eaadhaar.pdf");
     upstream.append("yob", yob);
     upstream.append("full_name", fullName);
+    upstream.append("password", password);
     const res = await surepassPostForm(EAADHAAR_UPLOAD_ENDPOINT, upstream);
     const json = await res.json().catch(() => ({}));
 

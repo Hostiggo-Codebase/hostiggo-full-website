@@ -4,14 +4,20 @@ import { MapPin, Clock, Navigation, Loader2 } from 'lucide-react';
 import { SUGGESTED_DESTINATIONS, findCityGuide } from '@/constants/data';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
-import { buildDestinationOptions } from '@/lib/destinationOptions';
+import { buildDestinationOptions, countStaysFor } from '@/lib/destinationOptions';
 import { reverseGeocode } from '@/lib/services/geocoding';
 import { toast } from 'sonner';
 
 interface DestinationDropdownProps {
   value: string;
+  // Called with typed text when the dropdown closes without a pick, so the
+  // search runs on what was typed -- not on every keystroke along the way.
   onQueryChange: (value: string) => void;
-  onSelect: (value: string) => void;
+  // Called on every keystroke, for a parent that only needs to remember the
+  // draft (e.g. so its Search button can use it) without searching on it.
+  onDraftChange?: (value: string) => void;
+  // `state` is set when a specific place was picked from the list.
+  onSelect: (value: string, state?: string) => void;
   onClose: () => void;
   /** Fill the parent's width (homepage hero) instead of a fixed 560px panel. */
   fullWidth?: boolean;
@@ -44,6 +50,7 @@ const FALLBACK_IMG = '/placeholder.svg';
 export default function DestinationDropdown({
   value,
   onQueryChange,
+  onDraftChange,
   onSelect,
   onClose,
   fullWidth = false,
@@ -63,6 +70,26 @@ export default function DestinationDropdown({
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const [allListings, setAllListings] = useState<any[]>([]);
+
+  // Typed text is only handed to the parent when the dropdown goes away
+  // without a pick (click elsewhere, press Search). Updating the parent on
+  // every keystroke ran a full listing search per letter -- "Del" flashed an
+  // empty result list before "Delhi" was finished.
+  const queryRef = useRef(value);
+  const committedRef = useRef(false);
+  const onQueryChangeRef = useRef(onQueryChange);
+  const initialValueRef = useRef(value);
+  useEffect(() => {
+    onQueryChangeRef.current = onQueryChange;
+  }, [onQueryChange]);
+  useEffect(
+    () => () => {
+      if (!committedRef.current && queryRef.current !== initialValueRef.current) {
+        onQueryChangeRef.current(queryRef.current);
+      }
+    },
+    [],
+  );
 
   // Load every active listing once so destinations can be ranked by how many
   // listings each state actually has. Cheap (cached, cover-photo rows only).
@@ -92,12 +119,19 @@ export default function DestinationDropdown({
     return counts;
   }, [allListings]);
 
-  // Listings in the state a destination points at. Drives both the ranking
-  // and the "(N stays)" label so the two always agree.
+  // Listings in the state a destination points at -- used to rank places.
   const countOf = useCallback(
     (place?: string | null) =>
       listingCountByState.get((place ?? '').trim().toLowerCase()) ?? 0,
     [listingCountByState],
+  );
+
+  // Listings a search for this destination will actually return. Drives the
+  // "(N stays)" labels and the ranking of the suggestions, so a city shows its
+  // own count rather than its whole state's.
+  const staysFor = useCallback(
+    (destination: string) => countStaysFor(destination, allListings),
+    [allListings],
   );
 
   // Live results, one option per place (plus the whole state when the query
@@ -110,11 +144,8 @@ export default function DestinationDropdown({
 
   // Same ranking for the default "click to open" suggestions.
   const sortedSuggested = useMemo(
-    () =>
-      [...SUGGESTED_DESTINATIONS].sort(
-        (a, b) => countOf(b.state || b.name) - countOf(a.state || a.name),
-      ),
-    [countOf],
+    () => [...SUGGESTED_DESTINATIONS].sort((a, b) => staysFor(b.name) - staysFor(a.name)),
+    [staysFor],
   );
 
   useEffect(() => {
@@ -167,9 +198,10 @@ export default function DestinationDropdown({
   // straight to /search via goToSearch below, sidestepping this) silently
   // closed the whole search bar instead of moving on to date selection --
   // looked like nothing happened when you picked a location.
-  const handleSelect = (name: string) => {
+  const handleSelect = (name: string, state?: string) => {
+    committedRef.current = true;
     pushRecentSearch(name);
-    onSelect(name);
+    onSelect(name, state);
   };
 
   const handleUseCurrentLocation = () => {
@@ -207,8 +239,8 @@ export default function DestinationDropdown({
 
   const handleQueryChange = (newQuery: string) => {
     setQuery(newQuery);
-    // Update parent location state, debounced
-    onQueryChange(newQuery);
+    queryRef.current = newQuery;
+    onDraftChange?.(newQuery);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -222,6 +254,7 @@ export default function DestinationDropdown({
   // city; `area` is passed through only as display context for the results
   // header.
   const goToSearch = (city: string, area?: string) => {
+    committedRef.current = true;
     onSelect(city);
     onClose();
     const params = new URLSearchParams({ destination: city });
@@ -287,7 +320,7 @@ export default function DestinationDropdown({
                   {cityGuide.city}
                 </p>
                 <p className="text-[12px] text-gray-400 mt-0.5">
-                  ({countOf(cityGuide.state).toLocaleString('en-IN')} stays)
+                  ({staysFor(cityGuide.city).toLocaleString('en-IN')} stays)
                 </p>
               </div>
             </button>
@@ -385,7 +418,7 @@ export default function DestinationDropdown({
                       </p>
                     )}
                     <p className="text-[11px] text-gray-400 mt-0.5">
-                      ({countOf(dest.state || dest.name).toLocaleString('en-IN')} stays)
+                      ({staysFor(dest.name).toLocaleString('en-IN')} stays)
                     </p>
                   </div>
                 </button>
@@ -414,7 +447,7 @@ export default function DestinationDropdown({
                 return (
                   <button
                     key={dest.key}
-                    onClick={() => handleSelect(displayName)}
+                    onClick={() => handleSelect(displayName, dest.wholeState ? undefined : dest.state)}
                     className={cn(
                       'w-full flex items-center gap-3 px-4 py-2.5 hover:bg-figma-navy/5 transition-colors text-left group',
                       value === displayName && 'bg-figma-navy/5',

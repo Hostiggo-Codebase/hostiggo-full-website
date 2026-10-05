@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildDestinationOptions, normalizePlaceName } from "../destinationOptions";
+import { buildDestinationOptions, countStaysFor, normalizePlaceName } from "../destinationOptions";
 
 // What search_locations_partial returns for "Haryana" (trimmed to the fields used).
 const HARYANA_ROWS = [
@@ -69,5 +69,48 @@ describe("normalizePlaceName", () => {
   it("ignores case, accents and surrounding whitespace", () => {
     expect(normalizePlaceName("  Haryāna ")).toBe("haryana");
     expect(normalizePlaceName(undefined)).toBe("");
+  });
+});
+
+describe("place states", () => {
+  it("sends the unaccented state for a picked place, so the search's state match works", () => {
+    const rows = [{ state: "Haryāna", district: "Faridabad" }];
+    expect(buildDestinationOptions(rows, "Farid")[0].state).toBe("Haryana");
+  });
+});
+
+describe("countStaysFor", () => {
+  const rows = [
+    { locations: { state: "Delhi", district: "Delhi" } },
+    { locations: { state: "Delhi", district: "Delhi" } },
+    { locations: { state: "Haryana", district: "Gurugram" } },
+    { locations: { state: "Himachal Pradesh", district: "Shimla" } },
+    { locations: { state: "Himachal Pradesh", district: "Manali" } },
+    { locations: { state: "Uttarakhand", district: "dehradun" } },
+    { locations: null },
+  ];
+
+  it("counts a city by its own district, not its whole state", () => {
+    expect(countStaysFor("Shimla", rows)).toBe(1);
+    expect(countStaysFor("shimla ", rows)).toBe(1);
+  });
+
+  it("counts a state name as the whole state", () => {
+    expect(countStaysFor("Himachal Pradesh", rows)).toBe(2);
+    expect(countStaysFor("Delhi", rows)).toBe(2);
+  });
+
+  it("follows the destination aliases", () => {
+    expect(countStaysFor("New Delhi", rows)).toBe(2);
+    expect(countStaysFor("Gurgaon", rows)).toBe(1);
+  });
+
+  it("is case-insensitive on the stored district", () => {
+    expect(countStaysFor("Dehradun", rows)).toBe(1);
+  });
+
+  it("is zero for unknown or empty names", () => {
+    expect(countStaysFor("Atlantis", rows)).toBe(0);
+    expect(countStaysFor("", rows)).toBe(0);
   });
 });

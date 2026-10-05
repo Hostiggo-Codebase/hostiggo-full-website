@@ -54,13 +54,13 @@ export default function CTABanner() {
 
           {/* Card Body */}
           <p className="text-sm font-semibold text-white/95 leading-snug">
-            First 10 bookings are 0% commission for all new hosts
+            No listing fee. One simple 5% commission.
           </p>
 
           <div className="border-t border-dashed border-gray-600 my-4" />
 
           <p className="text-xs text-gray-300 leading-relaxed">
-            After that, a low 2% platform commission applies.
+            You see your exact payout for every booking.
           </p>
 
           {/* Card Footer */}

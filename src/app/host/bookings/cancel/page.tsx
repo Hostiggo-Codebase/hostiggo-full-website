@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -55,7 +56,7 @@ function CancelInner() {
       const result = await api.cancelBookingWithRefund(id, userId, reasonLabel);
       toast.success(
         result?.refundStatus === 'processed'
-          ? `Reservation cancelled. The guest will be refunded ₹${Number(result.refundAmountRupees).toLocaleString('en-IN')}.`
+          ? `Reservation cancelled. The guest will be refunded ${formatINR(Number(result.refundAmountRupees))} (5-7 banking days, depending on their bank).`
           : 'Reservation cancelled.',
       );
       router.push('/host/bookings');
@@ -171,7 +172,7 @@ function CancelInner() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Amount</span>
                     <span className="font-bold text-gray-800">
-                      ₹{Number(booking?.amount ?? 0).toLocaleString('en-IN')}
+                      {formatINR(Number(booking?.amount ?? 0))}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">

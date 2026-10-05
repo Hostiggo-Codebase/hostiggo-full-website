@@ -96,6 +96,7 @@ export function KycVerificationForm({
   const [idMethod, setIdMethod] = useState<IdMethod>('pan');
   const [pan, setPan] = useState('');
   const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
+  const [aadhaarPassword, setAadhaarPassword] = useState('');
   const [yob, setYob] = useState('');
   const [passportFileNo, setPassportFileNo] = useState('');
   const [dob, setDob] = useState('');
@@ -122,7 +123,7 @@ export function KycVerificationForm({
     idMethod === 'pan'
       ? isValidPanNumber(pan)
       : idMethod === 'aadhaar'
-        ? Boolean(aadhaarFile) && /^\d{4}$/.test(yob) && Number(yob) >= 1900 && Number(yob) <= thisYear
+        ? Boolean(aadhaarFile) && aadhaarPassword.length > 0 && /^\d{4}$/.test(yob) && Number(yob) >= 1900 && Number(yob) <= thisYear
         : /^[A-Z0-9]{8,15}$/.test(passportFileNo) && Boolean(dob);
   const hasName = fullName.trim().length > 1;
   const canSubmitId = hasName && isIdValid && consent && !idSubmitting;
@@ -152,7 +153,7 @@ export function KycVerificationForm({
         idMethod === 'pan'
           ? await api.verifyPan(pan.trim().toUpperCase(), name)
           : idMethod === 'aadhaar'
-            ? await api.verifyAadhaar({ file: aadhaarFile as File, yob, fullName: name })
+            ? await api.verifyAadhaar({ file: aadhaarFile as File, yob, fullName: name, password: aadhaarPassword })
             : await api.verifyPassport({ fileNumber: passportFileNo, dob, fullName: name });
       const status = body?.status ?? 'pending';
       setIdResult({ status, reason: body?.reason ?? null });
@@ -351,6 +352,24 @@ export function KycVerificationForm({
                     myaadhaar.uidai.gov.in
                   </a>
                   . Upload the original PDF -- a scan or photo won&apos;t work.
+                </p>
+              </div>
+              <div>
+                <label htmlFor="aadhaarPassword" className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 mb-1.5">
+                  <Lock className="w-3.5 h-3.5" />
+                  eAadhaar PDF password
+                </label>
+                <input
+                  id="aadhaarPassword"
+                  type="password"
+                  autoComplete="off"
+                  value={aadhaarPassword}
+                  onChange={(e) => setAadhaarPassword(e.target.value)}
+                  placeholder="Enter the password for the downloaded PDF"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
+                />
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  UIDAI eAadhaar PDFs usually use the first four letters of your name in capitals followed by your birth year.
                 </p>
               </div>
               <div>

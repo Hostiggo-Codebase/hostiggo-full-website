@@ -1,5 +1,6 @@
 'use client';
 
+import { formatINR } from '@/lib/format';
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import {
@@ -503,7 +504,7 @@ function WishlistCard({
 
           <div className="inline-flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1">
             <span className="text-[12px] font-extrabold text-gray-900">
-              ₹ {allInNightlyPrice(property.price).toLocaleString('en-IN')}
+              {formatINR(allInNightlyPrice(property.price))}
             </span>
             <span className="text-[11px] text-gray-400">
               / night incl. taxes

@@ -17,9 +17,9 @@ export async function POST(req: NextRequest) {
     const target = String(phone ?? email ?? "").toLowerCase();
     const limited =
       action === "send"
-        ? rateLimit(`otp-send-ip:${clientIp(req)}`, 10, 10 * 60_000) ??
-          rateLimit(`otp-send:${target}`, 4, 10 * 60_000)
-        : rateLimit(`otp-verify:${target}`, 10, 10 * 60_000);
+        ? (await rateLimit(`otp-send-ip:${clientIp(req)}`, 10, 10 * 60_000)) ??
+          (await rateLimit(`otp-send:${target}`, 4, 10 * 60_000))
+        : await rateLimit(`otp-verify:${target}`, 10, 10 * 60_000);
     if (limited) return limited;
 
     // Send OTP action

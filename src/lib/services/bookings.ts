@@ -2,6 +2,7 @@
 // privileges on bookings, so everything here runs as the service role. Every
 // caller scopes by the verified user id (see getAuthenticatedUserId).
 import { supabaseAdmin } from "../supabase-admin";
+import { todayInIndia } from "../booking-config";
 const supabase = supabaseAdmin;
 
 // None of updateBookingStatus/updateBookingDates/updateBookingGuests ever
@@ -276,57 +277,6 @@ export const bookingsAPI = {
     return { ...booking, guest, host, houseRules, addons: addons ?? [] };
   },
 
-  async updateBookingStatus(
-    bookingId: string | number,
-    status: string,
-    _cancelledBy: "host" | "user" = "user",
-    _reason?: string,
-    requestingUserId?: string,
-  ) {
-    if (!requestingUserId) throw new Error("requestingUserId is required.");
-    await assertOwnsBooking(bookingId, requestingUserId);
-    const updateData: any = {};
-
-    if (status.toLowerCase() === "cancelled") {
-      updateData.status_id = 3;
-      if (_reason) updateData.cancellation_reason = _reason;
-    } else if (status.toLowerCase() === "confirmed") {
-      updateData.status_id = 2;
-    } else if (status.toLowerCase() === "pending") {
-      updateData.status_id = 1;
-    }
-
-    const { data, error } = await supabase
-      .from("bookings")
-      .update(updateData)
-      .eq("booking_id", Number(bookingId))
-      .select("booking_id, status_id, listing_id, start_date, end_date")
-      .single();
-
-    if (error) throw error;
-
-    // Release the calendar nights this booking had blocked, otherwise a
-    // guest cancelling from "My Trips" (a different code path than the
-    // host-side cancelBooking) leaves those dates unavailable forever.
-    if (
-      status.toLowerCase() === "cancelled" &&
-      data?.listing_id &&
-      data.start_date &&
-      data.end_date
-    ) {
-      const nights = eachDateInRange(data.start_date, data.end_date);
-      if (nights.length) {
-        await supabase
-          .from("listing_calendar")
-          .update({ is_available: true, updated_at: new Date().toISOString() })
-          .eq("listing_id", data.listing_id)
-          .in("date", nights);
-      }
-    }
-
-    return data;
-  },
-
   async updateBookingDates(
     bookingId: string | number,
     checkIn: string,
@@ -339,10 +289,34 @@ export const bookingsAPI = {
 
     const { data: existing, error: fetchErr } = await supabase
       .from("bookings")
-      .select("listing_id, start_date, end_date")
+      .select("listing_id, start_date, end_date, status_id")
       .eq("booking_id", Number(bookingId))
       .single();
     if (fetchErr) throw fetchErr;
+
+    // Dates are not re-priced, so a change may never add paid-for nights, and
+    // only a live, upcoming reservation can move at all (a cancelled booking
+    // must not re-block the calendar).
+    if (existing.status_id !== 2) {
+      throw new Error("Only confirmed bookings can be changed.");
+    }
+    if (formattedCheckOut <= formattedCheckIn) {
+      throw new Error("Check-out must be after check-in.");
+    }
+    if (formattedCheckIn < todayInIndia()) {
+      throw new Error("Check-in cannot be in the past.");
+    }
+    if (existing.start_date < todayInIndia()) {
+      throw new Error("A stay that has already started can't be changed.");
+    }
+    if (
+      eachDateInRange(formattedCheckIn, formattedCheckOut).length >
+      eachDateInRange(existing.start_date, existing.end_date).length
+    ) {
+      throw new Error(
+        "You can't extend a booking. Please book the extra nights as a new reservation.",
+      );
+    }
 
     // Same conflict checks createBooking runs, otherwise "modify dates"
     // can move a booking onto already-blocked or already-booked nights.

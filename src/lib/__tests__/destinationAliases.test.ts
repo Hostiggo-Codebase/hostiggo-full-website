@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveDestinationAlias } from "../destinationAliases";
+import { canonicalPlaceName, resolveDestinationAlias } from "../destinationAliases";
 
 describe("resolveDestinationAlias", () => {
   it("widens New Delhi to the whole Delhi state", () => {
@@ -20,5 +20,21 @@ describe("resolveDestinationAlias", () => {
     expect(resolveDestinationAlias("Gurugram")).toBeNull();
     expect(resolveDestinationAlias("")).toBeNull();
     expect(resolveDestinationAlias(undefined)).toBeNull();
+  });
+});
+
+describe("canonicalPlaceName", () => {
+  it("files old city names under their current district", () => {
+    expect(canonicalPlaceName("Gurgaon")).toBe("Gurugram");
+    expect(canonicalPlaceName("  gurgaon ")).toBe("Gurugram");
+  });
+
+  it("leaves everything else alone, only trimmed", () => {
+    expect(canonicalPlaceName("Gurugram")).toBe("Gurugram");
+    expect(canonicalPlaceName(" Shimla ")).toBe("Shimla");
+  });
+
+  it("keeps New Delhi as typed: that alias only widens a search to the state", () => {
+    expect(canonicalPlaceName("New Delhi")).toBe("New Delhi");
   });
 });

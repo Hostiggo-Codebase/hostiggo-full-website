@@ -22,7 +22,7 @@ const values = [
 ];
 
 export const metadata = {
-  title: "About Us · Hostiggo",
+  title: "About Us",
   description:
     "Hostiggo is a technology-enabled marketplace connecting hosts and travelers across India.",
 };

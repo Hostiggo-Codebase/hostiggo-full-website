@@ -5,7 +5,8 @@ import Footer from "@/components/layout/Footer";
 import Navbar from "@/components/layout/Navbar";
 import { useAuth } from "@/context/AuthContext";
 import { useWishlist } from "@/hooks/useWishlist";
-import { api, mapListingToProperty } from "@/lib/api";
+import { api, ApiError, mapListingToProperty } from "@/lib/api";
+import { track } from "@/lib/analytics";
 import { calculateBookingInvoice } from "@/lib/billing/invoice";
 import { CANCELLATION_POLICY_DEFAULTS } from "@/lib/billing/refund";
 import { loadGoogleMaps } from "@/lib/services/googleMaps";
@@ -19,8 +20,11 @@ import { openRazorpayCheckout } from '@/lib/services/razorpayCheckout';
 import WishlistPicker from '@/components/features/WishlistPicker';
 import {
   AlertTriangle,
+  ArrowUpDown,
   Award,
+  Bath,
   BedDouble,
+  BriefcaseMedical,
   CalendarDays,
   Car,
   CheckCircle,
@@ -30,17 +34,30 @@ import {
   Clock,
   Coffee,
   Droplets,
+  DoorOpen,
+  Dumbbell,
   ExternalLink,
+  Flame,
+  Gamepad2,
   Grid3x3,
   Heart,
   MapPin,
   MessageSquare,
+  Microwave,
   Mountain,
+  ParkingCircle,
+  PawPrint,
   Share2,
   Shield,
+  ShieldAlert,
+  Snowflake,
   Star,
+  Trees,
+  Tv,
   Users,
   UtensilsCrossed,
+  Waves,
+  WashingMachine,
   Wifi,
   Wind,
   X,
@@ -94,8 +111,30 @@ async function shareProperty(url: string, title?: string) {
 const BOOKING_DISABLED = !BOOKINGS_OPEN;
 
 // ── Amenity Icon Map ─────────────────────────────────────────────────
+// Keys are the `icon` values stored on the `amenities` table (plus a few
+// legacy keys used by the name-based fallback in mapListingToProperty).
 const AMENITY_ICON_MAP: Record<string, React.ReactNode> = {
   wifi: <Wifi className="w-5 h-5" />,
+  "ac-unit": <Snowflake className="w-5 h-5" />,
+  "local-fire-department": <Flame className="w-5 h-5" />,
+  kitchen: <UtensilsCrossed className="w-5 h-5" />,
+  "local-laundry-service": <WashingMachine className="w-5 h-5" />,
+  "local-parking": <ParkingCircle className="w-5 h-5" />,
+  tv: <Tv className="w-5 h-5" />,
+  microwave: <Microwave className="w-5 h-5" />,
+  pool: <Waves className="w-5 h-5" />,
+  "fitness-center": <Dumbbell className="w-5 h-5" />,
+  hot_tub: <Bath className="w-5 h-5" />,
+  balcony: <DoorOpen className="w-5 h-5" />,
+  elevator: <ArrowUpDown className="w-5 h-5" />,
+  "smoke-detector": <ShieldAlert className="w-5 h-5" />,
+  "medical-services": <BriefcaseMedical className="w-5 h-5" />,
+  pets: <PawPrint className="w-5 h-5" />,
+  shield: <Shield className="w-5 h-5" />,
+  outdoor_grill: <Flame className="w-5 h-5" />,
+  yard: <Trees className="w-5 h-5" />,
+  "sports-esports": <Gamepad2 className="w-5 h-5" />,
+  // legacy keys
   car: <Car className="w-5 h-5" />,
   coffee: <Coffee className="w-5 h-5" />,
   zap: <Zap className="w-5 h-5" />,
@@ -715,14 +754,6 @@ function HostCard({ host }: { host: Host }) {
           <MessageSquare className="w-4 h-4" />
           Message Host
         </button>
-        <button
-          disabled
-          title="Coming soon"
-          className="flex-1 flex items-center justify-center gap-1.5 bg-gray-200 text-gray-400 py-2.5 rounded-xl text-[13px] font-bold cursor-not-allowed"
-        >
-          <ExternalLink className="w-4 h-4" />
-          View Profile
-        </button>
       </div>
     </div>
   );
@@ -1085,6 +1116,12 @@ function BookingWidget({
         return;
       }
 
+      track("begin_checkout", {
+        item_id: property.id,
+        value: order.amountRupees,
+        currency: "INR",
+      });
+
       // Step 2: guest actually pays via the Razorpay Checkout widget.
       let payment;
       try {
@@ -1132,6 +1169,13 @@ function BookingWidget({
         try {
           created = await api.confirmBookingPayment(confirmPayload);
         } catch (confirmErr) {
+          // The dates went to someone else while this guest was paying and the
+          // payment has been refunded: final, not worth retrying or "don't pay again".
+          if (confirmErr instanceof ApiError && confirmErr.code === 'PAYMENT_REFUNDED') {
+            toast.error(confirmErr.message, { duration: 15000 });
+            setStatus('idle');
+            return;
+          }
           console.error('[property] confirm-payment attempt failed:', confirmErr);
           if (attempt < 2) await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
         }
@@ -1146,10 +1190,22 @@ function BookingWidget({
         return;
       }
       setStatus('confirmed');
+      track("purchase", {
+        transaction_id: created.booking_id,
+        item_id: property.id,
+        value: order.amountRupees,
+        currency: "INR",
+      });
       toast.success('Booking confirmed!');
       router.push(`/booking-confirmation/${created.booking_id}`);
     } catch (err) {
       console.error("[property] booking failed:", err);
+      if (err instanceof ApiError && err.code === "GUEST_ID_REQUIRED") {
+        toast.error(err.message);
+        router.push("/account/verification");
+        setStatus("available");
+        return;
+      }
       toast.error(
         err instanceof Error ? err.message : "Could not complete the booking.",
       );
@@ -1772,6 +1828,10 @@ export default function PropertyDetailsPage({ initialRow }: { initialRow?: any }
   );
   const [loading, setLoading] = useState(!initialRow);
   const [loadFailed, setLoadFailed] = useState(false);
+  const viewedId = property?.id;
+  useEffect(() => {
+    if (viewedId) track("view_item", { item_id: viewedId });
+  }, [viewedId]);
   const [reloadKey, setReloadKey] = useState(0);
   const { isAuthenticated, userId, user } = useAuth();
   const { isSaved } = useWishlist(userId);
@@ -1916,7 +1976,7 @@ export default function PropertyDetailsPage({ initialRow }: { initialRow?: any }
   const images = property.images.length > 0 ? property.images : [FALLBACK];
   const amenities =
     property.amenityDetails ??
-    property.amenities.map((a) => ({ name: a, icon: "wifi", available: true }));
+    property.amenities.map((a) => ({ name: a, icon: "check", available: true }));
   const visibleAmenities = showAllAmenities ? amenities : amenities.slice(0, 8);
   const reviews = property.reviews ?? [];
   const previewReviews = reviews.slice(0, 3);
@@ -2110,12 +2170,14 @@ export default function PropertyDetailsPage({ initialRow }: { initialRow?: any }
               <div className="flex flex-col text-type-poppins-regular-15-128-03 text-gray-600 gap-1">
                 <span className="flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-gray-400" />{" "}
-                  {property.maxGuests} Guests
+                  {property.maxGuests} {property.maxGuests === 1 ? "Guest" : "Guests"}
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <BedDouble className="w-4 h-4 text-gray-400" />{" "}
-                  {property.bedType || "1 Bedroom"}
-                </span>
+                {property.bedrooms != null && property.bedrooms > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <BedDouble className="w-4 h-4 text-gray-400" />{" "}
+                    {property.bedrooms} {property.bedrooms === 1 ? "Bedroom" : "Bedrooms"}
+                  </span>
+                )}
               </div>
             </div>
           </div>
