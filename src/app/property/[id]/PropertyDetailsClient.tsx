@@ -65,6 +65,7 @@ import {
   Filter
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { recordRecentlyViewed } from "@/lib/recentlyViewed";
@@ -2137,7 +2138,7 @@ export default function PropertyDetailsPage({ initialRow }: { initialRow?: any }
           {/* Host line & Quick stats */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 py-6 border-y border-gray-200 mb-8">
             {property.host && (
-              <div className="flex items-center gap-4">
+              <Link href={`/hosts/${property.host.id}`} className="flex items-center gap-4 rounded-2xl transition-colors hover:bg-gray-50">
                 <UserAvatar src={property.host.avatar} name={property.host.name} size={56} className="shadow-sm" />
                 <div>
                   <p className="text-[16px] font-bold text-gray-900">
@@ -2153,7 +2154,7 @@ export default function PropertyDetailsPage({ initialRow }: { initialRow?: any }
                     <span>{property.host.tripsHosted} trips hosted</span>
                   </p>
                 </div>
-              </div>
+              </Link>
             )}
 
             <div className="flex items-center gap-6 md:ml-auto">
@@ -2534,6 +2535,12 @@ export default function PropertyDetailsPage({ initialRow }: { initialRow?: any }
                 >
                   Contact Me
                 </button>
+                <Link
+                  href={`/hosts/${property.host.id}`}
+                  className="mt-2 w-full py-2 text-center text-type-poppins-medium-12-140-03 text-figma-navy hover:underline"
+                >
+                  View profile
+                </Link>
               </div>
 
               {/* Right: Host Bio + Occupation/Hobbies */}

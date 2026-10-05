@@ -4,14 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { ChevronRight, Camera, ShieldCheck, ShieldAlert, Mail, Phone, Loader2 } from 'lucide-react';
+import { BadgeCheck, ChevronRight, Camera, ShieldCheck, ShieldAlert, Mail, Phone, Loader2 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/context/AuthContext';
+import { useKycStatus } from '@/hooks/useKycStatus';
 import { api } from '@/lib/api';
 
 export default function GuestProfilePage() {
   const { user, userId, loading, isAuthenticated, refresh } = useAuth();
+  const { status: kycStatus, loading: kycLoading } = useKycStatus();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -20,6 +22,9 @@ export default function GuestProfilePage() {
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const identityVerified = user?.is_verified === true || kycStatus === 'verified';
+  const identityPending = kycStatus === 'pending';
+  const identityRejected = kycStatus === 'rejected';
 
   // Seed the form from the real user once it loads.
   useEffect(() => {
@@ -169,26 +174,54 @@ export default function GuestProfilePage() {
                 </div>
               </div>
 
-              {user?.is_verified ? (
-                <div className="bg-white rounded-3xl p-6 shadow-card border border-gray-200 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-figma-navy/5 flex items-center justify-center text-figma-navy">
-                    <ShieldCheck className="w-6 h-6" />
+              {identityVerified ? (
+                <div className="bg-white rounded-3xl p-6 shadow-card border border-gray-200">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-700">
+                      <BadgeCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">Verified guest</p>
+                      <p className="text-xs text-gray-500">Identity checks completed</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-800">Identity verified</p>
-                    <p className="text-xs text-gray-500">Your account is verified</p>
+                  <div className="mt-5 space-y-3 border-t border-gray-100 pt-5">
+                    {['Government ID verified', 'Profile ready for hosts', 'Bank details not required'].map((item) => (
+                      <div key={item} className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <ShieldCheck className="h-4 w-4 shrink-0 text-green-700" />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : identityPending ? (
+                <div className="bg-white rounded-3xl p-6 shadow-card border border-gray-200">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-figma-navy/5 flex items-center justify-center text-figma-navy shrink-0">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">Verification in review</p>
+                      <p className="text-xs text-gray-500">
+                        We received your ID details and will update your profile when checks finish.
+                      </p>
+                    </div>
                   </div>
                 </div>
               ) : (
                 <div className="bg-white rounded-3xl p-6 shadow-card border border-gray-200">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
-                      <ShieldAlert className="w-6 h-6" />
+                      {kycLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ShieldAlert className="w-6 h-6" />}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-gray-800">Verify your account</p>
+                      <p className="text-sm font-bold text-gray-800">
+                        {identityRejected ? 'Try verification again' : 'Verify your account'}
+                      </p>
                       <p className="text-xs text-gray-500">
-                        Confirm your identity with a government ID to build trust and unlock full access.
+                        {identityRejected
+                          ? 'Your last ID check could not be completed. Submit a government ID again.'
+                          : 'Confirm your identity with a government ID to build trust with hosts.'}
                       </p>
                     </div>
                   </div>
