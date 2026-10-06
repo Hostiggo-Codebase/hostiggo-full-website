@@ -7,7 +7,15 @@ import { Toaster } from 'sonner';
 import { NotificationProvider } from '@/context/NotificationContext';
 import ConsentAnalytics from '@/components/ConsentAnalytics';
 import JsonLd from '@/components/JsonLd';
-import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, SITE_URL, SOCIAL_LINKS, COMPANY_LEGAL_NAME, SUPPORT_EMAIL } from '@/lib/site';
+import {
+  COMPANY_LEGAL_NAME,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TAGLINE,
+  SITE_URL,
+  SOCIAL_LINKS,
+  SUPPORT_EMAIL,
+} from '@/lib/site';
 
 // Figma "Website Guest UI/UX" uses Poppins (Regular/Medium/SemiBold/Bold)
 // throughout -- this replaces the never-actually-loaded "Inter" fallback.
@@ -20,19 +28,67 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: `${SITE_NAME}: ${SITE_TAGLINE}`, template: `%s | ${SITE_NAME}` },
+  title: {
+    default: `${SITE_NAME}: ${SITE_TAGLINE}`,
+    template: `%s | ${SITE_NAME}`,
+  },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
-  // Each page's own URL, relative to metadataBase.
-  alternates: { canonical: './' },
+  keywords: [
+    'homestays in India',
+    'holiday homes',
+    'vacation rentals India',
+    'hostiggo',
+    'book stay India',
+    'verified homestays',
+    'rental properties India',
+  ],
+  alternates: {
+    canonical: './',
+    languages: {
+      'en-IN': './',
+    },
+  },
   openGraph: {
     type: 'website',
-    siteName: SITE_NAME,
     locale: 'en_IN',
+    url: SITE_URL,
+    siteName: SITE_NAME,
     title: `${SITE_NAME}: ${SITE_TAGLINE}`,
     description: SITE_DESCRIPTION,
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: `${SITE_NAME} home page preview`,
+      },
+    ],
   },
-  twitter: { card: 'summary_large_image', title: `${SITE_NAME}: ${SITE_TAGLINE}`, description: SITE_DESCRIPTION },
+  twitter: {
+    card: 'summary_large_image',
+    site: '@hostiggo',
+    creator: '@hostiggo',
+    title: `${SITE_NAME}: ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    images: ['/twitter-image'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+    apple: '/favicon.ico',
+  },
   formatDetection: { telephone: false },
 };
 

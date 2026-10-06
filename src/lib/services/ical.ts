@@ -1,7 +1,7 @@
 /**
  * iCal Sync Service Client
  * Integrates with the external iCal microservice to sync calendar feeds from Airbnb, Google Calendar, Booking.com, etc.
- * Service URL: https://ical-1-of1o.onrender.com (no auth required)
+ * Service URL: https://ical-production.up.railway.app
  */
 
 export interface ICalRegisterPayload {
@@ -15,7 +15,9 @@ export interface ICalRegisterResponse {
   slotOffsetS: number;
 }
 
-const SERVICE_URL = process.env.NEXT_PUBLIC_ICAL_SERVICE_URL || "https://ical-1-of1o.onrender.com";
+const SERVICE_URL = (
+  process.env.NEXT_PUBLIC_ICAL_SERVICE_URL || "https://ical-production.up.railway.app"
+).replace(/\/+$/, "");
 
 /**
  * Register or update a listing's iCal feed

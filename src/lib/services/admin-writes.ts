@@ -5,6 +5,7 @@ import { SCHEMA } from "../schema.constants";
 import { canonicalPlaceName } from "../destinationAliases";
 import { calculateBookingInvoice } from "../billing/invoice";
 import { getHostPayoutReadiness } from "./hostPayoutReadiness";
+import { DatesUnavailableError, isDatabaseAvailabilityError } from "../stayDates";
 
 const DB_SCHEMA = SCHEMA.testingSchema;
 
@@ -192,6 +193,17 @@ export async function upsertCalendarDay(input: {
 }) {
   const { listingId, date, price, isAvailable, currency } = input;
   await assertListingOwnedBy(listingId, input.requestingUserId);
+  if (isAvailable !== undefined) {
+    const { error } = await supabaseAdmin.rpc("set_host_calendar_dates", {
+      p_listing_id: listingId, p_dates: [date], p_is_available: isAvailable, p_price: price ?? null,
+    });
+    if (!error) {
+      const result = await supabaseAdmin.from("listing_calendar").select().eq("listing_id", listingId).eq("date", date).single();
+      if (result.error) throw result.error;
+      return result.data;
+    }
+    if (error.code !== "PGRST202") throw error;
+  }
 
   // Find an existing row for this (listing, date) so we update in place rather
   // than relying on a specific unique-constraint name for upsert.
@@ -294,7 +306,7 @@ export async function validateAndPriceBooking(input: BookingInput) {
     .eq("is_available", false);
   if (blockedErr) throw blockedErr;
   if (blocked && blocked.length > 0)
-    throw new Error("Some of the selected dates are not available.");
+    throw new DatesUnavailableError(undefined, blocked.map((row: { date: string }) => row.date));
 
   // Check B: overlapping confirmed bookings for the same listing.
   const { data: conflicts, error: conflictsErr } = await supabaseAdmin
@@ -307,7 +319,7 @@ export async function validateAndPriceBooking(input: BookingInput) {
     .gt("end_date", input.startDate); // existing booking ends after new start
   if (conflictsErr) throw conflictsErr;
   if (conflicts && conflicts.length > 0)
-    throw new Error("These dates are already booked.");
+    throw new DatesUnavailableError("These dates are already booked. Please choose different dates.");
 
   // Recompute the charge server-side from the listing's real per-night
   // prices, weekend nights (Fri/Sat) use price_weekend, everything else
@@ -472,40 +484,9 @@ async function insertConfirmedBooking(
     throw new Error("These dates were just booked by someone else. Please choose different dates.");
   }
 
-  // Block all nights in the booked range so they can't be double-booked.
-  const nights = stayNights;
-  if (nights.length) {
-    const now = new Date().toISOString();
-    // Update existing calendar rows first, then insert missing ones.
-    const { data: existing } = await supabaseAdmin
-      .from("listing_calendar")
-      .select("calendar_id, date")
-      .eq("listing_id", input.listingId)
-      .in("date", nights);
-
-    const existingDates = new Set((existing ?? []).map((r: any) => r.date));
-
-    if (existing?.length) {
-      await supabaseAdmin
-        .from("listing_calendar")
-        .update({ is_available: false, updated_at: now })
-        .eq("listing_id", input.listingId)
-        .in("date", nights);
-    }
-
-    const missing = nights.filter((d) => !existingDates.has(d));
-    if (missing.length) {
-      await supabaseAdmin.from("listing_calendar").insert(
-        missing.map((date) => ({
-          listing_id: input.listingId,
-          date,
-          is_available: false,
-          price: 0,
-          currency: "INR",
-        })),
-      );
-    }
-  }
+  // The database booking trigger updates listing_calendar atomically from the
+  // booking row. Keeping this write in the application would let a later
+  // cancellation accidentally reopen a host or iCal block.
 
   return data;
 }
@@ -668,6 +649,9 @@ export async function finalizeBookingFromRazorpayOrder(params: {
         .eq("razorpay_payment_id", params.paymentId)
         .maybeSingle();
       if (winner) return winner;
+    }
+    if (isDatabaseAvailabilityError(err)) {
+      throw await refundUnfulfillablePayment(params, order, "These dates were blocked or booked while you were paying.");
     }
     throw err;
   }

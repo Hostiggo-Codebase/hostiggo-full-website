@@ -15,6 +15,7 @@ function KycContent() {
   const searchParams = useSearchParams();
   const { userId, user, loading: authLoading } = useAuth();
   const redirect = safeRedirect(searchParams?.get('redirect'), '/');
+  const audience = searchParams?.get('audience') === 'guest' ? 'guest' : 'host';
 
   // Not signed in -- nothing to do here, move on. A prior submission never
   // bounces the visitor straight back to `redirect`: PAN and bank
@@ -23,9 +24,9 @@ function KycContent() {
   useEffect(() => {
     if (authLoading) return;
     if (!userId) {
-      router.replace(`/signin?redirect=${encodeURIComponent(`/kyc?redirect=${redirect}`)}`);
+      router.replace(`/signin?redirect=${encodeURIComponent(`/kyc?redirect=${redirect}&audience=${audience}`)}`);
     }
-  }, [authLoading, userId, redirect, router]);
+  }, [authLoading, userId, redirect, audience, router]);
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-center overflow-hidden py-10">
@@ -47,17 +48,19 @@ function KycContent() {
         </div>
         <h1 className="text-xl font-bold text-gray-900 mb-1.5">Verify your identity</h1>
         <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-          Verified hosts earn more guest trust and bookings. It&apos;s optional and takes a
-          minute -- verify your ID (Aadhaar, PAN or passport), then your bank account.
-          You can also do this later from Settings.
+          {audience === 'guest'
+            ? 'Verify your government ID to book with more trust. Guests only need identity verification - no bank details are required.'
+            : 'Verified hosts earn more guest trust and bookings. It takes a minute - verify your ID (Aadhaar, PAN or passport), then your bank account. You can also do this later from Settings.'}
         </p>
 
         {userId && (
           <KycVerificationForm
             userId={userId}
             defaultName={user?.name ?? ''}
+            audience={audience}
             onCompleted={() => router.push(redirect)}
             onSkipped={() => router.push(redirect)}
+            showSkip={audience === 'host'}
           />
         )}
       </div>

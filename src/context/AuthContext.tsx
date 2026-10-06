@@ -53,6 +53,11 @@ const AuthContext = createContext<(AuthState & AuthActions) | undefined>(undefin
 // doesn't surface as "Please sign in again" mid-task.
 let apiFetchInstalled = false;
 const PROXIED_API_PATHS = ['/api/search', '/api/locations'];
+const isInvalidRefreshTokenError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return message.includes('Invalid Refresh Token') || message.includes('Refresh Token Not Found');
+};
+
 function installApiFetch() {
   if (apiFetchInstalled || typeof window === 'undefined') return;
   apiFetchInstalled = true;
@@ -88,7 +93,13 @@ function installApiFetch() {
     if (res.status !== 401 || !token || explicitAuth) return res;
     // A FormData/stream body can only be sent once; JSON strings are safe to resend.
     if (init?.body && typeof init.body !== 'string') return res;
-    const { data } = await supabase.auth.refreshSession().catch(() => ({ data: null }));
+    const { data } = await supabase.auth.refreshSession().catch(async (err) => {
+      if (isInvalidRefreshTokenError(err)) {
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+        clearStoredAuth();
+      }
+      return { data: null };
+    });
     const fresh = data?.session?.access_token;
     if (!fresh || fresh === token) return res;
     setStoredSession(fresh, data?.session?.refresh_token);
@@ -126,7 +137,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data } = await supabase.auth.getSession();
         sessionUserId = data?.session?.user?.id ?? null;
-      } catch {
+      } catch (err) {
+        if (isInvalidRefreshTokenError(err)) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          clearStoredAuth();
+        }
         sessionUserId = null;
       }
       if (!mounted) return;

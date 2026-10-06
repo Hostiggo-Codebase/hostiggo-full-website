@@ -1,6 +1,7 @@
 'use client';
 
 import { formatINR } from '@/lib/format';
+import { useCalendarSync } from '@/hooks/useCalendarSync';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Download,
@@ -238,24 +239,29 @@ export default function CalendarPage() {
     };
   }, [userId]);
 
-  const loadCalendar = useCallback(async () => {
+  const calendarRequest = useRef(0);
+  const loadCalendar = useCallback(async (silent = false) => {
     if (!listingId) return;
+    const request = ++calendarRequest.current;
     const start = toDateStr(year, month, 1);
     const end = toDateStr(year, month, new Date(year, month + 1, 0).getDate());
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(false);
-    setSelectedDay(null);
+    if (!silent) setSelectedDay(null);
     try {
       const data = await api.hostCalendar(listingId, start, end);
+      if (request !== calendarRequest.current) return;
       setEntries(data.entries ?? []);
       setBookings(data.bookings ?? []);
     } catch (err) {
+      if (request !== calendarRequest.current) return;
       console.error('[host/calendar] calendar load failed:', err);
       setError(true);
     } finally {
-      setLoading(false);
+      if (request === calendarRequest.current) setLoading(false);
     }
   }, [listingId, year, month]);
+  useCalendarSync(listingId, () => loadCalendar(true));
 
   // Load iCal sync status for the current listing. Switching listings
   // quickly (or a slow response for one that's no longer selected) used to
@@ -304,8 +310,8 @@ export default function CalendarPage() {
       });
       toast.success(
         action === 'add'
-          ? 'iCal feed imported! Syncing will start in the next 15-minute slot.'
-          : 'iCal feed updated! Syncing will resume in the next 15-minute slot.'
+          ? 'iCal feed imported! Availability syncs every 15 seconds.'
+          : 'iCal feed updated! Availability syncs every 15 seconds.'
       );
       setShowICalModal(false);
       await loadICalStatus();
@@ -510,7 +516,7 @@ export default function CalendarPage() {
                 <p className="text-3xl mb-2">😕</p>
                 <p className="text-sm text-gray-500 mb-4">Couldn&apos;t load the calendar.</p>
                 <button
-                  onClick={loadCalendar}
+                  onClick={() => loadCalendar()}
                   className="inline-flex items-center gap-2 bg-figma-navy text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-figma-navy/90"
                 >
                   <RotateCcw className="w-4 h-4" /> Try again
@@ -728,7 +734,7 @@ export default function CalendarPage() {
                   className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-figma-navy focus:border-transparent outline-none disabled:opacity-50"
                 />
                 <p className="text-xs text-gray-500 mt-2">
-                  Paste your iCal (ICS) URL. We&apos;ll sync availability automatically every 15 minutes.
+                  Paste your iCal (ICS) URL. Availability syncs automatically every 15 seconds.
                 </p>
               </div>
 

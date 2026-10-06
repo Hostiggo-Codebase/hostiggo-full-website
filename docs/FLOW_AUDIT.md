@@ -391,7 +391,7 @@ All endpoints are **owner-only**: the token's user must own the listing's host r
 - `GET /api/host/calendar?listingId&start&end` returns daily entries and bookings.
 - `PATCH /api/host/calendar {listingId, date, price?, isAvailable?}` sets one day's price (0–1 crore) or blocks it.
 - Daily calendar prices **override** base prices (§7.1).
-- iCal sync with Airbnb, Google, Booking.com etc.: `POST /api/host/calendar/register {listingId, icalUrl, action: add|update|deactivate}`; `GET …/status`. The external service is at `ical-1-of1o.onrender.com`; feeds are in `listing_ical_feeds`. ⚠️
+- iCal sync with Airbnb, Google, Booking.com etc.: `POST /api/host/calendar/register {listingId, icalUrl, action: add|update|deactivate}`; `GET …/status`. The external service is at `ical-production.up.railway.app`; feeds are in `listing_ical_feeds`. ⚠️
 
 ### 6.6 Bookings (`/host/bookings`)
 
@@ -608,7 +608,7 @@ Error shape everywhere: `{ "error": string, "code"?: string }`. Success: `{ "dat
 | SurePass | PAN / Aadhaar / passport / bank KYC | `SUREPASS_API_KEY`, `SUREPASS_BASE_URL` | ⚠️ |
 | Google Maps | Maps, Places, Geocoding | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | ⚠️ |
 | AI-lister (Railway) | Listing import | `AI_LISTER_URL` | ⚠️ |
-| iCal service (Render) | Calendar sync | `NEXT_PUBLIC_ICAL_SERVICE_URL` | ⚠️ |
+| iCal service (Railway) | Calendar sync | `NEXT_PUBLIC_ICAL_SERVICE_URL` | ⚠️ |
 | Go search service | Optional search proxy | `SEARCH_SERVICE_URL` (leave unset) | ❌ down in Sept 2026; not used by default |
 
 Booking switches: `NEXT_PUBLIC_BOOKINGS_DISABLED` (freeze), `NEXT_PUBLIC_PAYMENTS_ENABLED` (live checkout), `NEXT_PUBLIC_ALLOW_UNPAID_BOOKINGS` (**staging only**).
