@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { registerListing, deactivateListing } from "@/lib/services/ical";
+import { syncListingICalFeed } from "@/lib/services/icalSync";
 import { assertListingOwnedBy } from "@/lib/services/admin-writes";
 
 export const dynamic = "force-dynamic";
@@ -43,27 +43,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "listingId must be a valid number" }, { status: 400 });
     }
 
-    // Call the external iCal service to register/update/deactivate
-    let icalResponse;
-    try {
-      if (action === "deactivate") {
-        await deactivateListing(listingNum);
-        icalResponse = { status: "deactivated", slotOffsetS: 0 };
-      } else {
-        icalResponse = await registerListing(listingNum, icalUrl, action);
-      }
-    } catch (serviceError) {
-      console.error("[POST /api/host/calendar/register] iCal service error:", serviceError);
-      return NextResponse.json(
-        {
-          error:
-            serviceError instanceof Error
-              ? serviceError.message
-              : "Failed to register with iCal service",
-        },
-        { status: 502 },
-      );
-    }
+    // Imports are fetched by our own sync (src/lib/services/icalSync.ts), so
+    // there is no third-party service to register with.
+    let icalResponse: { status: string; blockedDates?: number; syncError?: string } = {
+      status: action === "deactivate" ? "deactivated" : "registered",
+    };
 
     // Update the listing in Supabase with the iCal URL (or null if deactivating)
     const updatePayload: Record<string, any> = {
@@ -92,6 +76,23 @@ export async function POST(req: NextRequest) {
 
     if (!updatedListing || updatedListing.length === 0) {
       return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+    }
+
+    if (action === "deactivate") {
+      // Drop the imported blocks; manual host blocks and bookings are untouched.
+      const { error: clearError } = await supabaseAdmin.rpc("sync_listing_ical_dates", {
+        p_listing_id: listingNum,
+        p_dates: [],
+      });
+      if (clearError) console.error("[POST /api/host/calendar/register] clear failed:", clearError);
+    } else {
+      try {
+        const { blocked } = await syncListingICalFeed(listingNum, String(icalUrl).trim());
+        icalResponse.blockedDates = blocked;
+      } catch (syncError) {
+        // The URL is saved; the 15-second sync keeps retrying. Tell the host now.
+        icalResponse.syncError = syncError instanceof Error ? syncError.message : "Could not read the feed";
+      }
     }
 
     return NextResponse.json({

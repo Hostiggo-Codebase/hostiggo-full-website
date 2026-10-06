@@ -202,7 +202,9 @@ export async function upsertCalendarDay(input: {
       if (result.error) throw result.error;
       return result.data;
     }
-    if (error.code !== "PGRST202") throw error;
+    // Blocking must never fall back to a direct write: only the RPC refuses
+    // nights that already have a confirmed booking.
+    if (error.code !== "PGRST202" || isAvailable === false) throw error;
   }
 
   // Find an existing row for this (listing, date) so we update in place rather
