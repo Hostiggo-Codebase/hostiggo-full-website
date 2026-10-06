@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { cn } from '@/lib/utils';
@@ -91,8 +91,13 @@ export default function Navbar() {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, user, signOut } = useAuth();
   const { unreadCount } = useNotifications();
+
+  const isDevBypass =
+    process.env.NODE_ENV === 'development' &&
+    process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === 'true';
 
   const handleSignOut = () => {
     setProfileOpen(false);
@@ -146,121 +151,107 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center">
+            
+            <div className="flex items-center gap-1.5 text-[#004772] text-[15px] font-semibold font-['Poppins'] cursor-pointer hover:opacity-80 transition-opacity">
+              <IndianRupee className="w-[18px] h-[18px]" />
+              <span>INR.</span>
+            </div>
 
+            <div className="w-[1px] h-4 bg-[#004772]/20 mx-4"></div>
 
-            {/* List your property button matching Figma Rectangle 22987 */}
+            <div className="flex items-center gap-1.5 text-[#004772] text-[15px] font-semibold font-['Poppins'] cursor-pointer hover:opacity-80 transition-opacity">
+              <Globe className="w-[18px] h-[18px] stroke-2" />
+              <span>English</span>
+            </div>
+
+            <div className="w-[1px] h-4 bg-[#004772]/20 mx-4"></div>
+
+            {(!isAuthenticated || isDevBypass) && (
+              <button
+                type="button"
+                onClick={() => router.push("/signin")}
+                className="text-[#004772] text-[15px] font-semibold font-['Poppins'] hover:underline cursor-pointer"
+              >
+                Sign In
+              </button>
+            )}
+
             <button
               type="button"
-              className="border border-[#004772] text-[#004772] hover:bg-[#004772]/5 px-5 py-2.5 rounded-full text-[14px] md:text-[15px] font-medium transition-colors font-['Poppins'] cursor-pointer ml-1"
+              className="border border-[#004772] text-[#004772] hover:bg-[#004772]/5 px-6 py-2 rounded-xl text-[14px] font-semibold transition-colors font-['Poppins'] cursor-pointer ml-6"
               onClick={() => router.push("/host/list/method")}
             >
               List your property
             </button>
 
             {isAuthenticated ? (
-              <>
-                <Link
-                  href="/notifications"
-                  aria-label={unreadCount ? `Inbox, ${unreadCount} unread` : "Inbox"}
-                  title="Inbox"
-                  className="relative p-2 text-[#004772] hover:bg-[#004772]/5 rounded-full transition-colors"
-                >
-                  <Inbox className="w-5 h-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-[18px] text-center">
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
-                  )}
-                </Link>
-                {/* Avatar + Dropdown */}
-                <div ref={profileRef} className="relative ml-2">
-                  <button
-                    type="button"
-                    aria-label="Account menu"
-                    aria-haspopup="menu"
-                    aria-expanded={profileOpen}
-                    onClick={() => setProfileOpen((v) => !v)}
-                    className="w-11 h-11 rounded-full overflow-hidden border-2 border-gray-200 hover:border-[#004772] transition-all cursor-pointer shadow-xs"
-                  >
-                    <UserAvatar src={user?.profile_pic_url} name={user?.name || 'Account'} size={40} className="h-full w-full" />
-                  </button>
-
-                  {/* Dropdown */}
-                  {profileOpen && (
-                    <div
-                      className={cn(
-                        "absolute right-0 top-[calc(100%+8px)] w-[260px] h-auto max-h-[80vh] overflow-y-auto bg-white rounded-[6px] p-[9px] shadow-[0_4px_21.7px_6px_rgba(0,0,0,0.25)] border border-gray-100 z-50 flex flex-col",
-                        "animate-fade-in-down origin-top-right",
-                      )}
-                      style={{ animation: "fadeInDown 0.18s ease both" }}
-                    >
-                      <div className="flex flex-col">
-                        {MENU_GROUPS.map((group, gi) => (
-                          <div key={gi}>
-                            <div className="py-0.5">
-                              {group.map((item) =>
-                                item.soon ? (
-                                  <div
-                                    key={item.label}
-                                    aria-disabled="true"
-                                    title="Coming soon"
-                                    className="flex items-center gap-2.5 px-2.5 py-1.5 text-[14px] font-medium text-gray-400 cursor-default select-none"
-                                  >
-                                    <span className="text-gray-300">
-                                      {item.icon}
-                                    </span>
-                                    <span>{item.label}</span>
-                                    <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">
-                                      Soon
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <Link
-                                    key={item.label}
-                                    href={item.to ?? "#"}
-                                    onClick={() => {
-                                      item.action?.();
-                                      setProfileOpen(false);
-                                    }}
-                                    className="flex items-center gap-2.5 px-2.5 py-1.5 text-[14px] font-medium text-gray-700 hover:bg-gray-50 rounded transition-colors"
-                                  >
-                                    <span className="text-gray-400">
-                                      {item.icon}
-                                    </span>
-                                    <span>{item.label}</span>
-                                  </Link>
-                                ),
-                              )}
-                            </div>
-                            {/* Dotted divider below each group */}
-                            <div className="border-b border-dotted border-gray-300 my-1" />
-                          </div>
-                        ))}
-                      </div>
-
-
-                      {/* Sign out */}
-                      <button
-                        type="button"
-                        onClick={handleSignOut}
-                        className="w-full py-2 border border-red-500 text-red-500 font-medium rounded-md hover:bg-red-50 text-center flex justify-center transition-colors text-[14px]"
-                      >
-                        Sign out
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center gap-1.5 ml-2">
+              <div ref={profileRef} className="relative ml-6">
                 <button
                   type="button"
-                  className="bg-[#004772] hover:bg-[#003859] active:bg-[#002f4c] text-white px-4 py-2.5 rounded-full text-[14px] font-medium transition-colors shadow-xs cursor-pointer font-['Poppins']"
-                  onClick={() => router.push("/signin")}
+                  aria-label="Account menu"
+                  aria-expanded={profileOpen}
+                  onClick={() => setProfileOpen((v) => !v)}
+                  className="w-11 h-11 rounded-full overflow-hidden border-2 border-gray-200 hover:border-[#004772] transition-all cursor-pointer shadow-xs"
                 >
-                  Sign in or sign up
+                  <UserAvatar src={user?.profile_pic_url} name={user?.name || 'Account'} size={40} className="h-full w-full" />
                 </button>
+
+                {profileOpen && (
+                  <div
+                    className={cn(
+                      "absolute right-0 top-[calc(100%+8px)] w-[260px] h-auto max-h-[80vh] overflow-y-auto bg-white rounded-[6px] p-[9px] shadow-[0_4px_21.7px_6px_rgba(0,0,0,0.25)] border border-gray-100 z-50 flex flex-col",
+                      "animate-fade-in-down origin-top-right",
+                    )}
+                    style={{ animation: "fadeInDown 0.18s ease both" }}
+                  >
+                    <div className="flex flex-col">
+                      {MENU_GROUPS.map((group, gi) => (
+                        <div key={gi}>
+                          <div className="py-0.5">
+                            {group.map((item) =>
+                              item.soon ? (
+                                <div
+                                  key={item.label}
+                                  className="flex items-center gap-2.5 px-2.5 py-1.5 text-[14px] font-medium text-gray-400 cursor-default select-none"
+                                >
+                                  <span className="text-gray-300">{item.icon}</span>
+                                  <span>{item.label}</span>
+                                  <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
+                                </div>
+                              ) : (
+                                <Link
+                                  key={item.label}
+                                  href={item.to ?? "#"}
+                                  onClick={() => {
+                                    item.action?.();
+                                    setProfileOpen(false);
+                                  }}
+                                  className="flex items-center gap-2.5 px-2.5 py-1.5 text-[14px] font-medium text-gray-700 hover:bg-gray-50 rounded transition-colors"
+                                >
+                                  <span className="text-gray-400">{item.icon}</span>
+                                  <span>{item.label}</span>
+                                </Link>
+                              )
+                            )}
+                          </div>
+                          <div className="border-b border-dotted border-gray-300 my-1" />
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSignOut}
+                      className="w-full py-2 border border-red-500 text-red-500 font-medium rounded-md hover:bg-red-50 text-center flex justify-center transition-colors text-[14px]"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="ml-6 w-11 h-11 rounded-full overflow-hidden border-2 border-gray-200">
+                <UserAvatar src={undefined} name="Guest" size={40} className="h-full w-full opacity-50" />
               </div>
             )}
           </div>
@@ -379,7 +370,7 @@ export default function Navbar() {
         )}
       </div>
     </nav>
-    <ProfileCompletionBanner />
+    {!pathname.startsWith('/account/profile') && <ProfileCompletionBanner />}
     </>
   );
 }

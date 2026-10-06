@@ -25,22 +25,16 @@ interface AuthState {
   userId: string | null;
   loading: boolean;
   isAuthenticated: boolean;
+  mockAboutMe?: Record<string, string[]>;
+  mockSomethingElse?: Record<string, string>;
 }
 
 interface AuthActions {
   /** Persist the user id and load the profile (call after OTP verify or OAuth callback). */
   signIn: (userId: string) => Promise<void>;
-  /**
-   * Dev-only: establishes a REAL Supabase Auth session for the demo host via
-   * /api/dev/demo-session, then calls signIn() for the local state. Unlike
-   * plain signIn(), this is what the "Continue as demo host (dev)" button
-   * should call -- without a real session, getBearerToken() (src/lib/api.ts)
-   * has no access token to attach to authenticated requests, and anything
-   * requiring real auth (KYC submission, listing creation, etc.) 401s.
-   */
-  signInAsDemoHost: (userId: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
+  updateProfile?: (updates: any) => Promise<void>;
 }
 
 const AuthContext = createContext<(AuthState & AuthActions) | undefined>(undefined);
@@ -201,33 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadUser],
   );
 
-  const signInAsDemoHost = useCallback(
-    async (id: string) => {
-      const res = await fetch('/api/dev/demo-session', { method: 'POST' });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok || payload.error) {
-        throw new Error(payload.error || `Failed to establish demo session: ${res.status}`);
-      }
-      const { access_token, refresh_token } = payload.data ?? {};
-      if (!access_token || !refresh_token) {
-        throw new Error('Demo session response missing tokens');
-      }
-      const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-      if (error) throw error;
-      // Mirrors the pattern in signin/page.tsx and OTPPageContent.tsx: also
-      // populate the AUTH_ACCESS_TOKEN_KEY fallback that getBearerToken()
-      // (src/lib/api.ts) reads when supabase.auth.getSession() hasn't
-      // resolved yet -- e.g. right after a fresh page load/navigation, while
-      // the supabase-js client is still hydrating the session it just
-      // persisted to localStorage. Without this, requests fired in that
-      // window (like the bookings page's mount-time fetch) have no token at
-      // all and 401 with "Missing or malformed Authorization header", even
-      // though the real session was set correctly moments before.
-      setStoredSession(access_token, refresh_token);
-      await signIn(id);
-    },
-    [signIn],
-  );
+
 
   const signOut = useCallback(async () => {
     // Invalidates the real Supabase session (Google/email OTP). Phone OTP
@@ -245,6 +213,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userId) await loadUser(userId);
   }, [userId, loadUser]);
 
+  const updateProfile = async (updates: any) => {
+    // Real API call would go here if not in dev bypass
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -253,9 +225,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         isAuthenticated: Boolean(userId),
         signIn,
-        signInAsDemoHost,
         signOut,
         refresh,
+        updateProfile,
       }}
     >
       {children}
