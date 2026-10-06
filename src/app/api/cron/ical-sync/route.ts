@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     console.log(`[Cron] iCal sync completed in ${duration}ms`);
 
     return NextResponse.json({
-      success: true,
+      ok: true,
       ...result,
       duration,
       timestamp: new Date().toISOString(),

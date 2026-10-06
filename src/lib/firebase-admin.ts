@@ -1,17 +1,16 @@
 import "server-only";
-import * as admin from "firebase-admin";
+import { initializeApp, getApps, cert, ServiceAccount } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
 
 const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
   ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
   : null;
 
-if (!admin.apps.length && serviceAccount) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+if (getApps().length === 0 && serviceAccount) {
+  initializeApp({
+    credential: cert(serviceAccount as ServiceAccount),
   });
 }
-
-export const firebaseAdmin = admin;
 
 /**
  * Send push notification to specific device(s)
@@ -31,7 +30,7 @@ export async function sendPushNotification(input: {
   try {
     const tokens = Array.isArray(input.tokens) ? input.tokens : [input.tokens];
     
-    const message: admin.messaging.MulticastMessage = {
+    const message = {
       notification: {
         title: input.title,
         body: input.body,
@@ -54,12 +53,12 @@ export async function sendPushNotification(input: {
       },
     };
 
-    const response = await admin.messaging().sendMulticast(message);
+    const response = await getMessaging().sendEachForMulticast(message);
     
     console.log(`[Firebase Admin] Push sent successfully: ${response.successCount}/${tokens.length}`);
     
     if (response.failureCount > 0) {
-      response.responses.forEach((resp, idx) => {
+      response.responses.forEach((resp: any, idx: number) => {
         if (!resp.success) {
           console.error(`[Firebase Admin] Failed to send to token ${tokens[idx]}:`, resp.error);
         }
@@ -85,7 +84,7 @@ export async function sendTopicNotification(input: {
   }
 
   try {
-    const message: admin.messaging.Message = {
+    const message = {
       notification: {
         title: input.title,
         body: input.body,
@@ -100,7 +99,7 @@ export async function sendTopicNotification(input: {
       },
     };
 
-    await admin.messaging().send(message);
+    await getMessaging().send(message);
     console.log(`[Firebase Admin] Topic notification sent to: ${input.topic}`);
   } catch (err) {
     console.error("[Firebase Admin] Error sending topic notification:", err);
