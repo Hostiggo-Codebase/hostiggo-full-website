@@ -8,7 +8,10 @@ let channelId = 0;
 
 export function useCalendarSync(listingId: string | number | null, refresh: () => void | Promise<void>) {
   const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
+
   useEffect(() => {
     if (!listingId) return;
     const reload = () => { if (!document.hidden) void refreshRef.current(); };
