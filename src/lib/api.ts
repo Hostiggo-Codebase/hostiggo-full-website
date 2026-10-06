@@ -624,6 +624,18 @@ export const api = {
       { method: "POST", body: form },
     );
   },
+  // DigiLocker verification for Aadhaar (no PDF upload needed)
+  initializeDigilocker: (fullName: string) =>
+    request<{
+      clientId: string;
+      url: string;
+      expirySeconds: number;
+      userId: string;
+      fullName: string;
+    }>(`/api/verify/digilocker/initialize`, {
+      method: "POST",
+      body: JSON.stringify({ fullName }),
+    }),
   verifyPassport: (payload: { fileNumber: string; dob: string; fullName: string }) =>
     request<{ status: "verified" | "rejected" | "pending"; reason: string | null }>(
       `/api/verify/passport`,

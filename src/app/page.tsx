@@ -11,7 +11,7 @@ import {
 } from '@/lib/services/cached-reference-data';
 
 export const metadata: Metadata = {
-  title: 'Homestays & Unique Stays in India',
+  title: 'Hostiggo | Homestays & Unique Stays in India',
   description:
     'Explore verified homes, villas, and budget-friendly stays across India with secure booking, flexible cancellations, and transparent pricing.',
   alternates: {
