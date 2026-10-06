@@ -192,7 +192,7 @@ export default function AboutMePage() {
                 </button>
               </div>
               <p className="text-[#5F5F5F] text-[16px] md:text-[18px]">
-                Select the reasons that best describe what you're looking for. We'll personalize your experience accordingly.
+                Select the reasons that best describe what you’re looking for. We’ll personalize your experience accordingly.
               </p>
             </div>
             

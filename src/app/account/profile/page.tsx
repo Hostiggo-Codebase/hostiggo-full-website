@@ -112,7 +112,7 @@ export default function GuestProfilePage() {
           <div className="bg-white rounded-3xl border border-gray-200 shadow-card py-16 text-center max-w-md mx-auto">
             <p className="text-4xl mb-3">🔒</p>
             <h2 className="text-lg font-bold text-gray-800 mb-1">Sign in to view your profile</h2>
-            <p className="text-sm text-gray-500 mb-6">Manage your personal details once you're signed in.</p>
+            <p className="text-sm text-gray-500 mb-6">Manage your personal details once you’re signed in.</p>
             <Link
               href="/signin?redirect=/account/profile"
               className="inline-flex items-center gap-2 bg-figma-navy text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-figma-navy/90"
@@ -224,7 +224,7 @@ export default function GuestProfilePage() {
                     href="/account/verification"
                     className="w-[158px] h-[49px] rounded-[14px] border-2 border-[#004772] text-[15px] font-bold text-[#004772] flex items-center justify-center bg-white hover:bg-[#004772]/5 transition-colors box-border"
                   >
-                    Let's start
+                    Let’s start
                   </Link>
                 </div>
               )}
@@ -262,7 +262,7 @@ export default function GuestProfilePage() {
                 </div>
               ) : (
                 <Link href="/account/profile/about-me" className="inline-flex px-8 py-2.5 bg-[#004772] text-white text-[14px] font-bold rounded-[12px] hover:bg-[#003859] transition-colors">
-                  Let's start
+                  Let’s start
                 </Link>
               )}
             </div>
