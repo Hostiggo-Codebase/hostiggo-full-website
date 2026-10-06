@@ -3,10 +3,10 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 /**
  * Guests must have a verified government ID (PAN, Aadhaar or passport) before
- * they can book, when REQUIRE_GUEST_ID_VERIFICATION=true. Off by default so
- * the rule can be switched on without a deploy of new code.
+ * they can book, by default; set REQUIRE_GUEST_ID_VERIFICATION=false to switch it off. Kept as a flag so
+ * the rule can be toggled without a code change.
  */
-export const GUEST_ID_REQUIRED = process.env.REQUIRE_GUEST_ID_VERIFICATION === "true";
+export const GUEST_ID_REQUIRED = process.env.REQUIRE_GUEST_ID_VERIFICATION !== "false";
 
 export async function guestHasVerifiedId(userId: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin

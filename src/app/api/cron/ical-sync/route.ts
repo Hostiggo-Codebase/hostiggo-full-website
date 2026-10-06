@@ -3,21 +3,18 @@ import { syncAllICalFeeds } from "@/lib/services/icalSync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 15; // 15 seconds max
+export const maxDuration = 60;
 
 /**
- * Cron endpoint to sync iCal feeds every 15 seconds
- * Configure in Vercel or your hosting provider to call this endpoint
- * 
- * For local development, you can call this manually or set up a local cron
+ * Syncs every listing's iCal feed. Called every 15 seconds by pg_cron + pg_net
+ * (see supabase/migrations/20261006000001_ical_15s_cron.sql); Vercel's own
+ * cron (vercel.json) is a once-a-minute backstop since it can't go finer.
+ * Fails closed: CRON_SECRET must be set and presented as a Bearer token.
  */
 export async function GET(req: NextRequest) {
   try {
-    // Verify authorization (cron secret or API key)
-    const authHeader = req.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
-
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || req.headers.get("authorization") !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
