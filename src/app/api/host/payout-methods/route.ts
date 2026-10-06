@@ -279,7 +279,11 @@ export async function PATCH(req: NextRequest) {
 
     // Both lookups must match the name payouts will be made out to.
     const holderName = changes.account_holder_name ?? existing?.account_holder_name ?? null;
-    if (bankChanged) {
+    
+    // Always re-verify bank account when account number is provided in the request,
+    // even if it hasn't changed. This allows testing API integrity and ensures
+    // the most up-to-date verification status.
+    if (accountNumber) {
       const bank = await verifyBankAccount(userId, accountNumber, ifsc, holderName);
       if (!bank.verified) {
         return NextResponse.json(
@@ -287,9 +291,12 @@ export async function PATCH(req: NextRequest) {
           { status: 400 },
         );
       }
-      changes.bank_account_number = accountNumber;
-      changes.bank_ifsc = ifsc;
+      if (bankChanged) {
+        changes.bank_account_number = accountNumber;
+        changes.bank_ifsc = ifsc;
+      }
     }
+    
     if (panChanged) {
       const result = await verifyPanNumber(userId, pan, holderName);
       if (result.status !== "verified") {
