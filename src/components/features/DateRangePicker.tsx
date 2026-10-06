@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { blockedStayDates } from "@/lib/stayDates";
 
 interface DateRangePickerProps {
   checkIn: Date | null;
@@ -74,7 +75,9 @@ function CalendarMonth({
     date.setHours(0,0,0,0);
     const isPast = date < today;
     const isBooked = blockedDates.has(isoDate(date));
-    const isDisabled = isPast || isBooked;
+    const validCheckout = selecting === "checkout" && checkIn && date > checkIn &&
+      blockedStayDates(checkIn, date, blockedDates).length === 0;
+    const isDisabled = isPast || (isBooked && !validCheckout);
     const isStart = checkIn ? sameDay(date, checkIn) : false;
     const isEnd   = checkOut ? sameDay(date, checkOut) : false;
     const isHoverEnd = !checkOut && selecting === "checkout" && hoverDate ? sameDay(date, hoverDate) : false;
@@ -91,7 +94,8 @@ function CalendarMonth({
         key={day}
         type="button"
         disabled={isDisabled}
-        title={isBooked && !isPast ? "Already booked" : undefined}
+        title={isBooked && !isPast ? (validCheckout ? "Checkout only" : "Unavailable") : undefined}
+        aria-label={`${isoDate(date)}${isBooked ? (validCheckout ? ", checkout only" : ", unavailable") : ""}`}
         onClick={() => !isDisabled && onDayClick(date)}
         onMouseDown={() => !isDisabled && onDayMouseDown(date)}
         onMouseEnter={() => !isDisabled && onDayHover(date)}
@@ -101,7 +105,7 @@ function CalendarMonth({
           inRange && "bg-[#8DA8B9]",
           hasRangeConnectionRight && "before:absolute before:right-0 before:top-0 before:bottom-0 before:w-1/2 before:bg-[#8DA8B9]",
           hasRangeConnectionLeft && "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1/2 before:bg-[#8DA8B9]",
-          isDisabled && "cursor-not-allowed opacity-50 pointer-events-none"
+          isDisabled && "cursor-not-allowed opacity-50"
         )}
       >
         <span
@@ -166,6 +170,7 @@ export default function DateRangePicker({
   const [baseMonth, setBaseMonth] = useState(today.getMonth());
   const [selecting, setSelecting] = useState<"checkin" | "checkout">(checkIn ? "checkout" : "checkin");
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
+  const [rangeError, setRangeError] = useState("");
   // Date flexibility (visual for now, "Exact dates" is the default).
   const [flex, setFlex] = useState("exact");
 
@@ -184,6 +189,11 @@ export default function DateRangePicker({
       dragStartRef.current = null;
       if (!start || !hoverDate || sameDay(start, hoverDate) || hoverDate <= start) return;
       justDraggedRef.current = true;
+      if (blockedStayDates(start, hoverDate, blockedDates).length) {
+        setRangeError("This stay includes blocked dates. Please choose another range.");
+        return;
+      }
+      setRangeError("");
       onChange(start, hoverDate);
       setSelecting("checkin");
       onClose();
@@ -191,7 +201,7 @@ export default function DateRangePicker({
     window.addEventListener("mouseup", handleMouseUp);
     return () => window.removeEventListener("mouseup", handleMouseUp);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hoverDate]);
+  }, [hoverDate, blockedDates, onChange, onClose]);
 
   const nextYear  = baseMonth === 11 ? baseYear + 1 : baseYear;
   const nextMonth = baseMonth === 11 ? 0 : baseMonth + 1;
@@ -213,6 +223,7 @@ export default function DateRangePicker({
       justDraggedRef.current = false;
       return;
     }
+    setRangeError("");
     if (selecting === "checkin") {
       onChange(date, null);
       setSelecting("checkout");
@@ -221,6 +232,10 @@ export default function DateRangePicker({
         onChange(date, null);
         setSelecting("checkout");
       } else {
+        if (checkIn && blockedStayDates(checkIn, date, blockedDates).length) {
+          setRangeError("This stay includes blocked dates. Please choose another range.");
+          return;
+        }
         onChange(checkIn, date);
         setSelecting("checkin");
         onClose();
@@ -308,6 +323,8 @@ export default function DateRangePicker({
       </div>
 
       {/* Date flexibility pills */}
+      <p className="mt-3 text-xs text-gray-500">Unavailable dates are crossed out.</p>
+      {rangeError && <p role="alert" className="mt-2 text-sm text-red-600">{rangeError}</p>}
       <div className="flex flex-wrap gap-3 mt-6 pt-6 border-t border-gray-100">
         {FLEX_OPTIONS.map((o) => (
           <button

@@ -25,6 +25,7 @@ import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useNotifications } from '@/context/NotificationContext';
 
 interface NavItem {
   id: string;
@@ -193,6 +194,7 @@ function TogglePill({
 }
 
 export default function GuestSettingsPage() {
+  const { preferences: notificationPreferences } = useNotifications();
   const router = useRouter();
   const {
     user,
@@ -228,18 +230,16 @@ export default function GuestSettingsPage() {
   }, [user, sharedPrefs]);
 
   useEffect(() => {
-    if (!userId) return;
-    api
-      .notificationPreferences()
-      .then((np) =>
-        setSharedPrefs({
-          email_notifications: np.channels.email,
-          sms_alerts: np.channels.whatsapp,
-          promo_notifications: np.categories.marketing,
-        }),
-      )
-      .catch((err) => console.warn('[account/settings] notification preferences load failed:', err));
-  }, [userId]);
+    if (!notificationPreferences) {
+      setSharedPrefs({});
+      return;
+    }
+    setSharedPrefs({
+      email_notifications: notificationPreferences.channels.email,
+      sms_alerts: notificationPreferences.channels.whatsapp,
+      promo_notifications: notificationPreferences.categories.marketing,
+    });
+  }, [notificationPreferences]);
 
   const handleToggle = async (key: PrefKey) => {
     if (!userId || savingKey) return;

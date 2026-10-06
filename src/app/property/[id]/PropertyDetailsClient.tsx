@@ -69,6 +69,8 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { recordRecentlyViewed } from "@/lib/recentlyViewed";
+import { useCalendarSync } from "@/hooks/useCalendarSync";
+import { blockedStayDates } from "@/lib/stayDates";
 import { toast } from "sonner";
 
 const FALLBACK = "/placeholder.svg";
@@ -899,6 +901,9 @@ function BookingWidget({
   const pickerRef = useRef<HTMLDivElement>(null);
   const [blockedDates, setBlockedDates] = useState<Set<string>>(new Set());
 
+  const [calendarRevision, setCalendarRevision] = useState(0);
+  useCalendarSync(property.id, () => setCalendarRevision((value) => value + 1));
+
   // Fetch booked/unavailable dates so the calendar can grey them out up
   // front, instead of only telling the guest after they pick a range and
   // hit "Reserve".
@@ -910,7 +915,7 @@ function BookingWidget({
       end.setMonth(end.getMonth() + 12);
       try {
         const res = await fetch(
-          `/api/calendar?listingId=${property.id}&startDate=${toISODate(start)}&endDate=${toISODate(end)}`,
+          `/api/calendar?listingId=${property.id}&startDate=${toISODate(start)}&endDate=${toISODate(end)}`, { cache: "no-store" },
         );
         const json = await res.json();
         if (cancelled || !res.ok) return;
@@ -929,14 +934,14 @@ function BookingWidget({
         }
         setBlockedDates(blocked);
       } catch {
-        /* non-critical: calendar just won't grey out booked dates */
+        // Keep the last known blocks during a connection failure.
       }
     };
     load();
     return () => {
       cancelled = true;
     };
-  }, [property.id]);
+  }, [property.id, calendarRevision]);
 
   // The booking card is `sticky`, so it only sits near the top of the
   // viewport once the page has been scrolled. Opened before that (e.g.
@@ -955,6 +960,8 @@ function BookingWidget({
     "idle" | "checking" | "available" | "unavailable" | "booking" | "confirming" | "confirmed"
   >(paramCheckIn && paramCheckOut ? "available" : "idle");
   const [unavailableReason, setUnavailableReason] = useState("");
+  const selectedBlockedDates = checkIn && checkOut ? blockedStayDates(checkIn, checkOut, blockedDates) : [];
+  const selectedBlocked = status !== "confirmed" && status !== "confirming" && selectedBlockedDates.length > 0;
   const selectedAddons = (property.addons ?? []).filter((a) =>
     selectedAddonIds.includes(a.addonId),
   );
@@ -1046,6 +1053,11 @@ function BookingWidget({
 
   const checkAvailability = async () => {
     if (!checkIn || !checkOut) return;
+    if (selectedBlocked) {
+      setStatus("unavailable");
+      setUnavailableReason("These dates are blocked. Please choose different dates.");
+      return;
+    }
     const isoStart = toISODate(checkIn);
     const isoEnd = toISODate(checkOut);
     // Defense in depth: toISODate can only return null here if checkIn/
@@ -1085,6 +1097,11 @@ function BookingWidget({
   };
 
   const book = async () => {
+    if (selectedBlocked) {
+      setStatus("unavailable");
+      setUnavailableReason("These dates are blocked. Please choose different dates.");
+      return;
+    }
     if (!isAuthenticated || !userId) {
       toast("Please sign in to book this stay.");
       const params = new URLSearchParams();
@@ -1338,9 +1355,9 @@ function BookingWidget({
       </div>
 
       {/* Unavailable message */}
-      {status === "unavailable" && (
-        <p className="text-[11px] text-red-500 font-medium mb-2 flex items-center gap-1">
-          <X className="w-3 h-3" /> {unavailableReason}
+      {(status === "unavailable" || selectedBlocked) && (
+        <p role="alert" className="text-[11px] text-red-500 font-medium mb-2 flex items-center gap-1">
+          <X className="w-3 h-3" /> {selectedBlocked ? "These dates are blocked. Please choose different dates." : unavailableReason}
         </p>
       )}
 
@@ -1455,7 +1472,7 @@ function BookingWidget({
         ) : (
           <button
             onClick={book}
-            disabled={status === "booking"}
+            disabled={status === "booking" || selectedBlocked}
             className="w-full bg-figma-navy hover:bg-figma-navy/90 active:bg-figma-navy text-white py-3 rounded-xl font-bold text-[14px] transition-colors shadow-md shadow-figma-navy/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <CalendarDays className="w-4 h-4" />

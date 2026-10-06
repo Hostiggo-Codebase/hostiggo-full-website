@@ -7,6 +7,9 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
+import { useNotificationPreferences } from "@/hooks/useNotificationPreferences";
+import { mergeNotificationRow } from "@/lib/notificationFeed";
+import type { UserNotificationPreferences } from "@/lib/services/notificationPreferences";
 import {
   gatedListingId,
   isImportantNotification,
@@ -36,6 +39,7 @@ type NotificationContextValue = {
   markAsRead: (id: number) => void;
   markAllAsRead: () => void;
   refresh: () => void;
+  preferences: UserNotificationPreferences | null;
 };
 
 const NotificationContext = createContext<NotificationContextValue>({
@@ -45,6 +49,7 @@ const NotificationContext = createContext<NotificationContextValue>({
   markAsRead: () => {},
   markAllAsRead: () => {},
   refresh: () => {},
+  preferences: null,
 });
 
 export const useNotifications = () => useContext(NotificationContext);
@@ -100,6 +105,12 @@ async function fetchLiveListingIds(ids: number[]): Promise<Set<number>> {
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { userId } = useAuth();
+  const { preferences } = useNotificationPreferences();
+  const generation = useRef(0);
+  const preferencesRef = useRef(preferences);
+  useEffect(() => {
+    preferencesRef.current = preferences;
+  }, [preferences]);
   const router = useRouter();
   const [all, setAll] = useState<NotificationRow[] | null>(null);
   const [liveIds, setLiveIds] = useState<Set<number>>(new Set());
@@ -111,15 +122,18 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const refresh = useCallback(() => {
     if (!userId) return;
+    const current = generation.current;
     api
       .notifications()
-      .then((rows) => setAll(rows ?? []))
-      .catch(() => setAll((curr) => curr ?? []));
+      .then((rows) => { if (generation.current === current) setAll(rows ?? []); })
+      .catch(() => { if (generation.current === current) setAll((curr) => curr ?? []); });
   }, [userId]);
 
   useEffect(() => {
+    generation.current += 1;
     setAll(null);
     refresh();
+    return () => { generation.current += 1; };
   }, [refresh]);
 
   // ── realtime ────────────────────────────────────────────────────────────
@@ -133,11 +147,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         { event: "INSERT", schema: SCHEMA.testingSchema, table: "notifications", filter },
         (payload) => {
           const row = payload.new as NotificationRow;
-          setAll((prev) =>
-            (prev ?? []).some((n) => n.id === row.id) ? prev : [row, ...(prev ?? [])].slice(0, HISTORY_LIMIT),
-          );
+          setAll((prev) => mergeNotificationRow(prev ?? [], row, HISTORY_LIMIT));
           // Same tiering as the app: only important rows interrupt.
-          if (isImportantNotification(row.type)) {
+          const currentPreferences = preferencesRef.current;
+          if (!row.is_read && currentPreferences?.channels.in_app !== false && currentPreferences?.channels.push !== false && isImportantNotification(row.type)) {
             const href = webRouteForNotification(row);
             // Tab in the background: a toast would go unseen, so use an OS notification.
             if (typeof document !== "undefined" && document.hidden && browserNotificationsGranted()) {
@@ -165,14 +178,21 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         { event: "UPDATE", schema: SCHEMA.testingSchema, table: "notifications", filter },
         (payload) => {
           const row = payload.new as NotificationRow;
-          setAll((prev) => (prev ?? []).map((n) => (n.id === row.id ? { ...n, ...row } : n)));
+          setAll((prev) => mergeNotificationRow(prev ?? [], row, HISTORY_LIMIT));
         },
       )
-      .subscribe();
+      .subscribe((status) => { if (status === "SUBSCRIBED") refresh(); });
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    const timer = window.setInterval(onVisible, 30_000);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", refresh);
     return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", refresh);
       void supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, refresh]);
 
   // ── delay + listing gating (same rules as the app) ──────────────────────
   const list = useMemo(() => all ?? [], [all]);
@@ -210,32 +230,29 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const visible = useMemo(
     () =>
       due.filter((n) => {
+        if (preferences?.channels.in_app === false) return false;
         const id = gatedListingId(n);
         return id == null || liveIds.has(id);
       }),
-    [due, liveIds],
+    [due, liveIds, preferences],
   );
 
   const unreadCount = useMemo(() => visible.reduce((acc, n) => (n.is_read ? acc : acc + 1), 0), [visible]);
 
   // ── read state (optimistic; realtime UPDATE confirms it on every device) ─
   const markAsRead = useCallback((id: number) => {
-    let prev: NotificationRow[] | null = null;
     setAll((curr) => {
-      prev = curr;
       return (curr ?? []).map((n) => (n.id === id ? { ...n, is_read: true } : n));
     });
-    api.markNotificationsRead([id]).catch(() => prev && setAll(prev));
-  }, []);
+    api.markNotificationsRead([id]).catch(refresh);
+  }, [refresh]);
 
   const markAllAsRead = useCallback(() => {
-    let prev: NotificationRow[] | null = null;
     setAll((curr) => {
-      prev = curr;
       return (curr ?? []).map((n) => ({ ...n, is_read: true }));
     });
-    api.markAllNotificationsRead().catch(() => prev && setAll(prev));
-  }, []);
+    api.markAllNotificationsRead().catch(refresh);
+  }, [refresh]);
 
   const value = useMemo<NotificationContextValue>(
     () => ({
@@ -245,8 +262,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       markAsRead,
       markAllAsRead,
       refresh,
+      preferences,
     }),
-    [visible, unreadCount, userId, all, markAsRead, markAllAsRead, refresh],
+    [visible, unreadCount, userId, all, markAsRead, markAllAsRead, refresh, preferences],
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;

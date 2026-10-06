@@ -350,14 +350,9 @@ export async function cancelBookingWithRefund(params: {
       .eq("booking_id", bookingId);
     if (updateErr) throw updateErr;
 
-    // Free the calendar nights this booking held.
-    if (nights.length) {
-      await supabaseAdmin
-        .from("listing_calendar")
-        .update({ is_available: true, updated_at: new Date().toISOString() })
-        .eq("listing_id", booking.listing_id)
-        .in("date", nights);
-    }
+    // The database booking trigger recalculates these nights from the
+    // remaining bookings and source-owned calendar events. Do not write
+    // `is_available=true` here: that could reopen a host or iCal block.
 
     // In-app notifications (the `notifications` table the app reads).
     // Email/SMS/push still have no provider wired in.

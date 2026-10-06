@@ -354,45 +354,8 @@ export const bookingsAPI = {
 
     if (error) throw error;
 
-    // Release the old nights and block the new ones so the calendar stays
-    // in sync with the booking's actual dates.
-    const now = new Date().toISOString();
-    const oldNights = eachDateInRange(existing.start_date, existing.end_date);
-    if (oldNights.length) {
-      await supabase
-        .from("listing_calendar")
-        .update({ is_available: true, updated_at: now })
-        .eq("listing_id", existing.listing_id)
-        .in("date", oldNights);
-    }
-    const newNights = eachDateInRange(formattedCheckIn, formattedCheckOut);
-    if (newNights.length) {
-      const { data: existingRows } = await supabase
-        .from("listing_calendar")
-        .select("date")
-        .eq("listing_id", existing.listing_id)
-        .in("date", newNights);
-      const existingDates = new Set((existingRows ?? []).map((r: any) => r.date));
-      if (existingRows?.length) {
-        await supabase
-          .from("listing_calendar")
-          .update({ is_available: false, updated_at: now })
-          .eq("listing_id", existing.listing_id)
-          .in("date", newNights);
-      }
-      const missing = newNights.filter((d) => !existingDates.has(d));
-      if (missing.length) {
-        await supabase.from("listing_calendar").insert(
-          missing.map((date) => ({
-            listing_id: existing.listing_id,
-            date,
-            is_available: false,
-            price: 0,
-            currency: "INR",
-          })),
-        );
-      }
-    }
+    // The database booking trigger recalculates both the old and new ranges.
+    // Avoid direct calendar writes so source-owned blocks remain intact.
 
     return data;
   },
