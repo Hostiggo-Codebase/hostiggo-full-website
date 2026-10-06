@@ -484,40 +484,9 @@ async function insertConfirmedBooking(
     throw new Error("These dates were just booked by someone else. Please choose different dates.");
   }
 
-  // Block all nights in the booked range so they can't be double-booked.
-  const nights = stayNights;
-  if (nights.length) {
-    const now = new Date().toISOString();
-    // Update existing calendar rows first, then insert missing ones.
-    const { data: existing } = await supabaseAdmin
-      .from("listing_calendar")
-      .select("calendar_id, date")
-      .eq("listing_id", input.listingId)
-      .in("date", nights);
-
-    const existingDates = new Set((existing ?? []).map((r: any) => r.date));
-
-    if (existing?.length) {
-      await supabaseAdmin
-        .from("listing_calendar")
-        .update({ is_available: false, updated_at: now })
-        .eq("listing_id", input.listingId)
-        .in("date", nights);
-    }
-
-    const missing = nights.filter((d) => !existingDates.has(d));
-    if (missing.length) {
-      await supabaseAdmin.from("listing_calendar").insert(
-        missing.map((date) => ({
-          listing_id: input.listingId,
-          date,
-          is_available: false,
-          price: 0,
-          currency: "INR",
-        })),
-      );
-    }
-  }
+  // The database booking trigger updates listing_calendar atomically from the
+  // booking row. Keeping this write in the application would let a later
+  // cancellation accidentally reopen a host or iCal block.
 
   return data;
 }
