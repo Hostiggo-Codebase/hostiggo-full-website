@@ -1,88 +1,76 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
-import { forbiddenResponse, requireUserId } from '@/lib/auth-server';
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const ID_PROOF_TYPES = ['pan', 'aadhaar', 'passport'];
-
-const normalizeKycStatus = (status: unknown) => {
-  if (status === 'verified' || status === 'success') return 'verified';
-  if (status === 'pending') return 'pending';
-  if (status === 'rejected' || status === 'failed') return 'rejected';
-  return 'unknown';
-};
-
-// Live id-proof KYC status for a user, so the host dashboard banner and
-// Settings -> Identity Verification reflect the real verification state
-// instead of a client-only "I submitted once" localStorage flag. Follows
-// the caller's verified session (see requireUserId).
-//
-// Id proof is any one of PAN, Aadhaar (eAadhaar PDF) or passport, verified
-// through /api/verify/{pan,aadhaar,passport}. Payouts separately require a
-// verified PAN -- see maybeAutoOnboardHostToRoute.
-//
-// status:
-//   'none'     -- no id-proof submission on file
-//   'verified' -- PAN, Aadhaar or passport verified by SurePass
-//   'rejected' -- most recent submission was rejected, host needs to re-submit
-//   'unknown'  -- couldn't read (storage error); caller should fall back to
-//                 its local flag rather than assume 'none'
+/**
+ * GET /api/kyc/status
+ * Returns KYC verification status for a user
+ */
 export async function GET(req: NextRequest) {
   try {
-    const userId = await requireUserId(req);
-    if (userId instanceof NextResponse) return userId;
-    const requested = req.nextUrl.searchParams.get('userId');
-    if (requested && requested !== userId) return forbiddenResponse();
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
 
-    // A single verified id proof is enough, even if a later retry was rejected.
-    const [verified, latest] = await Promise.all([
-      supabaseAdmin
-        .from('kyc_requests')
-        .select('created_at, service_type')
-        .eq('user_id', userId)
-        .in('service_type', ID_PROOF_TYPES)
-        .in('status', ['verified', 'success'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabaseAdmin
-        .from('kyc_requests')
-        .select('status, error_message, created_at')
-        .eq('user_id', userId)
-        .in('service_type', ID_PROOF_TYPES)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
-
-    if (verified.error || latest.error) {
-      console.error('[api/kyc/status] failed to read status:', verified.error ?? latest.error);
-      return NextResponse.json({ data: { status: 'unknown' } }, { status: 200 });
+    if (!userId) {
+      return NextResponse.json(
+        { error: "userId required" },
+        { status: 400 }
+      );
     }
 
-    if (verified.data) {
+    // Check verification_status table
+    const { data: verification, error } = await supabaseAdmin
+      .from("verification_status")
+      .select("status, submitted_at, rejection_reason")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 = no rows returned (not an error)
+      throw error;
+    }
+
+    // If no verification record, check if user is marked as verified
+    if (!verification) {
+      const { data: user } = await supabaseAdmin
+        .from("users")
+        .select("is_verified")
+        .eq("user_id", userId)
+        .single();
+
+      if (user?.is_verified) {
+        return NextResponse.json({
+          data: {
+            status: "verified",
+            submittedAt: null,
+            reason: null,
+          },
+        });
+      }
+
       return NextResponse.json({
         data: {
-          status: 'verified',
-          submittedAt: verified.data.created_at,
+          status: "none",
+          submittedAt: null,
           reason: null,
-          method: verified.data.service_type,
         },
       });
     }
-    if (!latest.data) {
-      return NextResponse.json({ data: { status: 'none' } });
-    }
+
     return NextResponse.json({
       data: {
-        status: normalizeKycStatus(latest.data.status),
-        submittedAt: latest.data.created_at,
-        reason: latest.data.error_message ?? null,
+        status: verification.status || "none",
+        submittedAt: verification.submitted_at,
+        reason: verification.rejection_reason,
       },
     });
-  } catch (err) {
-    console.error('[api/kyc/status] unexpected error reading status:', err);
-    return NextResponse.json({ data: { status: 'unknown' } }, { status: 200 });
+  } catch (err: any) {
+    console.error("[KYC Status API] Error:", err);
+    return NextResponse.json(
+      { error: err.message || "Failed to fetch KYC status" },
+      { status: 500 }
+    );
   }
 }

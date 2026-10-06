@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "575210232467",
+    "project_id": "hostiggo-84654",
+    "storage_bucket": "hostiggo-84654.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:575210232467:android:77434f51faf1db27be8b66",
+        "android_client_info": {
+          "package_name": "com.hostiggo.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCU9MdAFZ97AdREMpjsqOkXk5Xl3S7pUOY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:575210232467:android:53553f90270abcb9be8b66",
+        "android_client_info": {
+          "package_name": "com.prakhar_agrawal.hostigooapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCU9MdAFZ97AdREMpjsqOkXk5Xl3S7pUOY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

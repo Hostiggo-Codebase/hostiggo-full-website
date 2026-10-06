@@ -18,6 +18,8 @@ export type IdDocument = {
   maxLength: number;
   /** Force the number to uppercase (PAN / passport). */
   uppercase?: boolean;
+  /** Skip file upload (for passport number-only verification). */
+  skipUpload?: boolean;
 };
 
 export const ID_DOCUMENTS: IdDocument[] = [
@@ -31,6 +33,7 @@ export const ID_DOCUMENTS: IdDocument[] = [
     uploadPlaceholder: 'Upload your eAadhaar PDF',
     inputMode: 'text',
     maxLength: 0,
+    skipUpload: false,
   },
   {
     id: 'pan',
@@ -38,22 +41,24 @@ export const ID_DOCUMENTS: IdDocument[] = [
     image: '/verification/pan.png',
     verificationTitle: 'PAN verification',
     numberLabel: 'PAN Card Number',
-    numberPlaceholder: 'Enter pan card number',
-    uploadPlaceholder: 'Upload your pan photo',
+    numberPlaceholder: 'ABCDE1234F',
+    uploadPlaceholder: '',
     inputMode: 'text',
     maxLength: 10,
     uppercase: true,
+    skipUpload: true,
   },
   {
     id: 'passport',
     label: 'Passport',
     image: '/verification/passport.png',
     verificationTitle: 'Passport verification',
-    numberLabel: 'Passport Number',
-    numberPlaceholder: 'Enter passport number',
-    uploadPlaceholder: 'Upload your passport photo',
+    numberLabel: 'Passport File Number',
+    numberPlaceholder: 'Enter file number',
+    uploadPlaceholder: '',
     inputMode: 'text',
-    maxLength: 9,
+    maxLength: 15,
     uppercase: true,
+    skipUpload: true,
   },
 ];
