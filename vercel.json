@@ -1,8 +1,11 @@
 {
+  "regions": [
+    "bom1"
+  ],
   "crons": [
     {
       "path": "/api/cron/ical-sync",
-      "schedule": "*/15 * * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/retry-whatsapp",
