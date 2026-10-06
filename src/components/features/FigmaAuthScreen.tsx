@@ -481,7 +481,7 @@ function FigmaAuthScreenContent({ mode: propMode = "mobile" }: { mode?: AuthMode
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#244246] font-[var(--font-poppins),sans-serif] text-[#1a1a1a]">
+    <main className="relative min-h-screen lg:h-screen lg:max-h-screen overflow-x-hidden lg:overflow-hidden bg-[#244246] font-[var(--font-poppins),sans-serif] text-[#1a1a1a]">
       {/* Background illustration */}
       <div className="absolute inset-0">
         <img
@@ -492,8 +492,8 @@ function FigmaAuthScreenContent({ mode: propMode = "mobile" }: { mode?: AuthMode
         <div className="absolute inset-0 bg-[#162d30]/35 backdrop-blur-[0.5px]" />
       </div>
 
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-3 py-16 sm:px-6 sm:py-20 lg:px-10">
-        <div className="relative w-full max-w-[1114px]">
+      <div className="relative z-10 flex min-h-screen lg:min-h-0 lg:h-full items-center justify-center px-3 py-16 sm:px-6 sm:py-20 lg:px-10 lg:py-0">
+        <div className="relative w-full max-w-[1114px] origin-center auth-modal-card">
           {/* Floating Close Button in tropical background above top-right of card (exact Figma / Sign in.svg coords) */}
           <button
             type="button"
@@ -733,6 +733,23 @@ function FigmaAuthScreenContent({ mode: propMode = "mobile" }: { mode?: AuthMode
           </section>
         </div>
       </div>
+      <style>{`
+        @media (min-width: 1024px) and (max-height: 870px) {
+          .auth-modal-card {
+            transform: scale(0.92);
+          }
+        }
+        @media (min-width: 1024px) and (max-height: 780px) {
+          .auth-modal-card {
+            transform: scale(0.85);
+          }
+        }
+        @media (min-width: 1024px) and (max-height: 700px) {
+          .auth-modal-card {
+            transform: scale(0.78);
+          }
+        }
+      `}</style>
     </main>
   );
 }
