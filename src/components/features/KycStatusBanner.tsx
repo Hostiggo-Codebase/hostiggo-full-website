@@ -56,15 +56,7 @@ export default function KycStatusBanner() {
   if (status === 'verified' || status === 'unknown') return null;
 
   const content =
-    status === 'pending'
-      ? {
-          tone: 'blue' as Tone,
-          Icon: Clock,
-          title: 'Your KYC is pending',
-          body: "We've received your identity details and verification is in progress — this usually takes 24–48 hours. No action needed from you.",
-          ctaLabel: null as string | null,
-        }
-      : status === 'rejected'
+    status === 'rejected'
         ? {
             tone: 'red' as Tone,
             Icon: ShieldAlert,

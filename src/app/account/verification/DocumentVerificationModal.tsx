@@ -94,19 +94,16 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
         const result = await api.verifyAadhaar({ file: file as File, yob, fullName: fullName.trim(), password });
         if (result.status === 'verified') toast.success('Your eAadhaar has been verified.');
         else if (result.status === 'rejected') toast.error(result.reason || 'eAadhaar verification failed.');
-        else toast.success('eAadhaar received. Verification is in progress.');
         onClose();
       } else if (doc.id === 'pan') {
         const result = await api.verifyPan(number.trim(), fullName.trim());
         if (result.status === 'verified') toast.success('Your PAN has been verified.');
         else if (result.status === 'rejected') toast.error(result.reason || 'PAN verification failed.');
-        else toast.success('PAN received. Verification is in progress.');
         onClose();
       } else if (doc.id === 'passport') {
         const result = await api.verifyPassport({ fileNumber: number.trim(), dob, fullName: fullName.trim() });
         if (result.status === 'verified') toast.success('Your Passport has been verified.');
         else if (result.status === 'rejected') toast.error(result.reason || 'Passport verification failed.');
-        else toast.success('Passport received. Verification is in progress.');
         onClose();
       }
     } catch (err) {
