@@ -628,14 +628,18 @@ export const api = {
   initializeDigilocker: (fullName: string) =>
     request<{
       clientId: string;
-      url: string;
+      token: string;
       expirySeconds: number;
-      userId: string;
-      fullName: string;
+      ticket: string;
     }>(`/api/verify/digilocker/initialize`, {
       method: "POST",
       body: JSON.stringify({ fullName }),
     }),
+  completeDigilocker: (payload: { clientId: string; ticket: string; fullName: string }) =>
+    request<{ status: "verified" | "rejected"; reason: string | null }>(
+      `/api/verify/digilocker/complete`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
   verifyPassport: (payload: { fileNumber: string; dob: string; fullName: string }) =>
     request<{ status: "verified" | "rejected" | "pending"; reason: string | null }>(
       `/api/verify/passport`,

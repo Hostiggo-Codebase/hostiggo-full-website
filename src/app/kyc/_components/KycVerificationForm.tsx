@@ -6,6 +6,7 @@ import { CreditCard, Landmark, CheckCircle2, XCircle, Clock, FileText, BookUser,
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import DigilockerSdkButton, { type DigilockerSession } from '@/components/DigilockerSdkButton';
 import { deferKyc, markKycSubmitted } from '@/lib/kyc';
 import { formatPanInput, isValidPanNumber } from '@/lib/pan';
 import { useKycStatus } from '@/hooks/useKycStatus';
@@ -101,6 +102,7 @@ export function KycVerificationForm({
   const [aadhaarPassword, setAadhaarPassword] = useState('');
   const [yob, setYob] = useState('');
   const [useDigilocker, setUseDigilocker] = useState(false);
+  const [dlSession, setDlSession] = useState<DigilockerSession | null>(null);
   const [passportFileNo, setPassportFileNo] = useState('');
   const [dob, setDob] = useState('');
   const [verifiedMethod, setVerifiedMethod] = useState<IdMethod | null>(null);
@@ -156,8 +158,8 @@ export function KycVerificationForm({
       // Handle DigiLocker flow for Aadhaar
       if (idMethod === 'aadhaar' && useDigilocker) {
         const result = await api.initializeDigilocker(name);
-        // Redirect user to DigiLocker authentication
-        window.location.href = `${result.url}&user_id=${result.userId}&full_name=${encodeURIComponent(result.fullName)}`;
+        // The SDK button (rendered below the form) opens DigiLocker.
+        setDlSession({ clientId: result.clientId, token: result.token, ticket: result.ticket });
         return;
       }
       
@@ -479,18 +481,41 @@ export function KycVerificationForm({
 
           <ResultBanner result={idResult} />
 
+          {dlSession && idMethod === 'aadhaar' && useDigilocker ? (
+            <DigilockerSdkButton
+              session={dlSession}
+              fullName={fullName.trim()}
+              onResult={(result) => {
+                setDlSession(null);
+                setIdResult({ status: result.status, reason: result.reason });
+                if (result.status === 'verified') {
+                  setVerifiedMethod('aadhaar');
+                  toast.success('Your Aadhaar has been verified!');
+                } else {
+                  toast.error(result.reason || 'Aadhaar verification failed.');
+                }
+                markKycSubmitted(userId);
+                refreshKycStatus();
+              }}
+              onError={(message) => {
+                setDlSession(null);
+                toast.error(message);
+              }}
+            />
+          ) : (
           <button
             type="submit"
             disabled={!canSubmitId}
             className="w-full py-3 bg-figma-navy text-white text-sm font-semibold rounded-xl hover:bg-figma-navy/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
-            {idSubmitting 
-              ? 'Verifying…' 
+            {idSubmitting
+              ? 'Verifying…'
               : idMethod === 'aadhaar' && useDigilocker
                 ? 'Continue with DigiLocker'
                 : `Verify ${ID_METHODS[idMethod].label}`
             }
           </button>
+          )}
         </form>
       )}
 

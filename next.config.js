@@ -7,12 +7,12 @@
 const isDev = process.env.NODE_ENV !== 'production';
 const CSP = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://checkout.razorpay.com https://maps.googleapis.com https://va.vercel-scripts.com https://www.googletagmanager.com https://connect.facebook.net`,
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://checkout.razorpay.com https://maps.googleapis.com https://va.vercel-scripts.com https://www.googletagmanager.com https://connect.facebook.net https://cdn.jsdelivr.net https://*.surepass.app`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.razorpay.com https://lumberjack.razorpay.com https://vitals.vercel-insights.com https://www.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://www.facebook.com https://connect.facebook.net",
-  "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.razorpay.com https://lumberjack.razorpay.com https://vitals.vercel-insights.com https://www.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://www.facebook.com https://connect.facebook.net https://*.surepass.app",
+  "frame-src https://api.razorpay.com https://checkout.razorpay.com https://*.surepass.app https://*.digilocker.gov.in https://digilocker.meripehchaan.gov.in",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

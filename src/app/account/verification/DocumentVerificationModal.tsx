@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import DigilockerSdkButton, { type DigilockerSession } from '@/components/DigilockerSdkButton';
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [useDigilocker, setUseDigilocker] = useState(false);
+  const [dlSession, setDlSession] = useState<DigilockerSession | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset the form whenever a different document is opened.
@@ -39,6 +41,7 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
     setDob('');
     setPassword('');
     setSubmitting(false);
+    setDlSession(null);
   }, [doc?.id]);
 
   // Keep an object URL for the image preview and clean it up.
@@ -95,10 +98,9 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
     try {
       if (doc.id === 'aadhaar') {
         if (useDigilocker) {
-          // Initialize DigiLocker flow and redirect user
+          // Start a session; the SDK button (rendered below) opens DigiLocker.
           const result = await api.initializeDigilocker(fullName.trim());
-          // Redirect user to DigiLocker authentication
-          window.location.href = `${result.url}&user_id=${result.userId}&full_name=${encodeURIComponent(result.fullName)}`;
+          setDlSession({ clientId: result.clientId, token: result.token, ticket: result.ticket });
           return;
         } else {
           const result = await api.verifyAadhaar({ file: file as File, yob, fullName: fullName.trim(), password });
@@ -292,6 +294,22 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
           )}
 
           {/* Submit */}
+          {dlSession && useDigilocker && doc.id === 'aadhaar' ? (
+            <DigilockerSdkButton
+              session={dlSession}
+              fullName={fullName.trim()}
+              onResult={(result) => {
+                setDlSession(null);
+                if (result.status === 'verified') toast.success('Your Aadhaar has been verified.');
+                else toast.error(result.reason || 'Aadhaar verification failed.');
+                onClose();
+              }}
+              onError={(message) => {
+                setDlSession(null);
+                toast.error(message);
+              }}
+            />
+          ) : (
           <button
             type="button"
             onClick={handleSubmit}
@@ -304,6 +322,7 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
           >
             {submitting ? 'Submitting…' : useDigilocker && doc.id === 'aadhaar' ? 'Continue with DigiLocker' : 'Submit'}
           </button>
+          )}
 
           <div className="text-center">
             <a

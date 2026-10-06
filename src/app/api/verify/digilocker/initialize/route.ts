@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
-import { isSurepassConfigured, surepassPost, DIGILOCKER_CALLBACK_URL } from "@/lib/surepass";
+import { isSurepassConfigured, surepassPost, signDigilockerTicket } from "@/lib/surepass";
 
 export const dynamic = "force-dynamic";
 
 const DIGILOCKER_INITIALIZE_ENDPOINT = "/api/v1/digilocker/initialize";
 
 /**
- * Initialize DigiLocker verification flow for Aadhaar.
- * Returns a URL that the user should be redirected to for DigiLocker authentication.
+ * Starts a DigiLocker session for the Digiboost Web SDK. Returns the SDK
+ * `token` (valid ~10 min) plus a signed `ticket` tying the session to this
+ * user; the client mounts the SDK button with the token and, on success,
+ * calls /api/verify/digilocker/complete.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -23,7 +25,6 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const fullName = String(body?.fullName ?? "").trim().slice(0, 100);
-
     if (fullName.length < 2) {
       return NextResponse.json(
         { error: "Enter your full name as it appears on your Aadhaar." },
@@ -31,57 +32,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Initialize DigiLocker session
+    // signup_flow must be true for the SDK. No redirect_url -- the SDK reports
+    // completion through its onSuccess callback, not a redirect.
     const res = await surepassPost(DIGILOCKER_INITIALIZE_ENDPOINT, {
-      data: {
-        signup_flow: true,
-        redirect_url: DIGILOCKER_CALLBACK_URL,
-        skip_main_screen: false,
-      },
+      data: { signup_flow: true, skip_main_screen: false },
     });
-
     const json = await res.json().catch(() => ({}));
 
     if (!res.ok || !json?.success) {
       console.error("[api/verify/digilocker/initialize] error:", res.status, json);
       return NextResponse.json(
         { error: json?.message || "Failed to initialize DigiLocker verification." },
-        { status: res.status }
+        { status: res.status >= 400 ? res.status : 502 }
       );
     }
 
-    const data = json.data ?? {};
-    const clientId = data.client_id;
-    const url = data.url;
-    const expirySeconds = data.expiry_seconds;
-
-    if (!clientId || !url) {
-      console.error("[api/verify/digilocker/initialize] missing client_id or url:", json);
-      return NextResponse.json(
-        { error: "Invalid response from verification provider." },
-        { status: 500 }
-      );
+    const { client_id: clientId, token, expiry_seconds: expirySeconds } = json.data ?? {};
+    if (!clientId || !token) {
+      console.error("[api/verify/digilocker/initialize] missing client_id or token:", json);
+      return NextResponse.json({ error: "Invalid response from verification provider." }, { status: 502 });
     }
 
-    // Store the client_id and user info in a temporary session (you might want to use Redis or database)
-    // For now, we'll return it to the client and they'll pass it back in the callback
     return NextResponse.json({
-      data: {
-        clientId,
-        url,
-        expirySeconds,
-        userId,
-        fullName,
-      },
+      data: { clientId, token, expirySeconds, ticket: signDigilockerTicket(clientId, userId) },
     });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
       return NextResponse.json({ error: err.message }, { status: 401 });
     }
     console.error("[api/verify/digilocker/initialize] unexpected error:", err);
-    return NextResponse.json(
-      { error: "Failed to initialize DigiLocker verification." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to initialize DigiLocker verification." }, { status: 500 });
   }
 }
