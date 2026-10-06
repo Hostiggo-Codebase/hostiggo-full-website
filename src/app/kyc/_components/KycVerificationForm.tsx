@@ -100,6 +100,7 @@ export function KycVerificationForm({
   const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
   const [aadhaarPassword, setAadhaarPassword] = useState('');
   const [yob, setYob] = useState('');
+  const [useDigilocker, setUseDigilocker] = useState(false);
   const [passportFileNo, setPassportFileNo] = useState('');
   const [dob, setDob] = useState('');
   const [verifiedMethod, setVerifiedMethod] = useState<IdMethod | null>(null);
@@ -125,7 +126,9 @@ export function KycVerificationForm({
     idMethod === 'pan'
       ? isValidPanNumber(pan)
       : idMethod === 'aadhaar'
-        ? Boolean(aadhaarFile) && aadhaarPassword.length > 0 && /^\d{4}$/.test(yob) && Number(yob) >= 1900 && Number(yob) <= thisYear
+        ? useDigilocker 
+          ? true // DigiLocker only needs name, validated by hasName check
+          : Boolean(aadhaarFile) && aadhaarPassword.length > 0 && /^\d{4}$/.test(yob) && Number(yob) >= 1900 && Number(yob) <= thisYear
         : /^[A-Z0-9]{8,15}$/.test(passportFileNo) && Boolean(dob);
   const hasName = fullName.trim().length > 1;
   const canSubmitId = hasName && isIdValid && consent && !idSubmitting;
@@ -149,6 +152,15 @@ export function KycVerificationForm({
     const label = ID_METHODS[idMethod].label;
     try {
       const name = fullName.trim();
+      
+      // Handle DigiLocker flow for Aadhaar
+      if (idMethod === 'aadhaar' && useDigilocker) {
+        const result = await api.initializeDigilocker(name);
+        // Redirect user to DigiLocker authentication
+        window.location.href = `${result.url}&user_id=${result.userId}&full_name=${encodeURIComponent(result.fullName)}`;
+        return;
+      }
+      
       const body =
         idMethod === 'pan'
           ? await api.verifyPan(pan.trim().toUpperCase(), name)
@@ -313,11 +325,33 @@ export function KycVerificationForm({
 
           {idMethod === 'aadhaar' && (
             <div className="space-y-3">
-              <div>
-                <label htmlFor="aadhaarFile" className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 mb-1.5">
-                  <FileText className="w-3.5 h-3.5" />
-                  eAadhaar PDF
-                </label>
+              {/* DigiLocker Option */}
+              <div className="flex items-center justify-between gap-4 rounded-lg bg-blue-50 border border-blue-200 p-3">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-blue-900">Verify with DigiLocker</p>
+                  <p className="text-xs text-blue-700 mt-0.5">Faster & easier - no PDF upload needed</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUseDigilocker(!useDigilocker)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    useDigilocker
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-blue-600 border border-blue-600'
+                  }`}
+                >
+                  {useDigilocker ? 'Using DigiLocker' : 'Use DigiLocker'}
+                </button>
+              </div>
+
+              {/* eAadhaar PDF Upload - only show if not using DigiLocker */}
+              {!useDigilocker && (
+                <>
+                  <div>
+                    <label htmlFor="aadhaarFile" className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 mb-1.5">
+                      <FileText className="w-3.5 h-3.5" />
+                      eAadhaar PDF
+                    </label>
                 <label
                   htmlFor="aadhaarFile"
                   className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-dashed border-gray-300 text-sm cursor-pointer hover:border-figma-navy/40 hover:bg-gray-50 transition-all"
@@ -386,6 +420,8 @@ export function KycVerificationForm({
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
                 />
               </div>
+                </>
+              )}
             </div>
           )}
 
@@ -448,7 +484,12 @@ export function KycVerificationForm({
             disabled={!canSubmitId}
             className="w-full py-3 bg-figma-navy text-white text-sm font-semibold rounded-xl hover:bg-figma-navy/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
-            {idSubmitting ? 'Verifying…' : `Verify ${ID_METHODS[idMethod].label}`}
+            {idSubmitting 
+              ? 'Verifying…' 
+              : idMethod === 'aadhaar' && useDigilocker
+                ? 'Continue with DigiLocker'
+                : `Verify ${ID_METHODS[idMethod].label}`
+            }
           </button>
         </form>
       )}
