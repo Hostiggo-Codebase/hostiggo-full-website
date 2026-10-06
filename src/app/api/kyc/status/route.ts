@@ -20,20 +20,23 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Check verification_status table
-    const { data: verification, error } = await supabaseAdmin
-      .from("verification_status")
-      .select("status, submitted_at, rejection_reason")
+    // Check for any verified identity document (PAN, Aadhaar, or Passport)
+    const { data: verifiedDocs, error } = await supabaseAdmin
+      .from("kyc_requests")
+      .select("status, created_at, service_type, error_message")
       .eq("user_id", userId)
-      .maybeSingle();
+      .in("service_type", ["pan", "aadhaar", "passport"])
+      .order("created_at", { ascending: false })
+      .limit(1);
 
     if (error && error.code !== "PGRST116") {
-      // PGRST116 = no rows returned (not an error)
       throw error;
     }
 
-    // If no verification record, check if user is marked as verified
-    if (!verification) {
+    const latestRequest = verifiedDocs?.[0];
+
+    if (!latestRequest) {
+      // Check if user is marked as verified (legacy)
       const { data: user } = await supabaseAdmin
         .from("users")
         .select("is_verified")
@@ -59,11 +62,21 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Map kyc_requests status to our KYC status
+    let status: string = "none";
+    if (latestRequest.status === "verified") {
+      status = "verified";
+    } else if (latestRequest.status === "rejected" || latestRequest.status === "failed") {
+      status = "rejected";
+    } else if (latestRequest.status === "pending") {
+      status = "pending";
+    }
+
     return NextResponse.json({
       data: {
-        status: verification.status || "none",
-        submittedAt: verification.submitted_at,
-        reason: verification.rejection_reason,
+        status,
+        submittedAt: latestRequest.created_at,
+        reason: latestRequest.error_message || null,
       },
     });
   } catch (err: any) {
