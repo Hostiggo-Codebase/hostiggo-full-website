@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { MapPin, X } from 'lucide-react';
 import PopularStays from '@/components/features/PopularStays';
-import CTABanner from '@/components/features/CTABanner';
 import type { Property, SearchFilters } from '@/types';
 import { api, mapListingToProperty } from '@/lib/api';
 
@@ -236,14 +235,12 @@ export default function HomeSections({ initialSections, initialError }: HomeSect
               </button>
             )}
           </div>
-          <CTABanner />
         </>
       ) : (
         <>
           {sections.slice(0, 2).map((section) => (
             <PopularStays key={section.id} title={section.title} properties={section.properties} />
           ))}
-          <CTABanner />
           {sections.slice(2).map((section) => (
             <PopularStays key={section.id} title={section.title} properties={section.properties} />
           ))}
