@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowRight, TrendingUp, Percent, Package, CalendarDays, Wallet, ShieldCheck } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import OnboardingSteps from './onboarding-steps';
 
 // First pass at the Figma "started website" host-landing frame
 // (node 2355:16418, file PkxxdQZz9FfGkmUWhnrMOW). Built from get_metadata
@@ -180,6 +181,7 @@ export default function BecomeAHostPage() {
           </div>
         </section>
       </main>
+      <OnboardingSteps />
       <Footer />
     </div>
   );
