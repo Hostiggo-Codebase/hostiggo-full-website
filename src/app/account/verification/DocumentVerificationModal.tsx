@@ -23,6 +23,7 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [fullName, setFullName] = useState('');
   const [yob, setYob] = useState('');
+  const [dob, setDob] = useState(''); // For passport (full date: YYYY-MM-DD)
   const [password, setPassword] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -34,6 +35,7 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
     setFile(null);
     setFullName('');
     setYob('');
+    setDob('');
     setPassword('');
     setSubmitting(false);
   }, [doc?.id]);
@@ -77,31 +79,41 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
 
   const canSubmit = doc.id === 'aadhaar'
     ? fullName.trim().length > 1 && /^\d{4}$/.test(yob) && password.length > 0 && !!file && !submitting
-    : number.trim().length > 0 && !!file && !submitting;
+    : doc.id === 'pan'
+    ? number.trim().length === 10 && fullName.trim().length > 1 && !submitting
+    : doc.id === 'passport'
+    ? number.trim().length > 0 && fullName.trim().length > 1 && dob.length === 10 && !submitting
+    : false;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
-    if (doc.id === 'aadhaar') {
-      try {
+    
+    try {
+      if (doc.id === 'aadhaar') {
         const result = await api.verifyAadhaar({ file: file as File, yob, fullName: fullName.trim(), password });
         if (result.status === 'verified') toast.success('Your eAadhaar has been verified.');
         else if (result.status === 'rejected') toast.error(result.reason || 'eAadhaar verification failed.');
         else toast.success('eAadhaar received. Verification is in progress.');
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not verify your eAadhaar.');
-      } finally {
-        setSubmitting(false);
+        onClose();
+      } else if (doc.id === 'pan') {
+        const result = await api.verifyPan(number.trim(), fullName.trim());
+        if (result.status === 'verified') toast.success('Your PAN has been verified.');
+        else if (result.status === 'rejected') toast.error(result.reason || 'PAN verification failed.');
+        else toast.success('PAN received. Verification is in progress.');
+        onClose();
+      } else if (doc.id === 'passport') {
+        const result = await api.verifyPassport({ fileNumber: number.trim(), dob, fullName: fullName.trim() });
+        if (result.status === 'verified') toast.success('Your Passport has been verified.');
+        else if (result.status === 'rejected') toast.error(result.reason || 'Passport verification failed.');
+        else toast.success('Passport received. Verification is in progress.');
+        onClose();
       }
-      return;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Could not verify your ${doc.label}.`);
+    } finally {
+      setSubmitting(false);
     }
-    // NOT wired to a backend yet -- there is no identity-verification
-    // endpoint or KYC table for this document type. Be honest about that
-    // rather than showing a fake "submitted, we'll review it" success, and
-    // point the user at the Aadhaar flow that does work today.
-    toast('Verification for this document type isn’t available yet — use Aadhaar verification for now.');
-    setSubmitting(false);
-    onClose();
   };
 
   return (
@@ -112,8 +124,7 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
             {doc.verificationTitle}
           </DialogTitle>
           <DialogDescription className="mt-1 text-[15px] leading-relaxed text-gray-500">
-            Please fill the below details so that our team can verify your
-            identity
+            Please fill the below details so that our team can verify your identity
           </DialogDescription>
         </DialogHeader>
 
@@ -135,73 +146,78 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
               </div>
             </>
           ) : (
-            <div className="space-y-2">
-              <label htmlFor="doc-number" className="block text-[17px] font-medium text-[#151515]">{doc.numberLabel}</label>
-              <input id="doc-number" type="text" inputMode={doc.inputMode} maxLength={doc.maxLength} autoComplete="off" value={number} onChange={(e) => handleNumberChange(e.target.value)} placeholder={doc.numberPlaceholder} className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
-            </div>
+            <>
+              <div className="space-y-2">
+                <label htmlFor="doc-number" className="block text-[17px] font-medium text-[#151515]">{doc.numberLabel}</label>
+                <input id="doc-number" type="text" inputMode={doc.inputMode} maxLength={doc.maxLength} autoComplete="off" value={number} onChange={(e) => handleNumberChange(e.target.value)} placeholder={doc.numberPlaceholder} className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="doc-fullname" className="block text-[17px] font-medium text-[#151515]">Full name as on {doc.label}</label>
+                <input id="doc-fullname" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter your full name" className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+              </div>
+              {doc.id === 'passport' && (
+                <div className="space-y-2">
+                  <label htmlFor="passport-dob" className="block text-[17px] font-medium text-[#151515]">Date of birth</label>
+                  <input id="passport-dob" type="date" value={dob} onChange={(e) => setDob(e.target.value)} className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+                </div>
+              )}
+            </>
           )}
 
-          {/* Upload image */}
-          <div className="space-y-2">
-            <p className="text-[17px] font-medium text-[#151515]">{doc.id === 'aadhaar' ? 'Upload eAadhaar PDF' : 'Upload image'}</p>
-            <div className="rounded-[15px] border border-[#a1a1a1] p-4">
-              {previewUrl ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative flex h-40 w-full items-center justify-center overflow-hidden rounded-lg bg-gray-50">
-                    {doc.id === 'aadhaar' ? (
+          {/* Upload section - only for aadhaar */}
+          {doc.id === 'aadhaar' && (
+            <div className="space-y-2">
+              <p className="text-[17px] font-medium text-[#151515]">Upload eAadhaar PDF</p>
+              <div className="rounded-[15px] border border-[#a1a1a1] p-4">
+                {previewUrl ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative flex h-40 w-full items-center justify-center overflow-hidden rounded-lg bg-gray-50">
                       <p className="px-4 text-center text-sm font-medium text-gray-600">eAadhaar PDF selected</p>
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={previewUrl}
-                        alt={`${doc.label} preview`}
-                        className="h-full w-full object-contain"
-                      />
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => setFile(null)}
+                        aria-label="Remove PDF"
+                        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <p className="max-w-full truncate text-xs text-gray-500">
+                      {file?.name}
+                    </p>
                     <button
                       type="button"
-                      onClick={() => setFile(null)}
-                      aria-label="Remove image"
-                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="rounded-full border border-[#d0d0d0] bg-white px-6 py-2 text-sm font-medium text-gray-600 shadow-[0_4px_18px_rgba(0,0,0,0.12)] transition-colors hover:text-blue-600"
                     >
-                      <X className="h-4 w-4" />
+                      Change
                     </button>
                   </div>
-                  <p className="max-w-full truncate text-xs text-gray-500">
-                    {file?.name}
-                  </p>
+                ) : (
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="rounded-full border border-[#d0d0d0] bg-white px-6 py-2 text-sm font-medium text-gray-600 shadow-[0_4px_18px_rgba(0,0,0,0.12)] transition-colors hover:text-blue-600"
+                    className="flex w-full flex-col items-center gap-3 py-4 text-center"
                   >
-                    Change
+                    <span className="self-start text-[15px] text-gray-400">
+                      Upload your eAadhaar PDF
+                    </span>
+                    <ImagePlus className="h-12 w-12 text-gray-300" strokeWidth={1.5} />
+                    <span className="rounded-full border border-[#d0d0d0] bg-white px-8 py-2 text-sm font-medium text-gray-600 shadow-[0_4px_18px_rgba(0,0,0,0.12)] transition-colors hover:text-blue-600">
+                      Upload
+                    </span>
                   </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex w-full flex-col items-center gap-3 py-4 text-center"
-                >
-                  <span className="self-start text-[15px] text-gray-400">
-                    {doc.uploadPlaceholder}
-                  </span>
-                  <ImagePlus className="h-12 w-12 text-gray-300" strokeWidth={1.5} />
-                  <span className="rounded-full border border-[#d0d0d0] bg-white px-8 py-2 text-sm font-medium text-gray-600 shadow-[0_4px_18px_rgba(0,0,0,0.12)] transition-colors hover:text-blue-600">
-                    Upload
-                  </span>
-                </button>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={doc.id === 'aadhaar' ? 'application/pdf,.pdf' : 'image/*'}
-                className="hidden"
-                onChange={handleFileChange}
-              />
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Submit */}
           <button
