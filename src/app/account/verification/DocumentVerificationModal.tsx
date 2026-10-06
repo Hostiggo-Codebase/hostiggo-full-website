@@ -129,36 +129,78 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
         </DialogHeader>
 
         <div className="mt-4 space-y-6">
+          {/* Full name field - shown for all document types */}
+          <div className="space-y-2">
+            <label htmlFor="doc-fullname" className="block text-[17px] font-medium text-[#151515]">
+              Full name (as on your {doc.id === 'aadhaar' ? 'ID' : doc.label})
+            </label>
+            <input 
+              id="doc-fullname" 
+              type="text" 
+              value={fullName} 
+              onChange={(e) => setFullName(e.target.value)} 
+              placeholder={doc.id === 'aadhaar' ? 'rijusmit biswas' : 'Enter your full name'} 
+              className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" 
+            />
+          </div>
+
           {doc.id === 'aadhaar' ? (
             <>
               <div className="space-y-2">
-                <label htmlFor="aadhaar-full-name" className="block text-[17px] font-medium text-[#151515]">Full name as on eAadhaar</label>
-                <input id="aadhaar-full-name" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter your full name" className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+                <label htmlFor="aadhaar-password" className="block text-[17px] font-medium text-[#151515]">eAadhaar PDF password</label>
+                <input 
+                  id="aadhaar-password" 
+                  type="password" 
+                  autoComplete="off" 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  placeholder="Enter the password for the downloaded PDF" 
+                  className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" 
+                />
+                <p className="text-xs leading-relaxed text-gray-500">
+                  UIDAI eAadhaar PDFs usually use the first four letters of your name in capitals followed by your birth year.
+                </p>
               </div>
               <div className="space-y-2">
                 <label htmlFor="aadhaar-yob" className="block text-[17px] font-medium text-[#151515]">Year of birth</label>
-                <input id="aadhaar-yob" type="text" inputMode="numeric" maxLength={4} value={yob} onChange={(e) => setYob(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="1990" className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="aadhaar-password" className="block text-[17px] font-medium text-[#151515]">eAadhaar PDF password</label>
-                <input id="aadhaar-password" type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your PDF password" className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
-                <p className="text-xs leading-relaxed text-gray-500">Usually the first four letters of your name in capitals followed by your birth year.</p>
+                <input 
+                  id="aadhaar-yob" 
+                  type="text" 
+                  inputMode="numeric" 
+                  maxLength={4} 
+                  value={yob} 
+                  onChange={(e) => setYob(e.target.value.replace(/\D/g, '').slice(0, 4))} 
+                  placeholder="1990" 
+                  className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" 
+                />
               </div>
             </>
           ) : (
             <>
               <div className="space-y-2">
                 <label htmlFor="doc-number" className="block text-[17px] font-medium text-[#151515]">{doc.numberLabel}</label>
-                <input id="doc-number" type="text" inputMode={doc.inputMode} maxLength={doc.maxLength} autoComplete="off" value={number} onChange={(e) => handleNumberChange(e.target.value)} placeholder={doc.numberPlaceholder} className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="doc-fullname" className="block text-[17px] font-medium text-[#151515]">Full name as on {doc.label}</label>
-                <input id="doc-fullname" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter your full name" className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+                <input 
+                  id="doc-number" 
+                  type="text" 
+                  inputMode={doc.inputMode} 
+                  maxLength={doc.maxLength} 
+                  autoComplete="off" 
+                  value={number} 
+                  onChange={(e) => handleNumberChange(e.target.value)} 
+                  placeholder={doc.numberPlaceholder} 
+                  className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" 
+                />
               </div>
               {doc.id === 'passport' && (
                 <div className="space-y-2">
                   <label htmlFor="passport-dob" className="block text-[17px] font-medium text-[#151515]">Date of birth</label>
-                  <input id="passport-dob" type="date" value={dob} onChange={(e) => setDob(e.target.value)} className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" />
+                  <input 
+                    id="passport-dob" 
+                    type="date" 
+                    value={dob} 
+                    onChange={(e) => setDob(e.target.value)} 
+                    className="h-14 w-full rounded-[15px] border border-[#a1a1a1] px-4 text-[15px] text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" 
+                  />
                 </div>
               )}
             </>
