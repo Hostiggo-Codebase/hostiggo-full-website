@@ -29,8 +29,15 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(1);
 
-    if (error && error.code !== "PGRST116") {
-      throw error;
+    if (error) {
+      console.error("[KYC Status API] Database error:", error);
+      // PGRST116 means no rows found, which is fine
+      if (error.code !== "PGRST116") {
+        return NextResponse.json(
+          { error: `Database query failed: ${error.message}` },
+          { status: 500 }
+        );
+      }
     }
 
     const latestRequest = verifiedDocs?.[0];

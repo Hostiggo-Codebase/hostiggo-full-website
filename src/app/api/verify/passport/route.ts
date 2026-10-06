@@ -32,12 +32,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (!isSurepassConfigured()) {
-      return NextResponse.json({
-        data: {
-          status: "pending",
-          reason: "Identity verification is not configured yet (missing SUREPASS_API_KEY).",
-        },
-      });
+      return NextResponse.json(
+        { error: "Identity verification is not configured. Contact support." },
+        { status: 503 }
+      );
     }
 
     // SurePass's passport endpoint (unlike pan-adv or bank-verification)
@@ -102,8 +100,8 @@ export async function POST(req: NextRequest) {
     }
     console.error("[api/verify/passport] unexpected error:", err);
     return NextResponse.json(
-      { data: { status: "pending", reason: "Verification failed unexpectedly. Please try again." } },
-      { status: 200 },
+      { error: "Verification failed unexpectedly. Please try again." },
+      { status: 500 },
     );
   }
 }
