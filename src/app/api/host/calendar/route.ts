@@ -77,6 +77,18 @@ export async function PATCH(req: NextRequest) {
     });
     return NextResponse.json({ data });
   } catch (err) {
+    const dbErr = err as { message?: string; details?: string } | null;
+    if (dbErr?.message?.includes("HOSTIGGO_DATES_BOOKED")) {
+      const bookedDates = (dbErr.details ?? "").split(",").filter(Boolean);
+      return NextResponse.json(
+        {
+          error: "These dates already have a booking, so they can't be blocked.",
+          code: "DATES_BOOKED",
+          bookedDates,
+        },
+        { status: 409 },
+      );
+    }
     console.error("[/api/host/calendar PATCH] error:", err);
     return NextResponse.json(
       { error: errorMessage(err, "Request failed") },

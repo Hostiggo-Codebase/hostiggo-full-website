@@ -2,28 +2,19 @@ BEGIN;
 
 -- iCal imports every 15 seconds. Vercel cron can't go below 1 minute, so
 -- pg_cron (>= 1.5 supports "N seconds") calls the site's sync endpoint via
--- pg_net. The URL and CRON_SECRET live in a locked-down table, never in SQL:
+-- pg_net. No new tables: the endpoint URL and CRON_SECRET are database-level
+-- settings, set once by an admin (run as a superuser / in the SQL editor):
 --
---   INSERT INTO hostiggo_testing_schema.internal_config (key, value) VALUES
---     ('ical_sync_url',    'https://<your-site>/api/cron/ical-sync'),
---     ('ical_sync_secret', '<same value as CRON_SECRET>')
---   ON CONFLICT (key) DO UPDATE SET value = excluded.value;
+--   ALTER DATABASE postgres SET app.ical_sync_url    = 'https://<your-site>/api/cron/ical-sync';
+--   ALTER DATABASE postgres SET app.ical_sync_secret = '<same value as CRON_SECRET>';
 --
--- Until both rows exist the tick is a harmless no-op.
-
-CREATE TABLE IF NOT EXISTS hostiggo_testing_schema.internal_config (
-  key   text PRIMARY KEY,
-  value text NOT NULL
-);
-ALTER TABLE hostiggo_testing_schema.internal_config ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON hostiggo_testing_schema.internal_config FROM PUBLIC, anon, authenticated;
+-- Until both are set the tick is a harmless no-op.
 
 CREATE OR REPLACE FUNCTION hostiggo_testing_schema.ical_cron_tick()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE v_url text; v_secret text;
+DECLARE v_url text := nullif(current_setting('app.ical_sync_url', true), '');
+        v_secret text := nullif(current_setting('app.ical_sync_secret', true), '');
 BEGIN
-  SELECT value INTO v_url FROM hostiggo_testing_schema.internal_config WHERE key = 'ical_sync_url';
-  SELECT value INTO v_secret FROM hostiggo_testing_schema.internal_config WHERE key = 'ical_sync_secret';
   IF v_url IS NULL OR v_secret IS NULL THEN RETURN; END IF;
   PERFORM net.http_get(
     url := v_url,

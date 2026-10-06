@@ -51,7 +51,9 @@ export default function DigilockerSdkButton({ session, fullName, onResult, onErr
   const containerRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const cb = useRef({ onResult, onError, fullName });
-  cb.current = { onResult, onError, fullName };
+  useEffect(() => {
+    cb.current = { onResult, onError, fullName };
+  });
 
   useEffect(() => {
     let cancelled = false;
