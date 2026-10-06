@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
     }
     console.error("[api/verify/pan] unexpected error:", err);
     return NextResponse.json(
-      { data: { status: "pending", reason: "Verification failed unexpectedly. Please try again." } },
-      { status: 200 },
+      { error: "Verification failed unexpectedly. Please try again." },
+      { status: 500 },
     );
   }
 }
