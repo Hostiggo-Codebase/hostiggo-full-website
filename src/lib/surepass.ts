@@ -12,6 +12,10 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 export const SUREPASS_BASE_URL = process.env.SUREPASS_BASE_URL || "https://kyc-api.surepass.app";
 const SUREPASS_API_KEY = process.env.SUREPASS_API_KEY || "";
 
+// Site URL for DigiLocker redirect callback
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+export const DIGILOCKER_CALLBACK_URL = `${SITE_URL}/api/verify/digilocker/callback`;
+
 export const isSurepassConfigured = (): boolean => Boolean(SUREPASS_API_KEY);
 
 export async function surepassPost(path: string, body: unknown): Promise<Response> {

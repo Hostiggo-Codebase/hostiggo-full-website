@@ -748,9 +748,7 @@ export default function HostSettingsPage() {
                     <p className="text-sm text-gray-500">
                       {profile?.isVerified || kycStatus === 'verified'
                         ? 'Your identity has been successfully verified.'
-                        : kycStatus === 'pending'
-                          ? 'Your documents are in -- verification is in progress.'
-                          : 'Optional. Verified hosts get more guest trust and bookings.'}{' '}
+                        : 'Optional. Verified hosts get more guest trust and bookings.'}{' '}
                       <Link href="/help/verify-identity" className="text-figma-navy underline">
                         Learn more
                       </Link>

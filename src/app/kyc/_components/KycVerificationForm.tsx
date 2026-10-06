@@ -49,9 +49,7 @@ function ResultBanner({ result }: { result: IdResult | BankResult }) {
     ? 'accountHolderName' in result && result.accountHolderName
       ? `Verified -- ${result.accountHolderName}${'bankName' in result && result.bankName ? ` (${result.bankName})` : ''}`
       : 'Verified'
-    : pending
-      ? 'Submitted -- verification in progress.'
-      : reason || 'Could not verify. Please check the details and try again.';
+    : reason || 'Could not verify. Please check the details and try again.';
 
   return (
     <div className={cn('flex items-start gap-2 rounded-xl border px-3 py-2.5 text-xs font-medium', tone)}>
@@ -162,8 +160,9 @@ export function KycVerificationForm({
       if (status === 'verified') {
         setVerifiedMethod(idMethod);
         toast.success(`Your ${label} has been verified!`);
-      } else if (status === 'rejected') toast.error(body?.reason || `${label} verification failed.`);
-      else toast.success(`${label} details received -- verification is in progress.`);
+      } else if (status === 'rejected') {
+        toast.error(body?.reason || `${label} verification failed.`);
+      }
       markKycSubmitted(userId);
       refreshKycStatus();
     } catch (err) {

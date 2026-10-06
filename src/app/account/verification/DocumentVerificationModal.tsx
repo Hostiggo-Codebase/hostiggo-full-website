@@ -27,6 +27,7 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
   const [password, setPassword] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [useDigilocker, setUseDigilocker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset the form whenever a different document is opened.
@@ -78,7 +79,9 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
   };
 
   const canSubmit = doc.id === 'aadhaar'
-    ? fullName.trim().length > 1 && /^\d{4}$/.test(yob) && password.length > 0 && !!file && !submitting
+    ? useDigilocker
+      ? fullName.trim().length > 1 && !submitting
+      : fullName.trim().length > 1 && /^\d{4}$/.test(yob) && password.length > 0 && !!file && !submitting
     : doc.id === 'pan'
     ? number.trim().length === 10 && fullName.trim().length > 1 && !submitting
     : doc.id === 'passport'
@@ -91,10 +94,18 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
     
     try {
       if (doc.id === 'aadhaar') {
-        const result = await api.verifyAadhaar({ file: file as File, yob, fullName: fullName.trim(), password });
-        if (result.status === 'verified') toast.success('Your eAadhaar has been verified.');
-        else if (result.status === 'rejected') toast.error(result.reason || 'eAadhaar verification failed.');
-        onClose();
+        if (useDigilocker) {
+          // Initialize DigiLocker flow and redirect user
+          const result = await api.initializeDigilocker(fullName.trim());
+          // Redirect user to DigiLocker authentication
+          window.location.href = `${result.url}&user_id=${result.userId}&full_name=${encodeURIComponent(result.fullName)}`;
+          return;
+        } else {
+          const result = await api.verifyAadhaar({ file: file as File, yob, fullName: fullName.trim(), password });
+          if (result.status === 'verified') toast.success('Your eAadhaar has been verified.');
+          else if (result.status === 'rejected') toast.error(result.reason || 'eAadhaar verification failed.');
+          onClose();
+        }
       } else if (doc.id === 'pan') {
         const result = await api.verifyPan(number.trim(), fullName.trim());
         if (result.status === 'verified') toast.success('Your PAN has been verified.');
@@ -205,9 +216,29 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
 
           {/* Upload section - only for aadhaar */}
           {doc.id === 'aadhaar' && (
-            <div className="space-y-2">
-              <p className="text-[17px] font-medium text-[#151515]">Upload eAadhaar PDF</p>
-              <div className="rounded-[15px] border border-[#a1a1a1] p-4">
+            <>
+              <div className="flex items-center justify-between gap-4 rounded-lg bg-blue-50 border border-blue-200 p-4">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-blue-900">Verify with DigiLocker</p>
+                  <p className="text-xs text-blue-700 mt-1">Faster & easier - no PDF upload needed</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUseDigilocker(!useDigilocker)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                    useDigilocker
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-blue-600 border border-blue-600'
+                  }`}
+                >
+                  {useDigilocker ? 'Using DigiLocker' : 'Use DigiLocker'}
+                </button>
+              </div>
+
+              {!useDigilocker && (
+                <div className="space-y-2">
+                  <p className="text-[17px] font-medium text-[#151515]">Upload eAadhaar PDF</p>
+                  <div className="rounded-[15px] border border-[#a1a1a1] p-4">
                 {previewUrl ? (
                   <div className="flex flex-col items-center gap-3">
                     <div className="relative flex h-40 w-full items-center justify-center overflow-hidden rounded-lg bg-gray-50">
@@ -256,6 +287,8 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
                 />
               </div>
             </div>
+              )}
+            </>
           )}
 
           {/* Submit */}
@@ -269,7 +302,7 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
                 : 'h-14 w-full cursor-not-allowed rounded-[25px] bg-[#ebebeb] text-[17px] font-semibold text-[#747474]'
             }
           >
-            {submitting ? 'Submitting…' : 'Submit'}
+            {submitting ? 'Submitting…' : useDigilocker && doc.id === 'aadhaar' ? 'Continue with DigiLocker' : 'Submit'}
           </button>
 
           <div className="text-center">

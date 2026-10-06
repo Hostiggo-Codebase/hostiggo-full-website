@@ -55,11 +55,11 @@ export function useKycStatus(): KycState {
         const data = body?.data ?? {};
         let next: KycStatus = data.status ?? 'unknown';
 
-        // The server is the source of truth, but if it can't be read, trust
-        // the local "submitted" flag so a host who just submitted still sees
-        // "pending" rather than "not started".
+        // The server is the source of truth, but if it can't be read and the
+        // user has a local "submitted" flag, treat it as unknown rather than
+        // showing a misleading "pending" status.
         if ((next === 'unknown' || next === 'none') && hasSubmittedKyc(userId)) {
-          next = 'pending';
+          next = 'unknown';
         }
         // Keep the local flag in sync so offline reads stay accurate.
         if (next === 'verified') markKycSubmitted(userId);
@@ -70,7 +70,7 @@ export function useKycStatus(): KycState {
       })
       .catch(() => {
         if (!active) return;
-        setStatus(hasSubmittedKyc(userId) ? 'pending' : 'unknown');
+        setStatus('unknown');
       })
       .finally(() => {
         if (active) setLoading(false);
