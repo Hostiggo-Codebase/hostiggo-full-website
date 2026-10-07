@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createBookingWithoutPayment, validateAndPriceBooking } from "@/lib/services/admin-writes";
+import { validateAndPriceBooking } from "@/lib/services/admin-writes";
 import { createRazorpayOrder } from "@/lib/billing/razorpay";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { GUEST_ID_REQUIRED, guestHasVerifiedId } from "@/lib/services/guestVerification";
@@ -8,7 +8,6 @@ import { DatesUnavailableError, isDatabaseAvailabilityError } from "@/lib/stayDa
 import {
   BOOKINGS_DISABLED,
   PAYMENTS_ENABLED,
-  UNPAID_BOOKINGS_ALLOWED,
   razorpayKeysConfigured,
   todayInIndia,
 } from "@/lib/booking-config";
@@ -30,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     if (
       BOOKINGS_DISABLED ||
-      (!PAYMENTS_ENABLED && !UNPAID_BOOKINGS_ALLOWED) ||
+      !PAYMENTS_ENABLED ||
       (PAYMENTS_ENABLED && !razorpayKeysConfigured())
     ) {
       return NextResponse.json(
@@ -116,11 +115,7 @@ export async function POST(req: NextRequest) {
       addonIds: normalizedAddonIds,
     };
 
-    if (UNPAID_BOOKINGS_ALLOWED) {
-      const booking = await createBookingWithoutPayment(bookingInput);
-      return NextResponse.json({ data: { paymentRequired: false, booking } });
-    }
-
+    // ALWAYS require payment - no unpaid bookings in dev or production
     const priced = await validateAndPriceBooking(bookingInput);
 
     // Everything finalizeBookingFromRazorpayOrder() will need to actually
