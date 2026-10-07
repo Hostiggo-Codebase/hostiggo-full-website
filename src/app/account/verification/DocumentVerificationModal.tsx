@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { ImagePlus, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import DigilockerSdkButton, { type DigilockerSession } from '@/components/DigilockerSdkButton';
 import {
   Dialog,
   DialogContent,
@@ -21,39 +19,17 @@ type Props = {
 
 export default function DocumentVerificationModal({ doc, onClose }: Props) {
   const [number, setNumber] = useState('');
-  const [file, setFile] = useState<File | null>(null);
   const [fullName, setFullName] = useState('');
-  const [yob, setYob] = useState('');
   const [dob, setDob] = useState(''); // For passport (full date: YYYY-MM-DD)
-  const [password, setPassword] = useState('');
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [useDigilocker, setUseDigilocker] = useState(false);
-  const [dlSession, setDlSession] = useState<DigilockerSession | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset the form whenever a different document is opened.
   useEffect(() => {
     setNumber('');
-    setFile(null);
     setFullName('');
-    setYob('');
     setDob('');
-    setPassword('');
     setSubmitting(false);
-    setDlSession(null);
   }, [doc?.id]);
-
-  // Keep an object URL for the image preview and clean it up.
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
 
   if (!doc) {
     return <Dialog open={false} onOpenChange={() => onClose()} />;
@@ -63,28 +39,8 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
     setNumber(doc.uppercase ? value.toUpperCase() : value);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (!selected) return;
-    if (doc.id === 'aadhaar' && selected.type !== 'application/pdf' && !selected.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Please upload the original eAadhaar PDF.');
-      return;
-    }
-    if (doc.id !== 'aadhaar' && !selected.type.startsWith('image/')) {
-      toast.error('Please upload an image file.');
-      return;
-    }
-    if (doc.id === 'aadhaar' && selected.size > 5 * 1024 * 1024) {
-      toast.error('The eAadhaar PDF is too large (max 5 MB).');
-      return;
-    }
-    setFile(selected);
-  };
-
   const canSubmit = doc.id === 'aadhaar'
-    ? useDigilocker
-      ? fullName.trim().length > 1 && !submitting
-      : fullName.trim().length > 1 && /^\d{4}$/.test(yob) && password.length > 0 && !!file && !submitting
+    ? number.trim().length === 12 && fullName.trim().length > 1 && !submitting
     : doc.id === 'pan'
     ? number.trim().length === 10 && fullName.trim().length > 1 && !submitting
     : doc.id === 'passport'
@@ -97,17 +53,10 @@ export default function DocumentVerificationModal({ doc, onClose }: Props) {
     
     try {
       if (doc.id === 'aadhaar') {
-        if (useDigilocker) {
-          // Start a session; the SDK button (rendered below) opens DigiLocker.
-          const result = await api.initializeDigilocker(fullName.trim());
-          setDlSession({ clientId: result.clientId, token: result.token, ticket: result.ticket });
-          return;
-        } else {
-          const result = await api.verifyAadhaar({ file: file as File, yob, fullName: fullName.trim(), password });
-          if (result.status === 'verified') toast.success('Your eAadhaar has been verified.');
-          else if (result.status === 'rejected') toast.error(result.reason || 'eAadhaar verification failed.');
-          onClose();
-        }
+        const result = await api.verifyAadhaar({ idNumber: number.trim(), fullName: fullName.trim() });
+        if (result.status === 'verified') toast.success('Your Aadhaar has been verified.');
+        else if (result.status === 'rejected') toast.error(result.reason || 'Aadhaar verification failed.');
+        onClose();
       } else if (doc.id === 'pan') {
         const result = await api.verifyPan(number.trim(), fullName.trim());
         if (result.status === 'verified') toast.success('Your PAN has been verified.');

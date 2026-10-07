@@ -9,6 +9,11 @@ import { getUserFCMTokens } from "@/lib/services/fcmTokens";
  */
 export async function POST(req: NextRequest) {
   try {
+    const secret = process.env.CRON_SECRET;
+    if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     const { userId, title, message, sendPush } = await req.json();
 
     if (!userId) {

@@ -6,10 +6,10 @@ import { CheckCircle2, Circle } from 'lucide-react';
 export type PayoutBlocker = 'kyc' | 'bank' | 'payout' | 'phone';
 
 const STEPS: Array<{ key: PayoutBlocker; label: string }> = [
-  { key: 'phone', label: 'Add phone number to your profile' },
+  { key: 'phone', label: 'Add your phone number' },
   { key: 'kyc', label: 'Verify your identity (PAN)' },
   { key: 'bank', label: 'Verify your bank account' },
-  { key: 'payout', label: 'Payout account created' },
+  { key: 'payout', label: 'Complete payout setup' },
 ];
 
 /** Shown while a host's listings can't go live because payouts aren't set up. */
