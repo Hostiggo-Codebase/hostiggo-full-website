@@ -397,7 +397,6 @@ export default function ManageListingPage() {
                   >
                     <div className="text-center">
                       <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-2 group-hover:text-gray-600 transition-colors" />
-                      <p className="text-xs text-gray-600 font-medium">Click to add photos</p>
                     </div>
                   </button>
                 </div>

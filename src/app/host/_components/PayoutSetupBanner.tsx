@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { CheckCircle2, Circle } from 'lucide-react';
 
-export type PayoutBlocker = 'kyc' | 'bank' | 'payout';
+export type PayoutBlocker = 'kyc' | 'bank' | 'payout' | 'phone';
 
 const STEPS: Array<{ key: PayoutBlocker; label: string }> = [
+  { key: 'phone', label: 'Add phone number to your profile' },
   { key: 'kyc', label: 'Verify your identity (PAN)' },
   { key: 'bank', label: 'Verify your bank account' },
   { key: 'payout', label: 'Payout account created' },
