@@ -15,17 +15,10 @@ export const PAYMENTS_ENABLED = process.env.NEXT_PUBLIC_PAYMENTS_ENABLED === "tr
 export const BOOKINGS_DISABLED = process.env.NEXT_PUBLIC_BOOKINGS_DISABLED === "true";
 
 /**
- * Only for staging/testing: with payments off, create confirmed bookings
- * without charging. Must be opted into explicitly -- a production deploy that
- * merely forgot NEXT_PUBLIC_PAYMENTS_ENABLED must not hand out free stays.
+ * DEPRECATED - No longer used. All bookings require payment.
+ * Kept for backwards compatibility but always evaluates to false.
  */
-export const UNPAID_BOOKINGS_ALLOWED =
-  !PAYMENTS_ENABLED &&
-  process.env.NEXT_PUBLIC_ALLOW_UNPAID_BOOKINGS === "true" &&
-  // Hard lock: free bookings can never be switched on in a Vercel production
-  // deployment, whatever the variables say.
-  process.env.VERCEL_ENV !== "production" &&
-  process.env.NEXT_PUBLIC_VERCEL_ENV !== "production";
+export const UNPAID_BOOKINGS_ALLOWED = false;
 
 /**
  * Server-side only: real charges need the Razorpay keys too. If they are
@@ -34,8 +27,8 @@ export const UNPAID_BOOKINGS_ALLOWED =
 export const razorpayKeysConfigured = () =>
   Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 
-/** Whether a guest can complete a booking right now. */
-export const BOOKINGS_OPEN = !BOOKINGS_DISABLED && (PAYMENTS_ENABLED || UNPAID_BOOKINGS_ALLOWED);
+/** Whether a guest can complete a booking right now. Payments are always required. */
+export const BOOKINGS_OPEN = !BOOKINGS_DISABLED && PAYMENTS_ENABLED;
 
 /**
  * Today's date in India (yyyy-mm-dd). Stays run on Indian calendar days, so
