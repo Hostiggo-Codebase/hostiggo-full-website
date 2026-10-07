@@ -22,6 +22,44 @@ export default function LocationPage() {
   const [longitude, setLongitude] = useState<number>(draft.longitude || 77.209);
   const [displayAddress, setDisplayAddress] = useState('');
 
+  const handleAddressChange = (newAddress: string) => {
+    setAddress(newAddress);
+    update({ addressLine1: newAddress });
+  };
+
+  const handleLocationSelect = (lat: number, lng: number, addr: string) => {
+    setLatitude(lat);
+    setLongitude(lng);
+    setAddress(addr);
+    setDisplayAddress(addr);
+    update({
+      latitude: lat,
+      longitude: lng,
+      addressLine1: addr,
+      // Clear any locationId resolved for a previous pin immediately -- a
+      // stale locationId from an earlier address is worse than none, since
+      // it silently mislabels the listing under the wrong destination.
+      locationId: undefined,
+    });
+
+    // Resolve which curated location this pin falls under, so the listing
+    // isn't left with no location_id (see resolveLocationId above), and
+    // fill in city/state/postal code -- the Confirm Address step needs all
+    // three to enable Next, and they'd otherwise never get set from a
+    // search pick or a dragged pin, only from typing them in by hand.
+    reverseGeocode(lat, lng).then((result) => {
+      if (!result) return;
+      resolveLocationId(result.address.city, result.address.county).then((locationId) => {
+        if (locationId) update({ locationId });
+      });
+      update({
+        city: result.address.city,
+        state: result.address.state,
+        postalCode: result.address.postcode,
+      });
+    });
+  };
+
   // Load initial address if coordinates exist
   useEffect(() => {
     const loadInitialAddress = async () => {
@@ -76,44 +114,6 @@ export default function LocationPage() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleAddressChange = (newAddress: string) => {
-    setAddress(newAddress);
-    update({ addressLine1: newAddress });
-  };
-
-  const handleLocationSelect = (lat: number, lng: number, addr: string) => {
-    setLatitude(lat);
-    setLongitude(lng);
-    setAddress(addr);
-    setDisplayAddress(addr);
-    update({
-      latitude: lat,
-      longitude: lng,
-      addressLine1: addr,
-      // Clear any locationId resolved for a previous pin immediately -- a
-      // stale locationId from an earlier address is worse than none, since
-      // it silently mislabels the listing under the wrong destination.
-      locationId: undefined,
-    });
-
-    // Resolve which curated location this pin falls under, so the listing
-    // isn't left with no location_id (see resolveLocationId above), and
-    // fill in city/state/postal code -- the Confirm Address step needs all
-    // three to enable Next, and they'd otherwise never get set from a
-    // search pick or a dragged pin, only from typing them in by hand.
-    reverseGeocode(lat, lng).then((result) => {
-      if (!result) return;
-      resolveLocationId(result.address.city, result.address.county).then((locationId) => {
-        if (locationId) update({ locationId });
-      });
-      update({
-        city: result.address.city,
-        state: result.address.state,
-        postalCode: result.address.postcode,
-      });
-    });
-  };
 
   return (
     <WizardShell

@@ -147,13 +147,6 @@ export default function ManageListingPage() {
   const [formData, setFormData] = useState<ListingDetails | null>(null);
   const [activeSection, setActiveSection] = useState<SectionType>('overview');
 
-  useEffect(() => {
-    if (!listingId || !userId) return;
-    loadListing();
-    loadLocations();
-    loadDelistStatus();
-  }, [listingId, userId]);
-
   const loadDelistStatus = async () => {
     if (!listingId) return;
     try {
@@ -201,6 +194,14 @@ export default function ManageListingPage() {
       setLocationsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!listingId || !userId) return;
+    loadListing();
+    loadLocations();
+    loadDelistStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listingId, userId]);
 
   const handleSave = async () => {
     if (!formData || !listingId || !userId) {
