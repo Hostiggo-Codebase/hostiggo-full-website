@@ -15,10 +15,10 @@ export type HostPayoutReadiness = {
 };
 
 export const PAYOUT_BLOCKER_MESSAGES: Record<PayoutBlocker, string> = {
-  kyc: "Verify your identity with PAN",
+  phone: "Add your phone number",
+  kyc: "Verify your identity (PAN)",
   bank: "Verify your bank account",
-  payout: "Finish payout setup",
-  phone: "Add phone number to your profile",
+  payout: "Complete payout setup",
 };
 
 /**
@@ -74,6 +74,7 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
   if (payout.error) throw payout.error;
   if (user.error) throw user.error;
 
+  const phoneAdded = !!user.data?.phone;
   const kycVerified = !!pan.data;
   const bankVerified = bank.data?.status === "success";
   const p = payout.data;
@@ -82,8 +83,8 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
     !!p?.razorpay_stakeholder_id &&
     !!p?.razorpay_product_id &&
     p.status !== "rejected";
-  const phoneAdded = !!user.data?.phone;
 
+  // Phone number must be first, then KYC, bank, and payout
   const blockers: PayoutBlocker[] = [];
   if (!phoneAdded) blockers.push("phone");
   if (!kycVerified) blockers.push("kyc");

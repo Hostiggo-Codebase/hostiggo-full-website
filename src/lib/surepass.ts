@@ -1,11 +1,10 @@
 import "server-only";
-import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createHash } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 // Server-only SurePass config. NEVER prefix these with NEXT_PUBLIC_ -- the
 // API key must never reach the client bundle. Routes call SurePass directly
-// (see src/app/api/verify/*) using this key -- PAN, bank and passport are
-// number-only lookups; Aadhaar is an eAadhaar PDF upload (surepassPostForm).
+// (see src/app/api/verify/*) using this key for direct verification lookups.
 //
 // Production only -- the account's sandbox environment has been retired, so
 // every verify route calls kyc-api.surepass.app directly with a live token.
@@ -29,29 +28,6 @@ export async function surepassGet(path: string): Promise<Response> {
   return fetch(`${SUREPASS_BASE_URL}${path}`, {
     method: "GET",
     headers: { Authorization: `Bearer ${SUREPASS_API_KEY}`, "Content-Type": "application/json" },
-  });
-}
-
-// Binds a DigiLocker session (client_id) to the user who started it, so the
-// completion route can't be fed someone else's session. Signed with the
-// server-only API key; no extra storage needed.
-export function signDigilockerTicket(clientId: string, userId: string): string {
-  return createHmac("sha256", SUREPASS_API_KEY).update(`${clientId}:${userId}`).digest("hex");
-}
-
-export function verifyDigilockerTicket(clientId: string, userId: string, ticket: string): boolean {
-  const expected = Buffer.from(signDigilockerTicket(clientId, userId));
-  const given = Buffer.from(String(ticket));
-  return expected.length === given.length && timingSafeEqual(expected, given);
-}
-
-// Multipart variant for document uploads (eAadhaar PDF). No Content-Type
-// header -- fetch sets the multipart boundary itself.
-export async function surepassPostForm(path: string, form: FormData): Promise<Response> {
-  return fetch(`${SUREPASS_BASE_URL}${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${SUREPASS_API_KEY}` },
-    body: form,
   });
 }
 

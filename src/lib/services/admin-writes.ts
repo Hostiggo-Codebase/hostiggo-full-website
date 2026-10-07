@@ -1399,6 +1399,29 @@ export async function createListing(draft: ListingDraft) {
     }
   }
 
+  // Notify the host about the listing creation
+  try {
+    const { notify } = await import("./notifications");
+    const status = readiness.ready 
+      ? "Your listing is now live on Hostiggo and available for bookings!"
+      : "Your listing has been created. Complete your payout setup to publish it.";
+    
+    await notify({
+      userId: draft.userId,
+      type: "host_onboarding",
+      category: "account",
+      title: readiness.ready ? "Listing published!" : "Listing created",
+      message: `${listing.title}: ${status}`,
+      metadata: {
+        listing_id: listingId,
+        property_id: listingId,
+        is_live: readiness.ready,
+      },
+    });
+  } catch (notifyErr) {
+    console.error("[createListing] failed to send notification:", notifyErr);
+  }
+
   return {
     listing_id: listingId,
     title: listing.title,

@@ -1,49 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
-import { isSurepassConfigured, surepassPostForm, logKycRequest, sha256Hex } from "@/lib/surepass";
-import { namesMatch } from "@/lib/services/kycVerify";
+import { isSurepassConfigured, surepassPost, logKycRequest, sha256Hex } from "@/lib/surepass";
 
 export const dynamic = "force-dynamic";
 
-const EAADHAAR_UPLOAD_ENDPOINT = "/api/v1/aadhaar/upload/eaadhaar";
-const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const AADHAAR_VALIDATION_ENDPOINT = "/api/v1/aadhaar-validation/aadhaar-validation";
+const AADHAAR_RE = /^[2-9]\d{11}$/;
 
-// eAadhaar PDF upload -- an alternative to PAN for identity (KYC) only.
-// SurePass checks the PDF's UIDAI digital signature and returns the
-// holder's details; the PDF's password is derived from the name + year of
-// birth, which is why both are sent along with it. Payouts still require a
-// verified PAN (Razorpay Route needs one), so this never triggers Route
-// onboarding. Only the last 4 digits and the name are stored -- never the
-// photo, address or full number.
+// Aadhaar number validation -- an alternative to PAN for identity (KYC) only.
+// Payouts still require a verified PAN (Razorpay Route needs one), so this
+// never triggers Route onboarding. Only the last 4 digits and a hash are
+// stored; the full Aadhaar number is sent to SurePass and then discarded.
 export async function POST(req: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId(req);
 
-    const form = await req.formData().catch(() => null);
-    const file = form?.get("file");
-    const yob = String(form?.get("yob") ?? "").trim();
-    const fullName = String(form?.get("fullName") ?? "").trim().slice(0, 100);
-    const password = String(form?.get("password") ?? "");
+    const body = (await req.json().catch(() => ({}))) as { idNumber?: unknown; fullName?: unknown };
+    const idNumber = String(body.idNumber ?? "").replace(/\D/g, "");
+    const fullName = String(body.fullName ?? "").trim().slice(0, 100);
 
-    if (!(file instanceof File) || file.size === 0) {
-      return NextResponse.json({ error: "Upload your eAadhaar PDF." }, { status: 400 });
-    }
-    if (file.type && file.type !== "application/pdf") {
-      return NextResponse.json({ error: "The eAadhaar must be a PDF file." }, { status: 400 });
-    }
-    if (file.size > MAX_PDF_BYTES) {
-      return NextResponse.json({ error: "The PDF is too large (max 5 MB)." }, { status: 400 });
-    }
-    const year = Number(yob);
-    if (!/^\d{4}$/.test(yob) || year < 1900 || year > new Date().getFullYear()) {
-      return NextResponse.json({ error: "Enter your year of birth (e.g. 1990)." }, { status: 400 });
+    if (!AADHAAR_RE.test(idNumber)) {
+      return NextResponse.json({ error: "Enter a valid 12-digit Aadhaar number." }, { status: 400 });
     }
     if (fullName.length < 2) {
       return NextResponse.json({ error: "Enter your full name as it appears on your Aadhaar." }, { status: 400 });
-    }
-    if (password.length < 1 || password.length > 100) {
-      return NextResponse.json({ error: "Enter the password for your eAadhaar PDF." }, { status: 400 });
     }
 
     if (!isSurepassConfigured()) {
@@ -53,58 +34,56 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const upstream = new FormData();
-    upstream.append("file", file, file.name || "eaadhaar.pdf");
-    upstream.append("yob", yob);
-    upstream.append("full_name", fullName);
-    upstream.append("password", password);
-    const res = await surepassPostForm(EAADHAAR_UPLOAD_ENDPOINT, upstream);
+    const res = await surepassPost(AADHAAR_VALIDATION_ENDPOINT, { id_number: idNumber });
     const json = await res.json().catch(() => ({}));
 
     let status: "verified" | "rejected";
     let reason: string | null = null;
     const data = (json?.data ?? {}) as Record<string, unknown>;
-    const nameOnRecord = typeof data.name === "string" ? data.name : null;
-    const maskedNumber = typeof data.aadhaar_number === "string" ? data.aadhaar_number : null;
+    const providerReference = typeof data.client_id === "string" ? data.client_id : null;
+    const providerAadhaar = typeof data.aadhaar_number === "string" ? data.aadhaar_number.replace(/\D/g, "") : "";
+    const providerLastDigits = typeof data.last_digits === "string" ? data.last_digits.replace(/\D/g, "") : "";
+    const normalizedRemarks = typeof data.remarks === "string" ? data.remarks.toLowerCase() : "";
 
-    if (!res.ok || !json?.success) {
-      console.error("[api/verify/aadhaar] upload error:", res.status, json?.message);
+    if (!res.ok || !json?.success || normalizedRemarks !== "success") {
+      console.error("[api/verify/aadhaar] validation error:", res.status, json?.message);
       status = "rejected";
-      reason =
-        json?.message ||
-        "Could not read that eAadhaar. Upload the PDF downloaded from UIDAI and check your name and year of birth.";
-    } else if (!nameOnRecord || !namesMatch(fullName, nameOnRecord)) {
-      status = "rejected";
-      reason = "The name you entered doesn't match the name on this Aadhaar. Enter it exactly as on your Aadhaar.";
+      reason = json?.message || "Aadhaar verification failed. Check the number and try again.";
     } else {
       status = "verified";
     }
 
-    const last4 = maskedNumber ? maskedNumber.replace(/\D/g, "").slice(-4) : null;
+    const last4 = (providerAadhaar || idNumber).slice(-4);
+    const maskedId = `XXXX XXXX ${last4}`;
     await logKycRequest({
       userId,
       serviceType: "aadhaar",
-      maskedId: last4 ? `XXXX XXXX ${last4}` : null,
+      maskedId,
       status,
-      providerReference: null,
+      providerReference,
       errorMessage: reason,
     });
     const now = new Date().toISOString();
-    // full_name, aadhaar_last4 and aadhaar_hash are NOT NULL -- a rejected
-    // upload may have no record name / number, so fall back rather than
-    // failing the insert. The full number is never available (eAadhaar
-    // masks it), so the hash is of the masked number SurePass returned.
-    const { error: aadhaarRowError } = await supabaseAdmin.from("aadhaar_kyc").insert({
-      user_id: userId,
-      full_name: nameOnRecord ?? fullName,
-      aadhaar_last4: last4 ?? "",
-      aadhaar_hash: sha256Hex(maskedNumber ?? ""),
-      status,
-      reason,
-      submitted_at: now,
-      updated_at: now,
-    });
-    if (aadhaarRowError) console.error("[api/verify/aadhaar] aadhaar_kyc insert failed:", aadhaarRowError);
+    // full_name, aadhaar_last4 and aadhaar_hash are NOT NULL. The full
+    // number is never stored; hash the submitted number for dedupe and keep
+    // the provider-returned last digits when available.
+    // Use upsert to handle re-verification attempts
+    const { error: aadhaarRowError } = await supabaseAdmin
+      .from("aadhaar_kyc")
+      .upsert(
+        {
+          user_id: userId,
+          full_name: fullName,
+          aadhaar_last4: providerLastDigits.slice(-4) || last4,
+          aadhaar_hash: sha256Hex(idNumber),
+          status,
+          reason,
+          submitted_at: now,
+          updated_at: now,
+        },
+        { onConflict: "user_id" }
+      );
+    if (aadhaarRowError) console.error("[api/verify/aadhaar] aadhaar_kyc upsert failed:", aadhaarRowError);
 
     return NextResponse.json({ data: { status, reason } });
   } catch (err) {

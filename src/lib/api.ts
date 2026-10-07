@@ -610,31 +610,9 @@ export const api = {
     }),
   // Alternatives to PAN for identity (KYC) only -- payouts still need a
   // verified PAN. See src/app/api/verify/aadhaar and /passport.
-  verifyAadhaar: (payload: { file: File; yob: string; fullName: string; password: string }) => {
-    const form = new FormData();
-    form.append("file", payload.file);
-    form.append("yob", payload.yob);
-    form.append("fullName", payload.fullName);
-    form.append("password", payload.password);
-    return request<{ status: "verified" | "rejected" | "pending"; reason: string | null }>(
+  verifyAadhaar: (payload: { idNumber: string; fullName: string }) =>
+    request<{ status: "verified" | "rejected" | "pending"; reason: string | null }>(
       `/api/verify/aadhaar`,
-      { method: "POST", body: form },
-    );
-  },
-  // DigiLocker verification for Aadhaar (no PDF upload needed)
-  initializeDigilocker: (fullName: string) =>
-    request<{
-      clientId: string;
-      token: string;
-      expirySeconds: number;
-      ticket: string;
-    }>(`/api/verify/digilocker/initialize`, {
-      method: "POST",
-      body: JSON.stringify({ fullName }),
-    }),
-  completeDigilocker: (payload: { clientId: string; ticket: string; fullName: string }) =>
-    request<{ status: "verified" | "rejected"; reason: string | null }>(
-      `/api/verify/digilocker/complete`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
   verifyPassport: (payload: { fileNumber: string; dob: string; fullName: string }) =>
@@ -811,11 +789,10 @@ export const api = {
   sendEmailOtp: async (email: string) => {
     const { data, error } = await supabase.auth.signInWithOtp({
       email: normalizeEmail(email),
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo:
-          typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined,
-      },
+      // Code-only login: the 6-digit code comes from {{ .Token }} in the Supabase
+      // email templates (see supabase/templates/README.md). No emailRedirectTo --
+      // that is only for link emails, and passing one invites the link flow.
+      options: { shouldCreateUser: true },
     });
     if (error) throw error;
     return data;

@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
     // Send OTP action
     if (action === "send") {
       if (email) {
-        // Email OTP - sends magic link by default, use .Token in email template for OTP code
+        // Email OTP. Code vs link is decided by the Supabase email templates: both
+        // "Magic Link" and "Confirm signup" must use {{ .Token }} (supabase/templates).
         const { data, error } = await authApi.signInWithEmailOtp(email);
         if (error) {
           console.error("[OTP] Email OTP send error:", error);
