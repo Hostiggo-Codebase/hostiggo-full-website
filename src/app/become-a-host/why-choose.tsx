@@ -56,7 +56,7 @@ export default function WhyChoose() {
       </div>
 
       {/* Bottom Graphic */}
-      <div className="flex justify-center items-center mt-[-40px] relative z-0 md:mt-[-60px]">
+      <div className="flex justify-center items-center mt-12 md:mt-16 relative z-0">
         {/* Glow */}
         <div className="absolute w-64 h-64 bg-blue-50 rounded-full blur-3xl -z-10 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
         
