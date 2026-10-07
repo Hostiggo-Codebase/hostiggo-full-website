@@ -118,6 +118,19 @@ export function ListingDraftProvider({ children }: { children: ReactNode }) {
       router.push('/signin?redirect=/host/list/house-rules');
       return;
     }
+
+    // Check if user has a phone number
+    try {
+      const userResponse = await api.getUser(userId);
+      if (!userResponse?.phone) {
+        toast.error('Please add a phone number to your profile before publishing listings.');
+        router.push('/host/settings?tab=personal');
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to check user profile:', err);
+    }
+
     setSubmitting(true);
     try {
       const result = await api.createListing({ userId, ...draft });

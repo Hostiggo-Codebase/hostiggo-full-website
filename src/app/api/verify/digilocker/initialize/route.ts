@@ -40,7 +40,19 @@ export async function POST(req: NextRequest) {
     const json = await res.json().catch(() => ({}));
 
     if (!res.ok || !json?.success) {
-      console.error("[api/verify/digilocker/initialize] error:", res.status, json);
+      console.error("[api/verify/digilocker/initialize] provider error:", res.status, json);
+      // A 401/403 here is SurePass refusing *our server* (key not enabled for
+      // DigiLocker, or this host's IP not allow-listed on the SurePass
+      // account) -- not the guest's session. Don't relay it as if it were.
+      if (res.status === 401 || res.status === 403) {
+        return NextResponse.json(
+          {
+            error: "DigiLocker is temporarily unavailable. Please try again later or upload your eAadhaar PDF.",
+            code: "PROVIDER_ACCESS_DENIED",
+          },
+          { status: 502 }
+        );
+      }
       return NextResponse.json(
         { error: json?.message || "Failed to initialize DigiLocker verification." },
         { status: res.status >= 400 ? res.status : 502 }

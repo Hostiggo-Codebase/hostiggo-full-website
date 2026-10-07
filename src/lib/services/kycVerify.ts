@@ -111,7 +111,7 @@ export type BankVerificationResult =
       branch: string | null;
       providerReference: string | null;
     }
-  | { verified: false; reason: string | null };
+  | { verified: false; reason: string | null; rateLimited?: boolean };
 
 export async function verifyBankAccount(
   userId: string,
@@ -142,6 +142,17 @@ export async function verifyBankAccount(
 
   if (!res.ok || !json?.success) {
     console.error("[kycVerify] bank error:", res.status, json);
+    // A provider throttle says nothing about the account itself. Don't log it
+    // as a failed verification: payout onboarding keys off the latest bank
+    // attempt, so a throttled retry would otherwise block an account that was
+    // already verified.
+    if (res.status === 429 || /rate limit/i.test(String(json?.message ?? ""))) {
+      return {
+        verified: false,
+        rateLimited: true,
+        reason: "Bank verification is busy right now. Please wait a few minutes and try again.",
+      };
+    }
     const reason = json?.message || `Verification provider error (${res.status}).`;
     await logAttempt({ status: "failed", providerReference: null, errorMessage: reason });
     return { verified: false, reason };

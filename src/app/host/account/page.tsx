@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboardShell';
+import ProfileCompletionCard from '../_components/ProfileCompletionCard';
 
 const QUICK: { icon: LucideIcon; label: string; href: string }[] = [
   { icon: Home, label: 'My listings', href: '/host/listings' },
@@ -123,6 +124,17 @@ export default function HostAccountPage() {
       <DashboardHeading
         title="Host Profile"
         subtitle="Your public profile and quick links to manage your hosting account."
+      />
+
+      <ProfileCompletionCard
+        profile={{
+          avatar: profile.avatar,
+          about: profile.about,
+          email: profile.email,
+          phone: profile.phone,
+          listings: profile.stats.listings,
+        }}
+        onPickPhoto={() => fileInputRef.current?.click()}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
