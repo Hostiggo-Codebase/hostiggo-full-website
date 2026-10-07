@@ -1097,6 +1097,13 @@ function BookingWidget({
   };
 
   const book = async () => {
+    console.log('[DEBUG] book() called');
+    console.log('[DEBUG] Environment check:', {
+      NEXT_PUBLIC_PAYMENTS_ENABLED: process.env.NEXT_PUBLIC_PAYMENTS_ENABLED,
+      BOOKINGS_OPEN,
+      BOOKING_DISABLED
+    });
+    
     if (selectedBlocked) {
       setStatus("unavailable");
       setUnavailableReason("These dates are blocked. Please choose different dates.");
@@ -1125,9 +1132,13 @@ function BookingWidget({
         numChildren: 0,
         addonIds: selectedAddonIds,
       });
+      
+      console.log('[DEBUG] Reserve booking response:', order);
+      
       if (!order.paymentRequired) {
         setStatus('confirmed');
         toast.success('Booking confirmed!');
+
         if (order.booking?.booking_id) {
           router.push(`/booking-confirmation/${order.booking.booking_id}`);
         }
