@@ -138,6 +138,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       data: {
+        paymentRequired: true,
         razorpayOrderId: order.id,
         razorpayKeyId: process.env.RAZORPAY_KEY_ID,
         amountPaise: priced.amountPaise,

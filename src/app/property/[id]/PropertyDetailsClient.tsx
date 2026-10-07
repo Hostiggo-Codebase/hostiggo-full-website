@@ -1126,9 +1126,9 @@ function BookingWidget({
         addonIds: selectedAddonIds,
       });
       
-      if (!order.paymentRequired) {
-        // This should never happen in production - payment is always required
-        toast.error('Payment is required to complete bookings. Please contact support if you see this message.');
+      // Payment is ALWAYS required
+      if (!order?.razorpayOrderId || !order?.razorpayKeyId) {
+        toast.error('Payment is required to complete bookings. Please contact support.');
         setStatus('available');
         return;
       }

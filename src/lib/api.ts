@@ -483,17 +483,14 @@ export const api = {
     // real charge from the listing's own prices, see
     // validateAndPriceBooking() in src/lib/services/admin-writes.ts
   }) =>
-    request<
-      | {
-          paymentRequired: true;
-          razorpayOrderId: string;
-          razorpayKeyId: string;
-          amountPaise: number;
-          amountRupees: number;
-          currency: string;
-        }
-      | { paymentRequired: false; booking: any }
-    >(`/api/bookings/reserve`, {
+    request<{
+      paymentRequired: true;
+      razorpayOrderId: string;
+      razorpayKeyId: string;
+      amountPaise: number;
+      amountRupees: number;
+      currency: string;
+    }>(`/api/bookings/reserve`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
