@@ -9,6 +9,7 @@ import Footer from '@/components/layout/Footer';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
+import SupportLiveChat from '@/components/features/SupportLiveChat';
 
 // Maps the on-screen action to the feedback.type stored in the DB.
 const TYPE_MAP: Record<string, string> = {
@@ -76,6 +77,8 @@ export default function SupportPage() {
             We&apos;re here to ensure your experience is seamless. How can we help you today?
           </p>
         </section>
+
+        <SupportLiveChat />
 
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
           {ACTIONS.map((a) => {
