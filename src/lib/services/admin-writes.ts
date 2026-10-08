@@ -4,6 +4,7 @@ import { todayInIndia } from "@/lib/booking-config";
 import { SCHEMA } from "../schema.constants";
 import { canonicalPlaceName } from "../destinationAliases";
 import { calculateBookingInvoice } from "../billing/invoice";
+import { discountedStaySubtotal, pickStayDiscount, type StayDiscountRow } from "../billing/stayDiscounts";
 import { getHostPayoutReadiness } from "./hostPayoutReadiness";
 import { DatesUnavailableError, isDatabaseAvailabilityError } from "../stayDates";
 
@@ -333,18 +334,43 @@ export async function validateAndPriceBooking(input: BookingInput) {
   const stayNights = eachDateInRange(input.startDate, input.endDate);
   const priceWeekday = Number(listing.price_weekday ?? 0);
   const priceWeekend = Number(listing.price_weekend ?? priceWeekday);
-  const subtotal = stayNights.reduce((sum, date) => {
+  // A host's per-date calendar price (listing_calendar.price > 0) overrides the
+  // weekday/weekend rate for that night; rows with price 0/null are not overrides.
+  const { data: calendarPrices, error: calendarPriceErr } = await supabaseAdmin
+    .from("listing_calendar")
+    .select("date, price")
+    .eq("listing_id", input.listingId)
+    .gte("date", input.startDate)
+    .lt("date", input.endDate);
+  if (calendarPriceErr) throw calendarPriceErr;
+  const overrides = new Map<string, number>();
+  for (const row of calendarPrices ?? []) {
+    const price = Number((row as { price: unknown }).price);
+    if (Number.isFinite(price) && price > 0) overrides.set(String((row as { date: unknown }).date).slice(0, 10), price);
+  }
+  const nightRate = (date: string) => {
+    const override = overrides.get(date);
+    if (override !== undefined) return override;
     const dow = new Date(date + "T00:00:00Z").getUTCDay();
-    const isWeekend = dow === 5 || dow === 6; // Friday or Saturday night
-    return sum + (isWeekend ? priceWeekend : priceWeekday);
-  }, 0);
+    return dow === 5 || dow === 6 ? priceWeekend : priceWeekday; // Friday or Saturday night
+  };
+  // The single best host discount (new listing / weekly / monthly) comes off every night.
+  const [{ data: discountRows, error: discountErr }, { count: priorConfirmed, error: priorErr }] = await Promise.all([
+    supabaseAdmin.from("listing_discounts").select("discount_type, percent, enabled, valid_from, valid_to, min_stay_nights").eq("listing_id", input.listingId),
+    supabaseAdmin.from("bookings").select("booking_id", { count: "exact", head: true }).eq("listing_id", input.listingId).eq("status_id", 2),
+  ]);
+  if (discountErr) throw discountErr;
+  if (priorErr) throw priorErr;
+  const stayDiscount = pickStayDiscount((discountRows ?? []) as StayDiscountRow[], {
+    nights: stayNights.length,
+    checkIn: input.startDate,
+    priorConfirmedBookings: priorConfirmed ?? 0,
+  });
+  const subtotal = discountedStaySubtotal(stayNights.map(nightRate), stayDiscount);
   // Which GST slab applies (5%/18%) is decided by the check-in night's own
-  // declared-tariff rate, not by the summed multi-night total -- see
-  // calculateBookingInvoice's gstRateBasisPrice.
-  const checkInDow = stayNights.length
-    ? new Date(stayNights[0] + "T00:00:00Z").getUTCDay()
-    : 0;
-  const gstRateBasisPrice = checkInDow === 5 || checkInDow === 6 ? priceWeekend : priceWeekday;
+  // declared-tariff rate (before any discount), not by the summed multi-night
+  // total -- see calculateBookingInvoice's gstRateBasisPrice.
+  const gstRateBasisPrice = stayNights.length ? nightRate(stayNights[0]) : priceWeekday;
 
   let resolvedAddons: { name: string; price: number; type: string | null }[] = [];
   if (input.addonIds?.length) {
