@@ -27,6 +27,7 @@ const footerSections: { title: string; links: FooterLink[] }[] = [
   {
     title: "Support",
     links: [
+      { label: "Customer support", href: "/support" },
       { label: "Help centre", href: "/help" },
       { label: "Chat guidelines", href: "/help/chat-guidelines" },
       { label: "Refunds explained", href: "/help/refunds" },
