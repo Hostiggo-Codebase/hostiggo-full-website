@@ -9,7 +9,9 @@ export function useAutoRetry(run: () => void | Promise<void>, { maxAttempts = 5,
   const [attempts, setAttempts] = useState(0);
   const [failing, setFailing] = useState(false);
   const runRef = useRef(run);
-  runRef.current = run;
+  useEffect(() => {
+    runRef.current = run;
+  });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const succeeded = useCallback(() => {

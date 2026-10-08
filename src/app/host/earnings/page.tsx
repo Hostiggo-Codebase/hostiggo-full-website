@@ -181,7 +181,9 @@ export default function EarningsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- autoRetry callbacks are stable
   }, [userId]);
-  retryRef.current = () => { void load(true); };
+  useEffect(() => {
+    retryRef.current = () => { void load(true); };
+  }, [load]);
 
   useEffect(() => {
     load();
