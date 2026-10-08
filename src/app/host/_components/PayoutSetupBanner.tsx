@@ -37,7 +37,7 @@ export default function PayoutSetupBanner({ blockers }: { blockers: PayoutBlocke
         })}
       </ol>
       <Link
-        href="/host/settings?tab=payouts"
+        href={`/host/settings?tab=${blockers.includes('phone') ? 'personal' : 'payouts'}`}
         className="mt-4 inline-flex rounded-xl bg-figma-navy px-4 py-2 text-sm font-semibold text-white hover:bg-figma-navy/90"
       >
         Set up payouts
