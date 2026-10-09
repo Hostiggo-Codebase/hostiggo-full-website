@@ -21,7 +21,6 @@ import {
 const SEND_TIMEOUT_MS = 12_000;
 
 // Support tables live in the `public` schema; the site client defaults to the app schema.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const publicDb = () => (supabase as any).schema("public");
 
 /**
@@ -215,7 +214,8 @@ export function useSupportChat(userId: string | null | undefined, enabled = true
   const send = useCallback(
     (text: string): boolean => {
       const body = text.trim();
-      if (!body || !socketRef.current?.connected || !userId) return false;
+      // Like the app: sending while disconnected adds the message as failed (with a retry) instead of dropping it.
+      if (!body || !userId) return false;
       const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setMessages((prev) => addOptimistic(prev, body, localId));
       void deliver(localId, body);
