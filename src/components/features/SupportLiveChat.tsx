@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 export default function SupportLiveChat() {
   const { userId } = useAuth();
-  const { messages, connected, send } = useSupportChat(userId);
+  const { messages, connected, send, retry } = useSupportChat(userId);
   const [text, setText] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +59,11 @@ export default function SupportLiveChat() {
             >
               <p className="whitespace-pre-wrap break-words">{m.text}</p>
               {!m.fromUser && <p className="mt-1 text-[10px] text-gray-400">Hostiggo Support</p>}
+              {m.failed && (
+                <button type="button" onClick={() => retry(m.id)} className="mt-1 block text-[11px] font-semibold text-red-200 underline">
+                  Not sent — tap to retry
+                </button>
+              )}
             </div>
           </div>
         ))}
