@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { addOptimistic, applyIncoming, ticketIdForUser, type SupportPayload } from "../supportChat";
+import {
+  addOptimistic,
+  applyIncoming,
+  fromRow,
+  markFailed,
+  markPending,
+  mergeHistory,
+  SUPPORT_CHAT_FALLBACK_URL,
+  SUPPORT_SENDER_TYPE,
+  type SupportPayload,
+} from "../supportChat";
 
 const ME = "user-1";
 const payload = (over: Partial<SupportPayload> = {}): SupportPayload => ({
-  id: "tmp-1", ticket_id: ME, sender_id: ME, sender_type: "student", body: "hello", created_at: "2026-10-08T10:00:00Z", ...over,
+  id: "tmp-1", ticket_id: "t-1", sender_id: ME, sender_type: "user", body: "hello", created_at: "2026-10-08T10:00:00Z", ...over,
 });
 
 describe("applyIncoming", () => {
@@ -43,9 +53,38 @@ describe("applyIncoming", () => {
   });
 });
 
-describe("ticketIdForUser", () => {
-  it("gives every user their own room (never a shared literal)", () => {
-    expect(ticketIdForUser("a")).not.toBe(ticketIdForUser("b"));
-    expect(ticketIdForUser("a")).not.toBe("support");
+describe("history, failure handling and config", () => {
+  it("sends as 'user' (the only customer type chat_messages accepts)", () => {
+    expect(SUPPORT_SENDER_TYPE).toBe("user");
+  });
+
+  it("falls back to the production socket service", () => {
+    expect(SUPPORT_CHAT_FALLBACK_URL).toBe("https://hostiggoadminportal-production.up.railway.app");
+  });
+
+  it("fromRow skips internal notes and marks own rows", () => {
+    expect(fromRow(payload({ is_internal_note: true }), ME)).toBeNull();
+    expect(fromRow(payload(), ME)).toMatchObject({ fromUser: true, text: "hello" });
+    expect(fromRow(payload({ sender_id: "a", sender_type: "agent" }), ME)?.fromUser).toBe(false);
+  });
+
+  it("mergeHistory keeps unconfirmed sends and drops ones the history already has", () => {
+    const history = [fromRow(payload({ id: "h1", body: "saved" }), ME)!];
+    const prev = addOptimistic(
+      addOptimistic([], "saved", "local-1", "2026-10-08T10:01:00Z"),
+      "not yet",
+      "local-2",
+      "2026-10-08T10:02:00Z",
+    );
+    expect(mergeHistory(prev, history).map((m) => m.text)).toEqual(["saved", "not yet"]);
+  });
+
+  it("a failed message can be retried and is replaced by its echo", () => {
+    let list = markFailed(addOptimistic([], "hi", "local-1"), "local-1");
+    expect(list[0]).toMatchObject({ failed: true, pending: false });
+    list = markPending(list, "local-1");
+    expect(list[0]).toMatchObject({ failed: false, pending: true });
+    list = markFailed(list, "local-1");
+    expect(applyIncoming(list, payload({ id: "s1", body: "hi" }), ME)).toHaveLength(1);
   });
 });
