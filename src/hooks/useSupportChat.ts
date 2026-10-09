@@ -73,7 +73,7 @@ export function useSupportChat(userId: string | null | undefined, enabled = true
         .from("support_tickets")
         .select("ticket_id")
         .eq("user_id", userId)
-        .neq("status", "CLOSED")
+        .not("status", "in", "(CLOSED,RESOLVED)")
         .order("created_at", { ascending: false })
         .limit(1);
       if (cancelled) return;
