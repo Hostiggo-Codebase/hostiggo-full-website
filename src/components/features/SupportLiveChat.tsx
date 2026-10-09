@@ -10,10 +10,12 @@ export default function SupportLiveChat() {
   const { userId } = useAuth();
   const { messages, connected, send, retry } = useSupportChat(userId);
   const [text, setText] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll only the message list. scrollIntoView would also scroll the whole page to the chat.
+    const list = listRef.current;
+    if (list) list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
 
   if (!userId) {
@@ -42,7 +44,7 @@ export default function SupportLiveChat() {
         </span>
       </header>
 
-      <div className="h-72 space-y-3 overflow-y-auto bg-gray-50 px-5 py-4" aria-live="polite">
+      <div ref={listRef} className="h-72 space-y-3 overflow-y-auto bg-gray-50 px-5 py-4" aria-live="polite">
         {messages.length === 0 && (
           <p className="pt-16 text-center text-sm text-gray-400">
             {connected ? "Say hello. Describe your issue and we will help." : "Connecting you to support…"}
@@ -67,7 +69,6 @@ export default function SupportLiveChat() {
             </div>
           </div>
         ))}
-        <div ref={endRef} />
       </div>
 
       <form
