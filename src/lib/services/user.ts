@@ -1,5 +1,6 @@
 import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "../supabase";
 import { supabaseAdmin } from "../supabase-admin";
+import { toE164Phone } from "../phoneFormat";
 
 const PROFILE_IMAGE_BUCKET = "profile-images";
 
@@ -94,6 +95,20 @@ export const usersAPI = {
   async getUserById(userId: string): Promise<UserRow | null> {
     const { data, error } = await getUserByIdWithSchema(userId);
     if (error) throw error;
+    
+    // If phone is missing in users table, try to get it from auth.users
+    if (data && !data.phone) {
+      try {
+        const { data: authData } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (authData?.user?.phone) {
+          data.phone = authData.user.phone;
+        }
+      } catch (authErr) {
+        console.warn('[usersAPI.getUserById] Failed to fetch auth.users phone:', authErr);
+      }
+    }
+    
+    if (data?.phone) data.phone = toE164Phone(data.phone);
     return data ?? null;
   },
 

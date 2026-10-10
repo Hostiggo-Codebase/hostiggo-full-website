@@ -1,0 +1,21 @@
+<!--
+  Supabase Auth -> Email Templates -> "Magic Link"
+  Sent when an EXISTING user signs in with their email.
+  Subject: Your Hostiggo verification code
+
+  Must contain {{ .Token }} and must NOT contain {{ .ConfirmationURL }}: the app
+  asks for a 6-digit code (FigmaAuthScreen / supabase.auth.verifyOtp), so a link
+  here is what makes Supabase "send magic links instead of OTP".
+-->
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111827">
+  <h2 style="margin:0 0 12px;font-size:20px">Your Hostiggo verification code</h2>
+  <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#374151">
+    Enter this code on the sign-in screen to continue:
+  </p>
+  <p style="margin:0 0 20px;font-size:32px;font-weight:700;letter-spacing:8px;color:#0b4a6f">
+    {{ .Token }}
+  </p>
+  <p style="margin:0;font-size:12px;line-height:1.5;color:#6b7280">
+    This code expires soon. If you didn't try to sign in to Hostiggo, you can ignore this email.
+  </p>
+</div>

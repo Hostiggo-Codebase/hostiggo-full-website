@@ -9,13 +9,13 @@ import { reverseGeocode } from '@/lib/services/geocoding';
 import { toast } from 'sonner';
 
 interface DestinationDropdownProps {
+  // Live text of the search bar's own destination input. The panel has no
+  // input of its own -- typing happens in the bar, and the suggestions
+  // follow this value.
   value: string;
   // Called with typed text when the dropdown closes without a pick, so the
   // search runs on what was typed -- not on every keystroke along the way.
   onQueryChange: (value: string) => void;
-  // Called on every keystroke, for a parent that only needs to remember the
-  // draft (e.g. so its Search button can use it) without searching on it.
-  onDraftChange?: (value: string) => void;
   // `state` is set when a specific place was picked from the list.
   onSelect: (value: string, state?: string) => void;
   onClose: () => void;
@@ -50,7 +50,6 @@ const FALLBACK_IMG = '/placeholder.svg';
 export default function DestinationDropdown({
   value,
   onQueryChange,
-  onDraftChange,
   onSelect,
   onClose,
   fullWidth = false,
@@ -61,12 +60,12 @@ export default function DestinationDropdown({
   useEffect(() => {
     panelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, []);
-  const [query, setQuery] = useState(value);
+  // The text being searched is the parent input's value.
+  const query = value;
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const [allListings, setAllListings] = useState<any[]>([]);
@@ -152,9 +151,10 @@ export default function DestinationDropdown({
     setRecent(getRecentSearches());
   }, []);
 
+  // Remember the latest typed text for the unmount commit above.
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    queryRef.current = value;
+  }, [value]);
 
   // Debounce API calls
   useEffect(() => {
@@ -237,18 +237,6 @@ export default function DestinationDropdown({
     );
   };
 
-  const handleQueryChange = (newQuery: string) => {
-    setQuery(newQuery);
-    queryRef.current = newQuery;
-    onDraftChange?.(newQuery);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && query.trim()) {
-      handleSelect(query);
-    }
-  };
-
   // Navigate straight to the results for a city (optionally focused on one of
   // its areas). Stays are stored at city level, so `destination` is always the
   // city; `area` is passed through only as display context for the results
@@ -272,35 +260,6 @@ export default function DestinationDropdown({
       className="dropdown-panel !relative shrink-0 animate-fade-in-down"
       style={{ width: fullWidth ? '100%' : 'min(560px, 92vw)' }}
     >
-      {/* Input */}
-      <div className="p-3 border-b border-gray-50">
-        <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
-          <MapPin className="w-4 h-4 text-figma-navy flex-shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => handleQueryChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Search destinations..."
-            aria-label="Search destinations"
-            className="flex-1 bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none font-medium"
-          />
-          {query && (
-            <button
-              type="button"
-              aria-label="Clear destination"
-              onClick={() => {
-                handleQueryChange('');
-              }}
-              className="text-gray-400 hover:text-gray-600 transition-colors text-xs font-bold"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
-
       <div className="max-h-[min(480px,calc(100dvh-12rem))] overflow-y-auto overscroll-contain scrollbar-hide">
         {query.trim() && cityGuide ? (
           /* Matched city guide: city header + popular areas */

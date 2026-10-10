@@ -31,13 +31,9 @@ export const authApi = {
   signInWithEmailOtp: async (email: string) => {
     return await supabase.auth.signInWithOtp({
       email,
-      options: { 
-        shouldCreateUser: true,
-        // Use email link redirect for magic link flow
-        emailRedirectTo: typeof window !== 'undefined' 
-          ? `${window.location.origin}/auth/callback` 
-          : undefined,
-      },
+      // Code-only login: the email carries the 6-digit {{ .Token }} (see
+      // supabase/templates/README.md). No emailRedirectTo -- that is for link emails.
+      options: { shouldCreateUser: true },
     });
   },
 

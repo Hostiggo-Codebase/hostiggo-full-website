@@ -56,7 +56,7 @@ const STATUS_META: Record<DayStatus, { label: string; dot: string; cell: string;
   none: { label: 'No rate set', dot: 'bg-gray-200', cell: 'hover:bg-gray-50', text: 'text-gray-300' },
 };
 
-type ListingOption = { id: string; title: string; location: string; image: string | null };
+type ListingOption = { id: string; title: string; location: string; image: string | null; basePrice: number; weekendPrice: number };
 
 // Replaces a plain native <select> that listed every one of a host's
 // properties as flat text -- fine for a couple of listings, but hosts with
@@ -182,7 +182,7 @@ function ListingPicker({
 export default function CalendarPage() {
   const { userId } = useAuth();
   const [listings, setListings] = useState<
-    { id: string; title: string; location: string; image: string | null }[]
+    ListingOption[]
   >([]);
   const [listingId, setListingId] = useState<string>('');
   const [monthDate, setMonthDate] = useState(() => {
@@ -227,6 +227,8 @@ export default function CalendarPage() {
             title: r.title?.trim() || `Listing ${r.listing_id}`,
             location: [loc?.district, loc?.state].filter(Boolean).join(', '),
             image: cover?.media_url ?? null,
+            basePrice: Number(r.price_weekday ?? 0),
+            weekendPrice: Number(r.price_weekend ?? r.price_weekday ?? 0),
           };
         });
         setListings(mapped);
@@ -357,6 +359,8 @@ export default function CalendarPage() {
     loadICalStatus();
   }, [loadICalStatus]);
 
+  const currentListing = listings.find((l) => l.id === listingId) ?? null;
+
   // Build a date -> DayInfo map for the visible month.
   const days = useMemo<DayInfo[]>(() => {
     const entryMap = new Map<string, any>();
@@ -378,20 +382,26 @@ export default function CalendarPage() {
       const dateStr = toDateStr(year, month, d);
       const entry = entryMap.get(dateStr);
       const booking = isBooked(dateStr);
-      let status: DayStatus = 'none';
+      // Every date is available by default; only an explicit block or a booking changes that.
+      let status: DayStatus = 'available';
       if (booking.booked) status = 'booked';
-      else if (entry) status = entry.is_available ? 'available' : 'blocked';
+      else if (entry && !entry.is_available) status = 'blocked';
+      // A row without a real override price (0 / missing) falls back to the listing's base rate.
+      const dow = new Date(year, month, d).getDay();
+      const baseRate = dow === 5 || dow === 6 ? currentListing?.weekendPrice : currentListing?.basePrice;
+      const overridePrice = entry ? Number(entry.price) : 0;
+      const price = overridePrice > 0 ? overridePrice : baseRate && baseRate > 0 ? baseRate : null;
       out.push({
         day: d,
         dateStr,
-        price: entry ? Number(entry.price) : null,
+        price,
         currency: entry?.currency ?? 'INR',
         status,
         guest: booking.guest,
       });
     }
     return out;
-  }, [entries, bookings, year, month]);
+  }, [entries, bookings, year, month, currentListing]);
 
   const leading = new Date(year, month, 1).getDay();
   const selected = selectedDay ? days.find((d) => d.dateStr === selectedDay) : null;
@@ -494,7 +504,7 @@ export default function CalendarPage() {
 
           {/* Legend */}
           <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
-            {(['available', 'blocked', 'booked', 'none'] as DayStatus[]).map((s) => (
+            {(['available', 'blocked', 'booked'] as DayStatus[]).map((s) => (
               <span key={s} className="flex items-center gap-1.5">
                 <span className={cn('w-2.5 h-2.5 rounded-full', STATUS_META[s].dot)} />
                 {STATUS_META[s].label}

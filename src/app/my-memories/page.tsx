@@ -71,10 +71,6 @@ interface Booking {
   priceWeekend: number | null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mock Data
-// ─────────────────────────────────────────────────────────────────────────────
-
 const today = new Date();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -106,69 +102,6 @@ const fmtHeaderDate = (d: Date) => {
 
 const fmtMonthYear = (d: Date) =>
   d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-
-const SAMPLE_BOOKINGS: Booking[] = [
-  {
-    id: 'sample-upcoming-1',
-    title: 'The Great Rooms Of Triply Home Services',
-    image: '/images/empty-states/sample-bedroom.jpg',
-    location: 'Hawa Mahal',
-    distanceText: '0.5 km from Hawa Mahal',
-    checkIn: new Date(today.getTime() + 2 * 86400000),
-    checkOut: new Date(today.getTime() + 4 * 86400000),
-    status: 'upcoming',
-    coordinates: { lat: 26.9239, lng: 75.8267 },
-    guests: { adults: 2, children: 0, rooms: 1, pets: false },
-    amount: 14500,
-    priceWeekday: 7250,
-    priceWeekend: 7250,
-  },
-  {
-    id: 'sample-completed-1',
-    title: 'The Great Rooms Of Triply Home Services',
-    image: '/images/empty-states/sample-bedroom.jpg',
-    location: 'Shimla',
-    distanceText: '0.5 km from Hawa Mahal',
-    checkIn: new Date(2026, 5, 3),
-    checkOut: new Date(2026, 5, 5),
-    status: 'completed',
-    coordinates: { lat: 31.1048, lng: 77.1734 },
-    guests: { adults: 2, children: 0, rooms: 1, pets: false },
-    amount: 12000,
-    priceWeekday: 6000,
-    priceWeekend: 6000,
-  },
-  {
-    id: 'sample-completed-2',
-    title: 'The Great Rooms Of Triply Home Services',
-    image: '/images/empty-states/sample-bedroom.jpg',
-    location: 'Darjiling',
-    distanceText: '0.5 km from Hawa Mahal',
-    checkIn: new Date(2026, 5, 30),
-    checkOut: new Date(2026, 6, 2),
-    status: 'completed',
-    coordinates: { lat: 27.041, lng: 88.2663 },
-    guests: { adults: 2, children: 0, rooms: 1, pets: false },
-    amount: 12000,
-    priceWeekday: 6000,
-    priceWeekend: 6000,
-  },
-  {
-    id: 'sample-cancelled-1',
-    title: 'The Great Rooms Of Triply Home Services',
-    image: '/images/empty-states/sample-bedroom.jpg',
-    location: 'Shimla',
-    distanceText: '0.5 km from Hawa Mahal',
-    checkIn: new Date(2026, 5, 3),
-    checkOut: new Date(2026, 5, 5),
-    status: 'cancelled',
-    coordinates: { lat: 31.1048, lng: 77.1734 },
-    guests: { adults: 2, children: 0, rooms: 1, pets: false },
-    amount: 12000,
-    priceWeekday: 6000,
-    priceWeekend: 6000,
-  },
-];
 
 function getDaysLeft(checkIn: Date): number {
   return Math.ceil((checkIn.getTime() - today.getTime()) / 86400000);
@@ -1214,9 +1147,9 @@ function BookingCard({
     }
   };
 
-  const headerDate = booking.id === 'sample-completed-2' ? '31 June' : fmtHeaderDate(booking.checkIn);
-  const checkInDisplay = booking.id === 'sample-upcoming-1' ? 'wed, 25 Dec' : fmtFigmaDate(booking.checkIn);
-  const checkOutDisplay = booking.id === 'sample-upcoming-1' ? 'Fri, 27 Dec' : fmtFigmaDate(booking.checkOut);
+  const headerDate = fmtHeaderDate(booking.checkIn);
+  const checkInDisplay = fmtFigmaDate(booking.checkIn);
+  const checkOutDisplay = fmtFigmaDate(booking.checkOut);
 
   return (
     <div className="w-full flex flex-col">
@@ -1733,6 +1666,29 @@ function EmptyState({ tab }: { tab: TabKey }) {
   );
 }
 
+function LoadErrorState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[420px] text-center px-6 animate-fade-in">
+      <div className="rounded-full bg-red-50 text-red-500 p-4 mb-5">
+        <XCircle className="w-8 h-8" />
+      </div>
+      <h2 className="text-[24px] sm:text-[30px] font-semibold italic text-[#1A1A1A] mb-3 font-['Poppins']">
+        We could not load your trips
+      </h2>
+      <p className="text-[15px] text-gray-500 max-w-md mb-6 font-['Poppins']">
+        Your booking history is safe. Please try again, and if it keeps happening contact Hostiggo support.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="bg-[#004772] text-white px-6 py-2.5 rounded-xl text-[14px] font-semibold hover:bg-[#003a5c] transition-all shadow-sm"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tab Switcher
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1828,15 +1784,14 @@ export default function MyMemoriesPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [managingId, setManagingId] = useState<string | null>(null);
   const { userId, loading: isLoading } = useAuth();
-  const [isPreview, setIsPreview] = useState(false);
   const [isAddonsMode, setIsAddonsMode] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const hasCardsPreview = params.get('preview') === 'cards';
       const hasAddons = params.get('addons') === 'true' || params.get('preview') === 'addons';
-      setIsPreview(hasCardsPreview || hasAddons);
       setIsAddonsMode(hasAddons);
       // Deep link from the booking confirmation page: open that booking's
       // manage sheet (dates, guests, cancel with refund preview).
@@ -1854,11 +1809,13 @@ export default function MyMemoriesPage() {
       const resolvedUserId = userId;
       if (!resolvedUserId) {
         setBookings([]);
+        setLoadError(false);
         setLoading(false);
         return;
       }
 
       setLoading(true);
+      setLoadError(false);
       try {
         const labels: TabKey[] = ['upcoming', 'completed', 'cancelled'];
         const results = await Promise.all(
@@ -1869,7 +1826,10 @@ export default function MyMemoriesPage() {
         }
       } catch (error) {
         console.error('[memories] failed to load bookings:', error);
-        if (mounted) setBookings([]);
+        if (mounted) {
+          setBookings([]);
+          setLoadError(true);
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -1880,11 +1840,10 @@ export default function MyMemoriesPage() {
     return () => {
       mounted = false;
     };
-  }, [userId, isLoading]);
+  }, [userId, isLoading, reloadKey]);
 
-  const effectiveBookings = isPreview && bookings.length === 0 ? SAMPLE_BOOKINGS : bookings;
-  const filtered = effectiveBookings.filter((b) => b.status === activeTab);
-  const managingBooking = effectiveBookings.find((b) => b.id === managingId) ?? null;
+  const filtered = bookings.filter((b) => b.status === activeTab);
+  const managingBooking = bookings.find((b) => b.id === managingId) ?? null;
 
   // A deep-linked booking may live under another tab -- show that tab.
   useEffect(() => {
@@ -1922,13 +1881,15 @@ export default function MyMemoriesPage() {
 
         {/* Content */}
         <div key={activeTab} className="flex-1 flex flex-col justify-center animate-fade-in">
-          {!userId && !isPreview ? (
+          {!userId ? (
             <SignedOutState />
-          ) : loading && !isPreview ? (
+          ) : loading ? (
             <div className="flex flex-col gap-4">
               <SkeletonCard />
               <SkeletonCard />
             </div>
+          ) : loadError ? (
+            <LoadErrorState onRetry={() => setReloadKey((key) => key + 1)} />
           ) : filtered.length === 0 ? (
             <EmptyState tab={activeTab} />
           ) : (

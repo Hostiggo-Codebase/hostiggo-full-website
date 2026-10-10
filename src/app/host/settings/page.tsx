@@ -26,6 +26,7 @@ import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboa
 import { useAuth } from '@/context/AuthContext';
 import { useKycStatus } from '@/hooks/useKycStatus';
 import BankDetailsNotice from '@/components/features/BankDetailsNotice';
+import { STATES_AND_UTS } from '@/lib/indianStates';
 import KycModal from '@/components/features/KycModal';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -459,6 +460,17 @@ export default function HostSettingsPage() {
                       onChange={(e) => setPhone(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-figma-navy focus:border-transparent outline-none text-sm"
                     />
+                    <p
+                      className={`ml-1 text-xs ${
+                        phone.trim() && phone.replace(/\D/g, '').slice(-10).length !== 10
+                          ? 'text-red-600'
+                          : 'text-gray-500'
+                      }`}
+                    >
+                      {phone.trim() && phone.replace(/\D/g, '').slice(-10).length !== 10
+                        ? 'Enter a valid 10-digit mobile number.'
+                        : 'Required to create your payout account. Without a valid 10-digit mobile number, payouts cannot be set up.'}
+                    </p>
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end">
@@ -500,6 +512,37 @@ export default function HostSettingsPage() {
                     </button>
                   )}
                 </div>
+
+                {(() => {
+                  const savedPhoneOk = (profile?.phone ?? '').replace(/\D/g, '').slice(-10).length === 10;
+                  return savedPhoneOk ? (
+                    <div className="mb-6 flex items-start gap-2 p-4 rounded-xl bg-figma-navy/5 border border-figma-navy/15">
+                      <Landmark className="w-4 h-4 text-figma-navy shrink-0 mt-0.5" />
+                      <p className="text-xs text-gray-700">
+                        <span className="font-bold">Your mobile number is used to create your payout account.</span>{' '}
+                        If you change it in Personal Info, your payout account is updated to match.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mb-6 flex items-start gap-2 p-4 rounded-xl bg-amber-50 border border-amber-200">
+                      <Landmark className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-800">
+                        <p>
+                          <span className="font-bold">Add your phone number to set up payouts.</span>{' '}
+                          A valid 10-digit mobile number is mandatory to create your payout account. Your
+                          bank details can be saved, but payouts stay inactive until it is added.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setTab('personal')}
+                          className="mt-2 font-bold underline hover:text-amber-900"
+                        >
+                          Add phone number in Personal Info
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {loadingPayoutMethod ? (
                   <div className="p-8 flex justify-center">
@@ -697,12 +740,20 @@ export default function HostSettingsPage() {
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-500 mb-1">State <span className="text-red-500">*</span></label>
-                        <input
-                          type="text"
+                        <select
                           value={payoutForm.state}
                           onChange={(e) => setPayoutForm((f) => ({ ...f, state: e.target.value }))}
-                          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
-                        />
+                          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
+                        >
+                          <option value="">Select state</option>
+                          {/* Keep a previously saved value that isn't on the list selectable. */}
+                          {payoutForm.state && !(STATES_AND_UTS as readonly string[]).includes(payoutForm.state) && (
+                            <option value={payoutForm.state}>{payoutForm.state}</option>
+                          )}
+                          {STATES_AND_UTS.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 

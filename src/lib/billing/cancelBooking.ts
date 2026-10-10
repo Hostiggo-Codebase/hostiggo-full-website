@@ -78,7 +78,7 @@ export async function previewCancellationRefund(params: {
 
   const { data: bookingRaw, error: bookingErr } = await supabaseAdmin
     .from("bookings")
-    .select("booking_id, listing_id, user_id, start_date, end_date, status_id")
+    .select("booking_id, listing_id, user_id, start_date, end_date, status_id, invoice")
     .eq("booking_id", bookingId)
     .maybeSingle();
   if (bookingErr) throw bookingErr;
@@ -86,7 +86,7 @@ export async function previewCancellationRefund(params: {
   const booking = bookingRaw as unknown as Pick<
     BookingRow,
     "booking_id" | "listing_id" | "user_id" | "start_date" | "end_date" | "status_id"
-  >;
+  > & { invoice?: unknown };
   if (booking.user_id !== requestingUserId) {
     throw new CancellationValidationError("You don't have permission to view this booking.");
   }
@@ -106,13 +106,16 @@ export async function previewCancellationRefund(params: {
   const priceWeekday = Number(listing.price_weekday ?? 0);
   const priceWeekend = Number(listing.price_weekend ?? priceWeekday);
   const addonPrices = await fetchBookingAddonPrices(bookingId);
-  const { invoice } = reconstructInvoice(
+  const { invoice: rebuiltInvoice } = reconstructInvoice(
     booking.start_date,
     booking.end_date,
     priceWeekday,
     priceWeekend,
     addonPrices,
   );
+  // What the guest actually paid is frozen on the booking (calendar-price overrides
+  // included); older rows fall back to the rebuilt invoice.
+  const invoice = (booking.invoice ?? rebuiltInvoice) as typeof rebuiltInvoice;
   const refundCalc = calculateRefund({
     invoice,
     checkIn: checkInMoment(booking.start_date, listing.check_in_time),

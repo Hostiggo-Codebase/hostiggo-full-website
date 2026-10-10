@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "./ReloadingLink";
 import CopyrightBar from "./CopyrightBar";
 import CookieSettingsButton from "./CookieSettingsButton";
 import { SOCIAL_LINKS, SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, WHATSAPP_URL } from "@/lib/site";
@@ -27,6 +27,7 @@ const footerSections: { title: string; links: FooterLink[] }[] = [
   {
     title: "Support",
     links: [
+      { label: "Customer support", href: "/support" },
       { label: "Help centre", href: "/help" },
       { label: "Chat guidelines", href: "/help/chat-guidelines" },
       { label: "Refunds explained", href: "/help/refunds" },

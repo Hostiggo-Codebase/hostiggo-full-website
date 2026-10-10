@@ -1,7 +1,7 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-export type PayoutBlocker = "kyc" | "bank" | "payout";
+export type PayoutBlocker = "kyc" | "bank" | "payout" | "phone";
 
 export type HostPayoutReadiness = {
   /** A listing may be live only when this is true. */
@@ -11,12 +11,14 @@ export type HostPayoutReadiness = {
   kycVerified: boolean;
   bankVerified: boolean;
   payoutCreated: boolean;
+  phoneAdded: boolean;
 };
 
 export const PAYOUT_BLOCKER_MESSAGES: Record<PayoutBlocker, string> = {
-  kyc: "Verify your identity with PAN",
+  phone: "Add your phone number",
+  kyc: "Verify your identity (PAN)",
   bank: "Verify your bank account",
-  payout: "Finish payout setup",
+  payout: "Complete payout setup",
 };
 
 /**
@@ -35,7 +37,7 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
     .maybeSingle();
   if (hostErr) throw hostErr;
 
-  const [pan, bank, payout] = await Promise.all([
+  const [pan, bank, payout, user, authUser] = await Promise.all([
     supabaseAdmin
       .from("kyc_requests")
       .select("id")
@@ -61,11 +63,20 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
           .eq("host_uuid", hostRow.host_uuid)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    supabaseAdmin
+      .from("users")
+      .select("phone")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabaseAdmin.auth.admin.getUserById(userId),
   ]);
   if (pan.error) throw pan.error;
   if (bank.error) throw bank.error;
   if (payout.error) throw payout.error;
+  if (user.error) throw user.error;
 
+  // Check phone in users table first, then fall back to auth.users
+  const phoneAdded = !!(user.data?.phone || authUser.data?.user?.phone);
   const kycVerified = !!pan.data;
   const bankVerified = bank.data?.status === "success";
   const p = payout.data;
@@ -75,12 +86,14 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
     !!p?.razorpay_product_id &&
     p.status !== "rejected";
 
+  // Phone number must be first, then KYC, bank, and payout
   const blockers: PayoutBlocker[] = [];
+  if (!phoneAdded) blockers.push("phone");
   if (!kycVerified) blockers.push("kyc");
   if (!bankVerified) blockers.push("bank");
   if (!payoutCreated) blockers.push("payout");
 
-  return { ready: blockers.length === 0, blockers, kycVerified, bankVerified, payoutCreated };
+  return { ready: blockers.length === 0, blockers, kycVerified, bankVerified, payoutCreated, phoneAdded };
 }
 
 export class PayoutNotReadyError extends Error {

@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CreditCard, Landmark, CheckCircle2, XCircle, Clock, FileText, BookUser, Upload, Lock } from 'lucide-react';
+import { CreditCard, Landmark, CheckCircle2, XCircle, Clock, FileText, BookUser, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
-import DigilockerSdkButton, { type DigilockerSession } from '@/components/DigilockerSdkButton';
 import { deferKyc, markKycSubmitted } from '@/lib/kyc';
 import { formatPanInput, isValidPanNumber } from '@/lib/pan';
 import { useKycStatus } from '@/hooks/useKycStatus';
@@ -31,6 +30,7 @@ const ID_METHODS: Record<IdMethod, { label: string; icon: typeof CreditCard }> =
 
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const ACCOUNT_RE = /^\d{9,18}$/;
+const AADHAAR_RE = /^[2-9]\d{11}$/;
 
 function ResultBanner({ result }: { result: IdResult | BankResult }) {
   if (!result) return null;
@@ -98,11 +98,7 @@ export function KycVerificationForm({
   const [fullName, setFullName] = useState(defaultName);
   const [idMethod, setIdMethod] = useState<IdMethod>('pan');
   const [pan, setPan] = useState('');
-  const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
-  const [aadhaarPassword, setAadhaarPassword] = useState('');
-  const [yob, setYob] = useState('');
-  const [useDigilocker, setUseDigilocker] = useState(false);
-  const [dlSession, setDlSession] = useState<DigilockerSession | null>(null);
+  const [aadhaarNumber, setAadhaarNumber] = useState('');
   const [passportFileNo, setPassportFileNo] = useState('');
   const [dob, setDob] = useState('');
   const [verifiedMethod, setVerifiedMethod] = useState<IdMethod | null>(null);
@@ -123,14 +119,11 @@ export function KycVerificationForm({
     if (defaultName) setFullName((current) => current || defaultName);
   }, [defaultName]);
 
-  const thisYear = new Date().getFullYear();
   const isIdValid =
     idMethod === 'pan'
       ? isValidPanNumber(pan)
       : idMethod === 'aadhaar'
-        ? useDigilocker 
-          ? true // DigiLocker only needs name, validated by hasName check
-          : Boolean(aadhaarFile) && aadhaarPassword.length > 0 && /^\d{4}$/.test(yob) && Number(yob) >= 1900 && Number(yob) <= thisYear
+        ? AADHAAR_RE.test(aadhaarNumber)
         : /^[A-Z0-9]{8,15}$/.test(passportFileNo) && Boolean(dob);
   const hasName = fullName.trim().length > 1;
   const canSubmitId = hasName && isIdValid && consent && !idSubmitting;
@@ -155,19 +148,11 @@ export function KycVerificationForm({
     try {
       const name = fullName.trim();
       
-      // Handle DigiLocker flow for Aadhaar
-      if (idMethod === 'aadhaar' && useDigilocker) {
-        const result = await api.initializeDigilocker(name);
-        // The SDK button (rendered below the form) opens DigiLocker.
-        setDlSession({ clientId: result.clientId, token: result.token, ticket: result.ticket });
-        return;
-      }
-      
       const body =
         idMethod === 'pan'
           ? await api.verifyPan(pan.trim().toUpperCase(), name)
           : idMethod === 'aadhaar'
-            ? await api.verifyAadhaar({ file: aadhaarFile as File, yob, fullName: name, password: aadhaarPassword })
+            ? await api.verifyAadhaar({ idNumber: aadhaarNumber, fullName: name })
             : await api.verifyPassport({ fileNumber: passportFileNo, dob, fullName: name });
       const status = body?.status ?? 'pending';
       setIdResult({ status, reason: body?.reason ?? null });
@@ -327,103 +312,26 @@ export function KycVerificationForm({
 
           {idMethod === 'aadhaar' && (
             <div className="space-y-3">
-              {/* DigiLocker Option */}
-              <div className="flex items-center justify-between gap-4 rounded-lg bg-blue-50 border border-blue-200 p-3">
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-blue-900">Verify with DigiLocker</p>
-                  <p className="text-xs text-blue-700 mt-0.5">Faster & easier - no PDF upload needed</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setUseDigilocker(!useDigilocker)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    useDigilocker
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-blue-600 border border-blue-600'
-                  }`}
-                >
-                  {useDigilocker ? 'Using DigiLocker' : 'Use DigiLocker'}
-                </button>
-              </div>
-
-              {/* eAadhaar PDF Upload - only show if not using DigiLocker */}
-              {!useDigilocker && (
-                <>
-                  <div>
-                    <label htmlFor="aadhaarFile" className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 mb-1.5">
-                      <FileText className="w-3.5 h-3.5" />
-                      eAadhaar PDF
-                    </label>
-                <label
-                  htmlFor="aadhaarFile"
-                  className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-dashed border-gray-300 text-sm cursor-pointer hover:border-figma-navy/40 hover:bg-gray-50 transition-all"
-                >
-                  <Upload className="w-4 h-4 text-gray-400 shrink-0" />
-                  <span className={cn('truncate', aadhaarFile ? 'text-gray-900' : 'text-gray-400')}>
-                    {aadhaarFile ? aadhaarFile.name : 'Choose your eAadhaar PDF (max 5 MB)'}
-                  </span>
-                </label>
-                <input
-                  id="aadhaarFile"
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] ?? null;
-                    if (f && f.size > 5 * 1024 * 1024) {
-                      toast.error('The PDF is too large (max 5 MB).');
-                      return;
-                    }
-                    setAadhaarFile(f);
-                  }}
-                />
-                <p className="text-[11px] text-gray-400 mt-1.5">
-                  Download it from{' '}
-                  <a
-                    href="https://myaadhaar.uidai.gov.in/genricDownloadAadhaar"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-figma-navy underline"
-                  >
-                    myaadhaar.uidai.gov.in
-                  </a>
-                  . Upload the original PDF -- a scan or photo won&apos;t work.
-                </p>
-              </div>
               <div>
-                <label htmlFor="aadhaarPassword" className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 mb-1.5">
-                  <Lock className="w-3.5 h-3.5" />
-                  eAadhaar PDF password
+                <label htmlFor="aadhaarNumber" className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 mb-1.5">
+                  <FileText className="w-3.5 h-3.5" />
+                  Aadhaar number
                 </label>
                 <input
-                  id="aadhaarPassword"
-                  type="password"
-                  autoComplete="off"
-                  value={aadhaarPassword}
-                  onChange={(e) => setAadhaarPassword(e.target.value)}
-                  placeholder="Enter the password for the downloaded PDF"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
-                />
-                <p className="text-[11px] text-gray-400 mt-1.5">
-                  UIDAI eAadhaar PDFs usually use the first four letters of your name in capitals followed by your birth year.
-                </p>
-              </div>
-              <div>
-                <label htmlFor="yob" className="block text-xs font-semibold text-gray-600 mb-1.5">
-                  Year of birth
-                </label>
-                <input
-                  id="yob"
+                  id="aadhaarNumber"
                   type="text"
                   inputMode="numeric"
-                  value={yob}
-                  onChange={(e) => setYob(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  placeholder="1990"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
+                  autoComplete="off"
+                  value={aadhaarNumber}
+                  onChange={(e) => setAadhaarNumber(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                  placeholder="1234 5678 9012"
+                  maxLength={12}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm tracking-widest outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
                 />
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  We send this to SurePass for validation and store only the masked digits.
+                </p>
               </div>
-                </>
-              )}
             </div>
           )}
 
@@ -481,40 +389,14 @@ export function KycVerificationForm({
 
           <ResultBanner result={idResult} />
 
-          {dlSession && idMethod === 'aadhaar' && useDigilocker ? (
-            <DigilockerSdkButton
-              session={dlSession}
-              fullName={fullName.trim()}
-              onResult={(result) => {
-                setDlSession(null);
-                setIdResult({ status: result.status, reason: result.reason });
-                if (result.status === 'verified') {
-                  setVerifiedMethod('aadhaar');
-                  toast.success('Your Aadhaar has been verified!');
-                } else {
-                  toast.error(result.reason || 'Aadhaar verification failed.');
-                }
-                markKycSubmitted(userId);
-                refreshKycStatus();
-              }}
-              onError={(message) => {
-                setDlSession(null);
-                toast.error(message);
-              }}
-            />
-          ) : (
-          <button
-            type="submit"
-            disabled={!canSubmitId}
-            className="w-full py-3 bg-figma-navy text-white text-sm font-semibold rounded-xl hover:bg-figma-navy/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          >
-            {idSubmitting
-              ? 'Verifying…'
-              : idMethod === 'aadhaar' && useDigilocker
-                ? 'Continue with DigiLocker'
-                : `Verify ${ID_METHODS[idMethod].label}`
-            }
-          </button>
+          {!idVerified && (
+            <button
+              type="submit"
+              disabled={!canSubmitId}
+              className="w-full py-3 bg-figma-navy text-white text-sm font-semibold rounded-xl hover:bg-figma-navy/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              {idSubmitting ? 'Verifying...' : `Verify ${ID_METHODS[idMethod].label}`}
+            </button>
           )}
         </form>
       )}
@@ -576,13 +458,15 @@ export function KycVerificationForm({
 
               <ResultBanner result={bankResult} />
 
-              <button
-                type="submit"
-                disabled={!canSubmitBank}
-                className="w-full py-3 bg-figma-navy text-white text-sm font-semibold rounded-xl hover:bg-figma-navy/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                {bankSubmitting ? 'Verifying…' : 'Verify bank account'}
-              </button>
+              {!bankVerified && (
+                <button
+                  type="submit"
+                  disabled={!canSubmitBank}
+                  className="w-full py-3 bg-figma-navy text-white text-sm font-semibold rounded-xl hover:bg-figma-navy/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  {bankSubmitting ? 'Verifying…' : 'Verify bank account'}
+                </button>
+              )}
             </form>
           )}
         </>

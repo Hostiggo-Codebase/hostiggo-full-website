@@ -280,23 +280,27 @@ export async function PATCH(req: NextRequest) {
     // Both lookups must match the name payouts will be made out to.
     const holderName = changes.account_holder_name ?? existing?.account_holder_name ?? null;
     
-    // Always re-verify bank account when account number is provided in the request,
-    // even if it hasn't changed. This allows testing API integrity and ensures
-    // the most up-to-date verification status.
+    // Only call SurePass when the account is new/changed or has no successful
+    // verification on file. Re-checking an already-verified, unchanged account
+    // on every save just burns the provider's rate limit and can block a host
+    // whose details are fine.
     if (accountNumber) {
-      const bank = await verifyBankAccount(userId, accountNumber, ifsc, holderName);
-      if (!bank.verified) {
-        return NextResponse.json(
-          { error: `Bank account could not be verified: ${bank.reason ?? "please check the account number and IFSC."}` },
-          { status: 400 },
-        );
+      const verifiedOnFile = bankChanged ? null : await latestValidBankVerification(userId, accountNumber);
+      if (!verifiedOnFile) {
+        const bank = await verifyBankAccount(userId, accountNumber, ifsc, holderName);
+        if (!bank.verified) {
+          return NextResponse.json(
+            { error: `Bank account could not be verified: ${bank.reason ?? "please check the account number and IFSC."}` },
+            { status: bank.rateLimited ? 429 : 400 },
+          );
+        }
       }
       if (bankChanged) {
         changes.bank_account_number = accountNumber;
         changes.bank_ifsc = ifsc;
       }
     }
-    
+
     if (panChanged) {
       const result = await verifyPanNumber(userId, pan, holderName);
       if (result.status !== "verified") {

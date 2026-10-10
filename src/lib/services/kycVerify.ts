@@ -1,6 +1,7 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { isSurepassConfigured, surepassPost, maskMiddle, sha256Hex, logKycRequest } from "@/lib/surepass";
+import { rateLimit } from "@/lib/rateLimit";
 
 // Shared SurePass verification, used by /api/verify/bank, /api/verify/pan
 // and by /api/host/payout-methods when a host edits their bank or PAN --
@@ -111,7 +112,7 @@ export type BankVerificationResult =
       branch: string | null;
       providerReference: string | null;
     }
-  | { verified: false; reason: string | null };
+  | { verified: false; reason: string | null; rateLimited?: boolean };
 
 export async function verifyBankAccount(
   userId: string,
@@ -121,6 +122,17 @@ export async function verifyBankAccount(
 ): Promise<BankVerificationResult> {
   if (!isSurepassConfigured()) {
     return { verified: false, reason: "Bank verification is not configured yet (missing SUREPASS_API_KEY)." };
+  }
+
+  // Every call here spends SurePass quota, and repeated clicks while SurePass is
+  // already throttling just extend the throttle. Cap real lookups per user; the
+  // caller shows this message instead of hitting the provider again.
+  if (await rateLimit(`bank-verify:${userId}`, 3, 10 * 60_000)) {
+    return {
+      verified: false,
+      rateLimited: true,
+      reason: "Too many bank verification attempts. Please wait about 10 minutes and try again.",
+    };
   }
 
   const logAttempt = (params: { status: string; providerReference: string | null; errorMessage: string | null }) =>
@@ -142,6 +154,17 @@ export async function verifyBankAccount(
 
   if (!res.ok || !json?.success) {
     console.error("[kycVerify] bank error:", res.status, json);
+    // A provider throttle says nothing about the account itself. Don't log it
+    // as a failed verification: payout onboarding keys off the latest bank
+    // attempt, so a throttled retry would otherwise block an account that was
+    // already verified.
+    if (res.status === 429 || /rate limit/i.test(String(json?.message ?? ""))) {
+      return {
+        verified: false,
+        rateLimited: true,
+        reason: "Bank verification is busy right now. Please wait a few minutes and try again.",
+      };
+    }
     const reason = json?.message || `Verification provider error (${res.status}).`;
     await logAttempt({ status: "failed", providerReference: null, errorMessage: reason });
     return { verified: false, reason };

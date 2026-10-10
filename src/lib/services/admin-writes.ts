@@ -4,6 +4,7 @@ import { todayInIndia } from "@/lib/booking-config";
 import { SCHEMA } from "../schema.constants";
 import { canonicalPlaceName } from "../destinationAliases";
 import { calculateBookingInvoice } from "../billing/invoice";
+import { discountedStaySubtotal, pickStayDiscount, type StayDiscountRow } from "../billing/stayDiscounts";
 import { getHostPayoutReadiness } from "./hostPayoutReadiness";
 import { DatesUnavailableError, isDatabaseAvailabilityError } from "../stayDates";
 
@@ -333,18 +334,43 @@ export async function validateAndPriceBooking(input: BookingInput) {
   const stayNights = eachDateInRange(input.startDate, input.endDate);
   const priceWeekday = Number(listing.price_weekday ?? 0);
   const priceWeekend = Number(listing.price_weekend ?? priceWeekday);
-  const subtotal = stayNights.reduce((sum, date) => {
+  // A host's per-date calendar price (listing_calendar.price > 0) overrides the
+  // weekday/weekend rate for that night; rows with price 0/null are not overrides.
+  const { data: calendarPrices, error: calendarPriceErr } = await supabaseAdmin
+    .from("listing_calendar")
+    .select("date, price")
+    .eq("listing_id", input.listingId)
+    .gte("date", input.startDate)
+    .lt("date", input.endDate);
+  if (calendarPriceErr) throw calendarPriceErr;
+  const overrides = new Map<string, number>();
+  for (const row of calendarPrices ?? []) {
+    const price = Number((row as { price: unknown }).price);
+    if (Number.isFinite(price) && price > 0) overrides.set(String((row as { date: unknown }).date).slice(0, 10), price);
+  }
+  const nightRate = (date: string) => {
+    const override = overrides.get(date);
+    if (override !== undefined) return override;
     const dow = new Date(date + "T00:00:00Z").getUTCDay();
-    const isWeekend = dow === 5 || dow === 6; // Friday or Saturday night
-    return sum + (isWeekend ? priceWeekend : priceWeekday);
-  }, 0);
+    return dow === 5 || dow === 6 ? priceWeekend : priceWeekday; // Friday or Saturday night
+  };
+  // The single best host discount (new listing / weekly / monthly) comes off every night.
+  const [{ data: discountRows, error: discountErr }, { count: priorConfirmed, error: priorErr }] = await Promise.all([
+    supabaseAdmin.from("listing_discounts").select("discount_type, percent, enabled, valid_from, valid_to, min_stay_nights").eq("listing_id", input.listingId),
+    supabaseAdmin.from("bookings").select("booking_id", { count: "exact", head: true }).eq("listing_id", input.listingId).eq("status_id", 2),
+  ]);
+  if (discountErr) throw discountErr;
+  if (priorErr) throw priorErr;
+  const stayDiscount = pickStayDiscount((discountRows ?? []) as StayDiscountRow[], {
+    nights: stayNights.length,
+    checkIn: input.startDate,
+    priorConfirmedBookings: priorConfirmed ?? 0,
+  });
+  const subtotal = discountedStaySubtotal(stayNights.map(nightRate), stayDiscount);
   // Which GST slab applies (5%/18%) is decided by the check-in night's own
-  // declared-tariff rate, not by the summed multi-night total -- see
-  // calculateBookingInvoice's gstRateBasisPrice.
-  const checkInDow = stayNights.length
-    ? new Date(stayNights[0] + "T00:00:00Z").getUTCDay()
-    : 0;
-  const gstRateBasisPrice = checkInDow === 5 || checkInDow === 6 ? priceWeekend : priceWeekday;
+  // declared-tariff rate (before any discount), not by the summed multi-night
+  // total -- see calculateBookingInvoice's gstRateBasisPrice.
+  const gstRateBasisPrice = stayNights.length ? nightRate(stayNights[0]) : priceWeekday;
 
   let resolvedAddons: { name: string; price: number; type: string | null }[] = [];
   if (input.addonIds?.length) {
@@ -1070,35 +1096,50 @@ function eachDateInRange(startDate: string, endDate: string): string[] {
 // ── Reviews ──────────────────────────────────────────────────────────────────
 export class ReviewNotAllowedError extends Error {}
 
+/**
+ * Only verified guests review: a confirmed (not cancelled) stay at this
+ * listing whose check-out date has passed, and at most one review per
+ * completed stay -- so ratings can't be stuffed by the host's friends or by
+ * one guest reviewing repeatedly. Shared by the review form (to decide
+ * whether to show it at all) and createReview (which enforces it).
+ */
+export async function getReviewEligibility(
+  listingId: number,
+  userId: string,
+): Promise<{ canReview: boolean; reason: string | null }> {
+  const today = todayInIndia();
+  const { count: completedStays, error: eligErr } = await supabaseAdmin
+    .from("bookings")
+    .select("booking_id", { count: "exact", head: true })
+    .eq("listing_id", listingId)
+    .eq("user_id", userId)
+    .eq("status_id", 2) // CONFIRMED
+    .lte("end_date", today); // checked out
+  if (eligErr) throw eligErr;
+  if (!completedStays) {
+    return { canReview: false, reason: "You can review a stay once you've checked out." };
+  }
+  const { count: existingReviews, error: countErr } = await supabaseAdmin
+    .from("review")
+    .select("review_id", { count: "exact", head: true })
+    .eq("listing_id", listingId)
+    .eq("user_id", userId);
+  if (countErr) throw countErr;
+  if ((existingReviews ?? 0) >= completedStays) {
+    return { canReview: false, reason: "You've already reviewed this stay." };
+  }
+  return { canReview: true, reason: null };
+}
+
 export async function createReview(input: {
   listingId: number;
   userId: string;
   rating: number;
   comment?: string | null;
 }) {
-  // Only verified guests review: a confirmed stay at this listing that has
-  // ended, and at most one review per completed stay -- so ratings can't be
-  // stuffed by the host's friends or by one guest reviewing repeatedly.
-  const today = todayInIndia();
-  const { count: completedStays, error: eligErr } = await supabaseAdmin
-    .from("bookings")
-    .select("booking_id", { count: "exact", head: true })
-    .eq("listing_id", input.listingId)
-    .eq("user_id", input.userId)
-    .eq("status_id", 2) // CONFIRMED
-    .lte("end_date", today); // checked out
-  if (eligErr) throw eligErr;
-  if (!completedStays) {
-    throw new ReviewNotAllowedError("You can review a stay once you've checked out.");
-  }
-  const { count: existingReviews, error: countErr } = await supabaseAdmin
-    .from("review")
-    .select("review_id", { count: "exact", head: true })
-    .eq("listing_id", input.listingId)
-    .eq("user_id", input.userId);
-  if (countErr) throw countErr;
-  if ((existingReviews ?? 0) >= completedStays) {
-    throw new ReviewNotAllowedError("You've already reviewed this stay.");
+  const eligibility = await getReviewEligibility(input.listingId, input.userId);
+  if (!eligibility.canReview) {
+    throw new ReviewNotAllowedError(eligibility.reason ?? "You can't review this stay.");
   }
 
   const { data, error } = await supabaseAdmin
@@ -1245,6 +1286,8 @@ export async function resolveLocationId(
   return created.location_id;
 }
 
+const LISTING_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
+
 export async function createListing(draft: ListingDraft) {
   // Ensure the user has a host profile (auto-create if needed)
   const hostUuid = await ensureHostProfile(draft.userId);
@@ -1297,6 +1340,33 @@ export async function createListing(draft: ListingDraft) {
       .eq("type_id", draft.propertyType)
       .maybeSingle();
     if (propType) row.property_type_id = propType.id;
+  }
+
+  // Idempotency: repeated Submit clicks (or a retried request) used to create
+  // one identical listing per click. If this host created a listing with the
+  // same title, description and weekday price in the last few minutes, treat
+  // this as the same submission and return that listing instead of inserting.
+  const dedupeSince = new Date(Date.now() - LISTING_DEDUPE_WINDOW_MS).toISOString();
+  const { data: recentDup } = await supabaseAdmin
+    .from("listings")
+    .select("listing_id, title")
+    .eq("host_uuid", hostUuid)
+    .eq("title", row.title)
+    .eq("description", row.description)
+    .eq("price_weekday", row.price_weekday)
+    .gte("created_at", dedupeSince)
+    .order("listing_id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (recentDup) {
+    return {
+      listing_id: recentDup.listing_id,
+      title: recentDup.title,
+      warnings: [] as string[],
+      live: readiness.ready,
+      payoutBlockers: readiness.blockers,
+      duplicate: true,
+    };
   }
 
   // listings.listing_id is NOT NULL with no default in the schema, so it has
@@ -1397,6 +1467,29 @@ export async function createListing(draft: ListingDraft) {
       console.error("[createListing] media insert failed:", merr.message);
       warnings.push("Your listing was created, but the photos failed to save.");
     }
+  }
+
+  // Notify the host about the listing creation
+  try {
+    const { notify } = await import("./notifications");
+    const status = readiness.ready 
+      ? "Your listing is now live on Hostiggo and available for bookings!"
+      : "Your listing has been created. Complete your payout setup to publish it.";
+    
+    await notify({
+      userId: draft.userId,
+      type: "host_onboarding",
+      category: "account",
+      title: readiness.ready ? "Listing published!" : "Listing created",
+      message: `${listing.title}: ${status}`,
+      metadata: {
+        listing_id: listingId,
+        property_id: listingId,
+        is_live: readiness.ready,
+      },
+    });
+  } catch (notifyErr) {
+    console.error("[createListing] failed to send notification:", notifyErr);
   }
 
   return {

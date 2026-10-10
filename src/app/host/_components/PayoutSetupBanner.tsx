@@ -3,12 +3,13 @@
 import Link from 'next/link';
 import { CheckCircle2, Circle } from 'lucide-react';
 
-export type PayoutBlocker = 'kyc' | 'bank' | 'payout';
+export type PayoutBlocker = 'kyc' | 'bank' | 'payout' | 'phone';
 
 const STEPS: Array<{ key: PayoutBlocker; label: string }> = [
+  { key: 'phone', label: 'Add your phone number' },
   { key: 'kyc', label: 'Verify your identity (PAN)' },
   { key: 'bank', label: 'Verify your bank account' },
-  { key: 'payout', label: 'Payout account created' },
+  { key: 'payout', label: 'Complete payout setup' },
 ];
 
 /** Shown while a host's listings can't go live because payouts aren't set up. */
@@ -36,7 +37,7 @@ export default function PayoutSetupBanner({ blockers }: { blockers: PayoutBlocke
         })}
       </ol>
       <Link
-        href="/host/settings?tab=payouts"
+        href={`/host/settings?tab=${blockers.includes('phone') ? 'personal' : 'payouts'}`}
         className="mt-4 inline-flex rounded-xl bg-figma-navy px-4 py-2 text-sm font-semibold text-white hover:bg-figma-navy/90"
       >
         Set up payouts

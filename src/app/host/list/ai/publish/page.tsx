@@ -82,6 +82,19 @@ export default function AiPublishPage() {
       router.push('/signin?redirect=/host/list/ai/publish');
       return;
     }
+
+    // Check if user has a phone number
+    try {
+      const userResponse = await api.getUser(userId);
+      if (!userResponse?.phone) {
+        toast.error('Please add a phone number to your profile before publishing listings.');
+        router.push('/host/settings?tab=personal');
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to check user profile:', err);
+    }
+
     setPublishing(true);
     const outcomes: PublishResult[] = [];
     // Sequential, not Promise.all -- keeps failures isolated to their own

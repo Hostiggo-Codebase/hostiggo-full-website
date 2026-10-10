@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Search, Calendar, Users, ChevronDown, X, MapPin } from 'lucide-react';
+import { Search, Calendar, Users, ChevronDown, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import DestinationDropdown from '@/components/features/DestinationDropdown';
@@ -57,9 +57,16 @@ export function CompactSearchBar() {
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  // Text typed in the destination box but not picked from the list yet. Kept
-  // in a ref (no re-render, no search) and used when Search is pressed.
+  // Text typed in the destination box but not picked from the list yet. It
+  // drives the input and the suggestions, but doesn't run a search until it is
+  // picked, the dropdown closes, or Search is pressed. The ref mirrors it for
+  // handleSearch.
   const draftRef = useRef<string | null>(null);
+  const [draft, setDraftState] = useState<string | null>(null);
+  const setDraft = (v: string | null) => {
+    draftRef.current = v;
+    setDraftState(v);
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -89,7 +96,7 @@ export function CompactSearchBar() {
     }
     if (draft != null) {
       setLocation({ query });
-      draftRef.current = null;
+      setDraft(null);
     }
     router.push(
       `/search?${searchQueryString(query, dates, guests, draft != null ? undefined : location.state)}`,
@@ -114,10 +121,12 @@ export function CompactSearchBar() {
       )}
       {/* Destination Pill */}
       <div className="relative z-[1100] w-full sm:flex-[1.2] min-w-0">
-        <button
-          onClick={() => toggle('destination')}
+        {/* The pill's own input is the only place to type a destination --
+            the dropdown below just lists suggestions for it. */}
+        <div
+          onClick={() => setActivePanel('destination')}
           className={cn(
-            'w-full h-[52px] flex items-center gap-3 px-5 rounded-full bg-white transition-all text-left border-2',
+            'w-full h-[52px] flex items-center gap-3 px-5 rounded-full bg-white transition-all text-left border-2 cursor-text',
             activePanel === 'destination'
               ? 'border-figma-navy/40'
               : 'border-transparent',
@@ -127,51 +136,49 @@ export function CompactSearchBar() {
             className="w-5 h-5 text-gray-400 flex-shrink-0"
             strokeWidth={2.5}
           />
-          <span
-            className={cn(
-              'text-[14px] font-medium truncate',
-              location.query ? 'text-gray-900' : 'text-gray-400',
-            )}
-          >
-            {location.query || 'New Delhi'}
-          </span>
-          {location.query && (
-            <span
-              role="button"
-              tabIndex={0}
+          <input
+            type="text"
+            value={draft ?? location.query}
+            onFocus={() => setActivePanel('destination')}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setActivePanel('destination');
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSearch();
+              }
+            }}
+            placeholder="Search destination or homestay"
+            aria-label="Search destination or homestay"
+            className="min-w-0 flex-1 bg-transparent outline-none text-[14px] font-medium text-gray-900 placeholder-gray-400 truncate"
+          />
+          {(draft ?? location.query) && (
+            <button
+              type="button"
               aria-label="Clear destination"
               className="ml-auto p-1 hover:bg-gray-100 rounded-full"
               onClick={(e) => {
                 e.stopPropagation();
-                draftRef.current = null;
+                setDraft(null);
                 setLocation({ query: '' });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  draftRef.current = null;
-                  setLocation({ query: '' });
-                }
               }}
             >
               <X className="w-3.5 h-3.5 text-gray-400" />
-            </span>
+            </button>
           )}
-        </button>
+        </div>
         {activePanel === 'destination' && (
           <div className="absolute top-[calc(100%+12px)] left-0 w-full min-w-[320px] z-[1100]">
             <DestinationDropdown
-              value={location.query}
+              value={draft ?? location.query}
               onQueryChange={(v) => {
-                draftRef.current = null;
+                setDraft(null);
                 setLocation({ query: v });
               }}
-              onDraftChange={(v) => {
-                draftRef.current = v;
-              }}
               onSelect={(v, state) => {
-                draftRef.current = null;
+                setDraft(null);
                 setLocation({ query: v, state });
                 setActivePanel(null);
               }}
@@ -326,9 +333,16 @@ export default function SearchForm() {
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  // Text typed in the destination box but not picked from the list yet. Kept
-  // in a ref (no re-render, no search) and used when Search is pressed.
+  // Text typed in the destination box but not picked from the list yet. It
+  // drives the input and the suggestions, but doesn't run a search until it is
+  // picked, the dropdown closes, or Search is pressed. The ref mirrors it for
+  // handleSearch.
   const draftRef = useRef<string | null>(null);
+  const [draft, setDraftState] = useState<string | null>(null);
+  const setDraft = (v: string | null) => {
+    draftRef.current = v;
+    setDraftState(v);
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -358,7 +372,7 @@ export default function SearchForm() {
     }
     if (draft != null) {
       setLocation({ query });
-      draftRef.current = null;
+      setDraft(null);
     }
     router.push(
       `/search?${searchQueryString(query, dates, guests, draft != null ? undefined : location.state)}`,
@@ -373,13 +387,12 @@ export default function SearchForm() {
     >
       {/* Destination */}
       <div className="relative">
-        <button
-          type="button"
-          onClick={() => toggle('destination')}
-          aria-haspopup="dialog"
-          aria-expanded={activePanel === 'destination'}
+        {/* The only destination input -- the dropdown below lists
+            suggestions for whatever is typed here. */}
+        <div
+          onClick={() => setActivePanel('destination')}
           className={cn(
-            'w-full h-[52px] flex items-center gap-3 px-5 rounded-full border transition-all text-left bg-white',
+            'w-full h-[52px] flex items-center gap-3 px-5 rounded-full border transition-all text-left bg-white cursor-text',
             activePanel === 'destination'
               ? 'border-figma-navy shadow-md ring-4 ring-figma-navy/10'
               : 'border-gray-200 hover:border-gray-300 shadow-sm hover:shadow',
@@ -389,32 +402,50 @@ export default function SearchForm() {
             className="w-4 h-4 text-gray-400 flex-shrink-0"
             strokeWidth={2}
           />
-          <div className="min-w-0 flex-1">
-            {location.query ? (
-              <p className="text-[18px] font-medium text-gray-900 truncate">
-                {location.query}
-              </p>
-            ) : (
-              <p className="text-[17px] font-normal text-gray-400 truncate">
-                Search destination or homestay
-              </p>
-            )}
-          </div>
-        </button>
+          <input
+            type="text"
+            value={draft ?? location.query}
+            onFocus={() => setActivePanel('destination')}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setActivePanel('destination');
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSearch();
+              }
+            }}
+            placeholder="Search destination or homestay"
+            aria-label="Search destination or homestay"
+            className="min-w-0 flex-1 bg-transparent outline-none text-[17px] font-medium text-gray-900 placeholder:font-normal placeholder-gray-400 truncate"
+          />
+          {(draft ?? location.query) && (
+            <button
+              type="button"
+              aria-label="Clear destination"
+              className="p-1 hover:bg-gray-100 rounded-full flex-shrink-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDraft(null);
+                setLocation({ query: '' });
+              }}
+            >
+              <X className="w-3.5 h-3.5 text-gray-400" />
+            </button>
+          )}
+        </div>
         {activePanel === 'destination' && (
           <div className="absolute top-[calc(100%+8px)] left-0 w-full z-[1100]">
             <DestinationDropdown
               fullWidth
-              value={location.query}
+              value={draft ?? location.query}
               onQueryChange={(v) => {
-                draftRef.current = null;
+                setDraft(null);
                 setLocation({ query: v });
               }}
-              onDraftChange={(v) => {
-                draftRef.current = v;
-              }}
               onSelect={(v, state) => {
-                draftRef.current = null;
+                setDraft(null);
                 setLocation({ query: v, state });
                 setActivePanel('date');
               }}
@@ -572,30 +603,6 @@ export default function SearchForm() {
         </button>
       </div>
 
-      {/* Search on Map Button */}
-      <button
-        onClick={() => {
-          if (location.query.trim().length > 0) {
-            toast.error('You can either use the map or fill in the location yourself, not both.');
-            return;
-          }
-          router.push('/search?view=map');
-        }}
-        className={cn(
-          "w-full flex items-center gap-4 bg-white rounded-2xl p-4 border transition-all text-left",
-          location.query.trim().length > 0
-            ? "opacity-50 cursor-not-allowed border-gray-200"
-            : "border-gray-200 hover:border-gray-300 shadow-sm hover:shadow"
-        )}
-      >
-        <div className="w-12 h-12 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm flex-shrink-0">
-          <MapPin className="w-6 h-6 text-figma-navy" strokeWidth={1.5} />
-        </div>
-        <div>
-          <h3 className="text-[15px] font-medium text-figma-ink">Search on Map</h3>
-          <p className="text-[12px] font-normal text-gray-400">For Accurate Location</p>
-        </div>
-      </button>
     </div>
   );
 }
