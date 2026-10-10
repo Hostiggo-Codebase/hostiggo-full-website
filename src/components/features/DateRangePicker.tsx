@@ -304,7 +304,11 @@ export default function DateRangePicker({
       </div>
 
       {/* Date flexibility pills */}
-      <p className="mt-2 text-xs text-gray-500">Unavailable dates are crossed out.</p>
+      {/* Only explain crossed-out dates when there are some: the property page
+          passes its booked dates, general search passes none. */}
+      {blockedDates.size > 0 && (
+        <p className="mt-2 text-xs text-gray-500">Unavailable dates are crossed out.</p>
+      )}
       {rangeError && <p role="alert" className="mt-2 text-sm text-red-600">{rangeError}</p>}
       <div className="flex flex-wrap gap-2 sm:gap-3 mt-3 pt-3 border-t border-gray-100">
         {FLEX_OPTIONS.map((o) => (
