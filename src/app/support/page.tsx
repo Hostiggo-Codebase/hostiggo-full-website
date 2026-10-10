@@ -3,29 +3,38 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { toast } from 'sonner';
-import { AlertTriangle, Lightbulb, Smile, UserPlus, X, Lock, ChevronDown, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, Lightbulb, Smile, X, Lock, ChevronDown, type LucideIcon } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
 import SupportLiveChat from '@/components/features/SupportLiveChat';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
+// Feedback length limit, counted on the trimmed text (what is saved).
+const MAX_FEEDBACK_CHARS = 1000;
 
 // Maps the on-screen action to the feedback.type stored in the DB.
 const TYPE_MAP: Record<string, string> = {
   issue: 'report_issue',
   suggest: 'suggest_improvement',
   experience: 'share_experience',
-  // Not a feedback_type enum value: referrals are shared experiences filed
-  // under the referral_program category (see handleSubmit).
-  referral: 'share_experience',
 };
 
 const ACTIONS: { id: string; title: string; desc: string; icon: LucideIcon; tint: string }[] = [
   { id: 'issue', title: 'Report an issue', desc: 'Experiencing technical difficulties? Let us know so we can fix it immediately.', icon: AlertTriangle, tint: 'bg-red-50 text-red-500' },
   { id: 'suggest', title: 'Suggest improvement', desc: 'Have an idea to make Hostiggo better? We love hearing your creative thoughts.', icon: Lightbulb, tint: 'bg-sky-50 text-sky-600' },
   { id: 'experience', title: 'Share experience', desc: 'Tell us about your hosting journey. Your stories help us grow together.', icon: Smile, tint: 'bg-gray-100 text-figma-navy' },
-  { id: 'referral', title: 'Referral', desc: 'Know another great host? Refer them and earn rewards on our platform.', icon: UserPlus, tint: 'bg-figma-navy/5 text-figma-navy' },
 ];
 
 const FAQ = [
@@ -38,7 +47,25 @@ export default function SupportPage() {
   const [text, setText] = useState('');
   const [open, setOpen] = useState<number | null>(0);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const { userId } = useAuth();
+  // Only real characters count -- leading/trailing whitespace is dropped on
+  // submit, and a box of only spaces is empty.
+  const charCount = text.trim().length;
+
+  // Closing with typed text asks first; an empty box just closes.
+  const requestClose = () => {
+    if (charCount > 0) setConfirmDiscard(true);
+    else {
+      setText('');
+      setActive(null);
+    }
+  };
+  const discard = () => {
+    setConfirmDiscard(false);
+    setText('');
+    setActive(null);
+  };
 
   const handleSubmit = async () => {
     if (!text.trim()) {
@@ -51,8 +78,8 @@ export default function SupportPage() {
       await api.submitFeedback({
         userId: userId ?? null,
         type: TYPE_MAP[active] ?? 'share_experience',
-        category: active === 'referral' ? 'referral_program' : null,
-        description: text.trim(),
+        category: null,
+        description: text.trim().slice(0, MAX_FEEDBACK_CHARS),
       });
       toast.success('Thanks! Your feedback has been received.');
       setText('');
@@ -80,7 +107,7 @@ export default function SupportPage() {
 
         <SupportLiveChat />
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">
           {ACTIONS.map((a) => {
             const Icon = a.icon;
             return (
@@ -112,7 +139,9 @@ export default function SupportPage() {
                   {ACTIONS.find((a) => a.id === active)?.title}
                 </h2>
                 <button
-                  onClick={() => setActive(null)}
+                  type="button"
+                  onClick={requestClose}
+                  aria-label="Close feedback form"
                   className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-500"
                 >
                   <X className="w-5 h-5" />
@@ -127,14 +156,19 @@ export default function SupportPage() {
                     <textarea
                       id="feedback-text"
                       rows={6}
-                      maxLength={1000}
                       value={text}
-                      onChange={(e) => setText(e.target.value)}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        // Cap at the limit of real characters; whitespace
+                        // around the text doesn't use up the allowance.
+                        if (next.trim().length <= MAX_FEEDBACK_CHARS) setText(next);
+                        else setText(next.trimStart().slice(0, MAX_FEEDBACK_CHARS));
+                      }}
                       placeholder="Tell us more details here..."
                       className="w-full p-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-figma-navy focus:border-transparent outline-none resize-none"
                     />
                     <div className="absolute bottom-3 right-4 text-xs text-gray-400 font-medium">
-                      {text.length}/1000
+                      {charCount}/{MAX_FEEDBACK_CHARS}
                     </div>
                   </div>
                 </div>
@@ -143,18 +177,44 @@ export default function SupportPage() {
                     <Lock className="w-4 h-4" />
                     Your feedback is encrypted and secure
                   </div>
+                  <div className="flex w-full sm:w-auto gap-3">
+                  <button
+                    type="button"
+                    onClick={requestClose}
+                    className="flex-1 sm:flex-none px-6 py-4 border border-gray-200 text-gray-700 font-semibold rounded-2xl hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
                   <button
                     onClick={handleSubmit}
                     disabled={submitting}
-                    className="w-full sm:w-auto px-10 py-4 bg-figma-navy text-white font-bold rounded-2xl shadow-md hover:bg-figma-navy/90 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    className="flex-[2] sm:flex-none px-10 py-4 bg-figma-navy text-white font-bold rounded-2xl shadow-md hover:bg-figma-navy/90 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
                   >
                     {submitting ? 'Submitting…' : 'Submit Feedback'}
                   </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         )}
+
+        <AlertDialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+          <AlertDialogContent className="bg-white text-gray-900 rounded-2xl w-[calc(100%-2rem)] max-w-md border-gray-200">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-lg font-bold text-gray-900">Discard your feedback?</AlertDialogTitle>
+              <AlertDialogDescription className="text-sm text-gray-600">
+                Your changes will not be saved.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="rounded-xl border-gray-200 bg-white text-gray-800 hover:bg-gray-50">Keep editing</AlertDialogCancel>
+              <AlertDialogAction onClick={discard} className="rounded-xl bg-red-600 text-white hover:bg-red-700">
+                Discard
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           <div className="lg:col-span-5 relative h-80 rounded-3xl overflow-hidden shadow-card">
