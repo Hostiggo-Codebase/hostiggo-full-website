@@ -26,6 +26,7 @@ import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboa
 import { useAuth } from '@/context/AuthContext';
 import { useKycStatus } from '@/hooks/useKycStatus';
 import BankDetailsNotice from '@/components/features/BankDetailsNotice';
+import { STATES_AND_UTS } from '@/lib/indianStates';
 import KycModal from '@/components/features/KycModal';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -739,12 +740,20 @@ export default function HostSettingsPage() {
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-500 mb-1">State <span className="text-red-500">*</span></label>
-                        <input
-                          type="text"
+                        <select
                           value={payoutForm.state}
                           onChange={(e) => setPayoutForm((f) => ({ ...f, state: e.target.value }))}
-                          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
-                        />
+                          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
+                        >
+                          <option value="">Select state</option>
+                          {/* Keep a previously saved value that isn't on the list selectable. */}
+                          {payoutForm.state && !(STATES_AND_UTS as readonly string[]).includes(payoutForm.state) && (
+                            <option value={payoutForm.state}>{payoutForm.state}</option>
+                          )}
+                          {STATES_AND_UTS.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 
