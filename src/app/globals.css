@@ -235,3 +235,21 @@ input:checked + .toggle-slider::before {
 .animate-slide-up {
   animation: slideUp 0.22s ease-out forwards;
 }
+
+/* Height of the sticky site header (Navbar: h-16 / md:h-[105px] + 1px
+   border). Sticky sidebars and in-page anchor targets offset by it so
+   nothing hides underneath the header. */
+:root {
+  --site-header-h: 65px;
+}
+@media (min-width: 768px) {
+  :root {
+    --site-header-h: 106px;
+  }
+}
+.sticky-below-header {
+  top: calc(var(--site-header-h) + 1.5rem);
+}
+.anchor-below-header {
+  scroll-margin-top: calc(var(--site-header-h) + 1rem);
+}

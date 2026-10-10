@@ -65,7 +65,7 @@ export default function ShippingPolicyPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-10">
           <aside className="hidden lg:block">
-            <nav className="sticky top-24">
+            <nav className="sticky sticky-below-header">
               <p className="text-xs font-semibold uppercase tracking-wide text-figma-ink/60 mb-3">
                 On this page
               </p>
@@ -86,7 +86,7 @@ export default function ShippingPolicyPage() {
 
           <article className="max-w-3xl bg-white rounded-3xl border border-figma-border p-6 md:p-10">
             {sections.map((s) => (
-              <section key={s.id} id={s.id} className="mb-8 scroll-mt-24">
+              <section key={s.id} id={s.id} className="mb-8 anchor-below-header">
                 <h2 className="text-xl md:text-2xl font-semibold text-figma-ink mb-3">
                   {s.title}
                 </h2>
