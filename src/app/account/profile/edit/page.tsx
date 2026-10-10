@@ -4,41 +4,57 @@ import Navbar from '@/components/layout/Navbar';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
-import { ArrowLeft, Camera, ChevronRight, CreditCard, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Camera, ChevronRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  buildProfilePatch,
+  profileFormFromUser,
+  validateProfileForm,
+  type ProfileForm,
+  type ProfileFormErrors,
+} from '@/lib/profileForm';
 
 export default function EditProfilePage() {
   const router = useRouter();
-  const { user, userId, refresh, updateProfile } = useAuth();
-  
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [dob, setDob] = useState('');
-  const [gender, setGender] = useState('');
+  const { user, userId, loading, isAuthenticated, updateProfile } = useAuth();
+
+  const [form, setForm] = useState<ProfileForm>(() => profileFormFromUser(null));
+  const [errors, setErrors] = useState<ProfileFormErrors>({});
+  const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { name, email, phone, age, emergencyContact } = form;
+  const setField = (key: keyof ProfileForm) => (value: string) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
 
   useEffect(() => {
-    if (user) {
-      setName(user.name || '');
-      setEmail(user.email || '');
-      setPhone(user.phone || '');
-      setDob(user.dob || '');
-      setGender(user.gender || '');
-    }
+    if (user) setForm(profileFormFromUser(user));
   }, [user]);
 
-  const handleSave = () => {
-    if (updateProfile) {
-      updateProfile({
-        profile: { name, email, phone, dob, gender }
-      });
+  const handleSave = async () => {
+    if (!userId || saving) return;
+    const found = validateProfileForm(form);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+    const patch = buildProfilePatch(form, user);
+    if (Object.keys(patch).length === 0) {
+      toast.info('No changes to save.', { id: 'profile-save' });
+      return;
     }
-    router.push('/account/profile');
+    setSaving(true);
+    try {
+      await updateProfile(patch);
+      toast.success('Profile updated.', { id: 'profile-save' });
+      router.push('/account/profile');
+    } catch (err) {
+      console.error('[account/profile/edit] save failed:', err);
+      toast.error(err instanceof Error ? err.message : 'Could not save your profile.', { id: 'profile-save' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,12 +64,7 @@ export default function EditProfilePage() {
     setUploadingPhoto(true);
     try {
       const url = await api.uploadProfilePhoto(file);
-      if (updateProfile) {
-        updateProfile({ profile_pic_url: url });
-      } else {
-        await api.updateProfile(userId, { profile_pic_url: url });
-        await refresh();
-      }
+      await updateProfile({ profile_pic_url: url });
       toast.success('Profile photo updated.');
     } catch (err) {
       console.error('[account/profile/edit] photo upload failed:', err);
@@ -62,6 +73,32 @@ export default function EditProfilePage() {
       setUploadingPhoto(false);
     }
   };
+
+  if (loading || !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-figma-cream">
+        <Navbar />
+        <main className="w-full max-w-[1440px] mx-auto px-6 lg:px-10 py-16">
+          {loading ? (
+            <div className="flex justify-center text-gray-400">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          ) : (
+            <div className="bg-white rounded-3xl border border-gray-200 shadow-card py-16 text-center max-w-md mx-auto">
+              <h2 className="text-lg font-bold text-gray-800 mb-1">Sign in to edit your profile</h2>
+              <p className="text-sm text-gray-500 mb-6">Manage your personal details once you&apos;re signed in.</p>
+              <Link
+                href="/signin?redirect=/account/profile/edit"
+                className="inline-flex items-center gap-2 bg-figma-navy text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-figma-navy/90"
+              >
+                Sign in
+              </Link>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-figma-cream flex flex-col relative pb-[100px]">
@@ -119,7 +156,7 @@ export default function EditProfilePage() {
                   {uploadingPhoto ? 'Uploading...' : 'Upload'}
                 </button>
               </div>
-              <input type="file" ref={fileInputRef} onChange={handlePhotoChange} className="hidden" accept="image/*" />
+              <input type="file" ref={fileInputRef} onChange={handlePhotoChange} className="hidden" accept="image/jpeg,image/png,image/webp" />
             </div>
 
             {/* Vertical Divider */}
@@ -138,7 +175,10 @@ export default function EditProfilePage() {
                     <input 
                       type="text" 
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => setField('name')(e.target.value)}
+                      maxLength={80}
+                      autoComplete="name"
+                      aria-invalid={!!errors.name}
                       className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative" 
                     />
                     <label className={`absolute left-5 transition-all duration-200 pointer-events-none z-0 ${
@@ -151,20 +191,25 @@ export default function EditProfilePage() {
                     <input 
                       type="email" 
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => setField('email')(e.target.value)}
+                      autoComplete="email"
+                      aria-invalid={!!errors.email}
                       className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative" 
                     />
                     <label className={`absolute left-5 transition-all duration-200 pointer-events-none z-0 ${
                       email ? 'top-2 text-[12px] text-[#434343]' : 'top-1/2 -translate-y-1/2 text-[15px] text-gray-400'
                     } peer-focus:top-2 peer-focus:translate-y-0 peer-focus:text-[12px] peer-focus:text-[#434343]`}>
-                      Email Id<span className="text-red-500">*</span>
+                      Email Id
                     </label>
                   </div>
                   <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
                     <input 
                       type="tel" 
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => setField('phone')(e.target.value)}
+                      autoComplete="tel"
+                      placeholder="+91XXXXXXXXXX"
+                      aria-invalid={!!errors.phone}
                       className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative" 
                     />
                     <label className={`absolute left-5 transition-all duration-200 pointer-events-none z-0 ${
@@ -173,38 +218,47 @@ export default function EditProfilePage() {
                       Phone Number
                     </label>
                   </div>
-                  <div className="flex gap-6">
-                    <div className="flex-1 relative h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
-                      <input 
-                        type="text" 
-                        value={dob}
-                        onChange={(e) => setDob(e.target.value)}
-                        className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative" 
-                      />
-                      <label className={`absolute left-5 transition-all duration-200 pointer-events-none z-0 ${
-                        dob ? 'top-2 text-[12px] text-[#434343]' : 'top-1/2 -translate-y-1/2 text-[15px] text-gray-400'
-                      } peer-focus:top-2 peer-focus:translate-y-0 peer-focus:text-[12px] peer-focus:text-[#434343]`}>
-                        DOB
-                      </label>
-                    </div>
-                    <div className="flex-1 relative h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
-                      <select 
-                        value={gender}
-                        onChange={(e) => setGender(e.target.value)}
-                        className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative appearance-none"
-                      >
-                        <option value="" disabled hidden></option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                      <label className={`absolute left-5 transition-all duration-200 pointer-events-none z-0 ${
-                        gender ? 'top-2 text-[12px] text-[#434343]' : 'top-1/2 -translate-y-1/2 text-[15px] text-gray-400'
-                      } peer-focus:top-2 peer-focus:translate-y-0 peer-focus:text-[12px] peer-focus:text-[#434343]`}>
-                        Gender
-                      </label>
-                    </div>
+                  <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
+                    <input
+                      type="number"
+                      value={age}
+                      onChange={(e) => setField('age')(e.target.value)}
+                      inputMode="numeric"
+                      min={18}
+                      max={120}
+                      aria-invalid={!!errors.age}
+                      className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative"
+                    />
+                    <label className={`absolute left-5 transition-all duration-200 pointer-events-none z-0 ${
+                      age ? 'top-2 text-[12px] text-[#434343]' : 'top-1/2 -translate-y-1/2 text-[15px] text-gray-400'
+                    } peer-focus:top-2 peer-focus:translate-y-0 peer-focus:text-[12px] peer-focus:text-[#434343]`}>
+                      Age
+                    </label>
                   </div>
+                  <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
+                    <input
+                      type="text"
+                      value={emergencyContact}
+                      onChange={(e) => setField('emergencyContact')(e.target.value)}
+                      maxLength={100}
+                      aria-invalid={!!errors.emergencyContact}
+                      className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative"
+                    />
+                    <label className={`absolute left-5 transition-all duration-200 pointer-events-none z-0 ${
+                      emergencyContact ? 'top-2 text-[12px] text-[#434343]' : 'top-1/2 -translate-y-1/2 text-[15px] text-gray-400'
+                    } peer-focus:top-2 peer-focus:translate-y-0 peer-focus:text-[12px] peer-focus:text-[#434343]`}>
+                      Emergency contact (name and mobile)
+                    </label>
+                  </div>
+                  {Object.values(errors).some(Boolean) && (
+                    <ul role="alert" className="space-y-1">
+                      {Object.entries(errors).map(([key, msg]) =>
+                        msg ? (
+                          <li key={key} className="ml-1 text-xs font-medium text-red-600">{msg}</li>
+                        ) : null,
+                      )}
+                    </ul>
+                  )}
                 </div>
               </section>
 
@@ -260,9 +314,10 @@ export default function EditProfilePage() {
         <div className="max-w-[1440px] mx-auto px-6 lg:pl-24 xl:pl-40 lg:pr-[200px] xl:pr-[350px] flex justify-end">
           <button 
             onClick={handleSave}
-            className="bg-[#004772] text-white px-10 py-3 rounded-[12px] font-semibold text-[16px] w-full md:w-auto md:min-w-[140px] hover:bg-[#003655] transition-colors"
+            disabled={saving || uploadingPhoto}
+            className="disabled:opacity-60 disabled:cursor-not-allowed bg-[#004772] text-white px-10 py-3 rounded-[12px] font-semibold text-[16px] w-full md:w-auto md:min-w-[140px] hover:bg-[#003655] transition-colors"
           >
-            Save
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>

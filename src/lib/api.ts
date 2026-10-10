@@ -386,8 +386,6 @@ export type CurrentUser = {
   profile_pic_url: string | null;
   is_verified: boolean | null;
   is_active: boolean | null;
-  dob: string | null;
-  gender: string | null;
   age: number | null;
   emergency_contact: string | null;
   created_at: string | null;

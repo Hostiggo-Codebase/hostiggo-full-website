@@ -19,14 +19,13 @@ import {
   type CurrentUser,
 } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
+import { saveProfilePatch } from '@/lib/profileForm';
 
 interface AuthState {
   user: CurrentUser | null;
   userId: string | null;
   loading: boolean;
   isAuthenticated: boolean;
-  mockAboutMe?: Record<string, string[]>;
-  mockSomethingElse?: Record<string, string>;
 }
 
 interface AuthActions {
@@ -34,7 +33,12 @@ interface AuthActions {
   signIn: (userId: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
-  updateProfile?: (updates: any) => Promise<void>;
+  /**
+   * Save profile fields via PATCH /api/users (server validates + normalises,
+   * e.g. phone -> +91XXXXXXXXXX), then reload the user. Throws on failure so
+   * callers can show an error instead of pretending it saved.
+   */
+  updateProfile: (patch: Record<string, unknown>) => Promise<void>;
 }
 
 const AuthContext = createContext<(AuthState & AuthActions) | undefined>(undefined);
@@ -195,8 +199,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadUser],
   );
 
-
-
   const signOut = useCallback(async () => {
     // Invalidates the real Supabase session (Google/email OTP). Phone OTP
     // never has one client-side, so this is a harmless no-op for that case.
@@ -213,9 +215,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userId) await loadUser(userId);
   }, [userId, loadUser]);
 
-  const updateProfile = async (updates: any) => {
-    // Real API call would go here if not in dev bypass
-  };
+  const updateProfile = useCallback(
+    async (patch: Record<string, unknown>) => {
+      await saveProfilePatch(
+        { update: api.updateProfile, reload: loadUser },
+        userId,
+        patch,
+      );
+    },
+    [userId, loadUser],
+  );
 
   return (
     <AuthContext.Provider

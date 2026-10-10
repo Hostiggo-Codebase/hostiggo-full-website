@@ -153,14 +153,14 @@ export default function Navbar() {
           {/* Desktop nav */}
           <div className="hidden md:flex items-center">
             
-            <div className="flex items-center gap-1.5 text-[#004772] text-[15px] font-semibold font-['Poppins'] cursor-pointer hover:opacity-80 transition-opacity">
+            <div className="flex items-center gap-1.5 text-[#004772] text-[15px] font-semibold font-['Poppins'] select-none">
               <IndianRupee className="w-[18px] h-[18px]" />
               <span>INR.</span>
             </div>
 
             <div className="w-[1px] h-4 bg-[#004772]/20 mx-4"></div>
 
-            <div className="flex items-center gap-1.5 text-[#004772] text-[15px] font-semibold font-['Poppins'] cursor-pointer hover:opacity-80 transition-opacity">
+            <div className="flex items-center gap-1.5 text-[#004772] text-[15px] font-semibold font-['Poppins'] select-none">
               <Globe className="w-[18px] h-[18px] stroke-2" />
               <span>English</span>
             </div>
@@ -186,10 +186,25 @@ export default function Navbar() {
             </button>
 
             {isAuthenticated ? (
-              <div ref={profileRef} className="relative ml-6">
+              <>
+              <Link
+                href="/notifications"
+                aria-label={unreadCount ? `Inbox, ${unreadCount} unread` : "Inbox"}
+                title="Inbox"
+                className="relative ml-4 p-2 text-[#004772] hover:bg-[#004772]/5 rounded-full transition-colors"
+              >
+                <Inbox className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-[18px] text-center">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </Link>
+              <div ref={profileRef} className="relative ml-2">
                 <button
                   type="button"
                   aria-label="Account menu"
+                  aria-haspopup="menu"
                   aria-expanded={profileOpen}
                   onClick={() => setProfileOpen((v) => !v)}
                   className="w-11 h-11 rounded-full overflow-hidden border-2 border-gray-200 hover:border-[#004772] transition-all cursor-pointer shadow-xs"
@@ -213,6 +228,8 @@ export default function Navbar() {
                               item.soon ? (
                                 <div
                                   key={item.label}
+                                  aria-disabled="true"
+                                  title="Coming soon"
                                   className="flex items-center gap-2.5 px-2.5 py-1.5 text-[14px] font-medium text-gray-400 cursor-default select-none"
                                 >
                                   <span className="text-gray-300">{item.icon}</span>
@@ -249,6 +266,7 @@ export default function Navbar() {
                   </div>
                 )}
               </div>
+              </>
             ) : (
               <div className="ml-6 w-11 h-11 rounded-full overflow-hidden border-2 border-gray-200">
                 <UserAvatar src={undefined} name="Guest" size={40} className="h-full w-full opacity-50" />

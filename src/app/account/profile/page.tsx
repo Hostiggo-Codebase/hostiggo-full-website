@@ -4,27 +4,12 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { BadgeCheck, Camera, ShieldCheck, Loader2, Pencil, Compass, Users, UserCheck, User, PartyPopper, Coffee, Sun, Map, Utensils, Landmark, BookOpen, Smile, Star } from 'lucide-react';
+import { Camera, ShieldCheck, Loader2, Pencil } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { useAuth } from '@/context/AuthContext';
 import { useKycStatus } from '@/hooks/useKycStatus';
 import { api } from '@/lib/api';
-
-const mapChipToTag = (chip: string) => {
-  if (chip === 'Travel' || chip === 'New experiences') return { label: 'Traveller', icon: Compass };
-  if (chip === 'Friends' || chip === 'Yes, absolutely!') return { label: 'Extrovert', icon: Users };
-  if (chip === 'Sometimes') return { label: 'Ambivert', icon: UserCheck };
-  if (chip === 'I prefer staying to myself') return { label: 'Introvert', icon: User };
-  if (chip === 'House party') return { label: 'Party goer', icon: PartyPopper };
-  if (chip === 'Quiet evening') return { label: 'Quiet', icon: Coffee };
-  if (chip === 'Chill & Relax') return { label: 'Chill', icon: Sun };
-  if (chip === 'Adventure') return { label: 'Adventurer', icon: Map };
-  if (chip === 'Foodie' || chip === 'My cooking') return { label: 'Foodie', icon: Utensils };
-  if (chip === 'Culture') return { label: 'Culture', icon: Landmark };
-  if (chip === 'My stories') return { label: 'Storyteller', icon: BookOpen };
-  if (chip === 'My jokes') return { label: 'Joker', icon: Smile };
-  return { label: chip, icon: Star };
-};
+import { toE164Phone } from '@/lib/phoneFormat';
 
 export default function GuestProfilePage() {
   const { user, userId, loading, isAuthenticated, refresh } = useAuth();
@@ -34,16 +19,12 @@ export default function GuestProfilePage() {
   const [phone, setPhone] = useState('');
   const [age, setAge] = useState('');
   const [emergencyContact, setEmergencyContact] = useState('');
-  const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const identityVerified = user?.is_verified === true || kycStatus === 'verified';
   const identityPending = kycStatus === 'pending';
   const identityRejected = kycStatus === 'rejected';
-
-  const hasAboutMe = false; // Add real about_me logic from backend when available
-  const aboutMeChips: any[] = [];
 
   // Calculate profile completion percentage
   const { percentage } = useMemo(() => {
@@ -58,11 +39,9 @@ export default function GuestProfilePage() {
     check(user?.name);
     check(user?.email);
     check(user?.phone);
-    check(user?.dob || user?.age);
-    check(user?.gender);
+    check(user?.age);
+    check(user?.emergency_contact);
     check(identityVerified);
-
-
 
     return {
       percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
@@ -194,7 +173,7 @@ export default function GuestProfilePage() {
                     </div>
                     <div className="flex items-center justify-between text-[13px] font-semibold tracking-wide">
                       <span className="text-gray-500">Your profile is {percentage}% complete</span>
-                      <Link href="/account/profile/about-me" className="text-[#0396EF] font-bold hover:underline">Continue</Link>
+                      <Link href="/account/profile/edit" className="text-[#0396EF] font-bold hover:underline">Continue</Link>
                     </div>
                   </div>
                 </div>
@@ -216,9 +195,14 @@ export default function GuestProfilePage() {
                 </div>
               ) : (
                 <div className="w-full lg:w-[434px] lg:h-[224px] rounded-[14px] border-2 border-dashed border-gray-300 flex flex-col items-center justify-center bg-transparent">
-                  <h3 className="font-extrabold text-gray-900 mb-2 text-[16px]">Profile verification required!</h3>
+                  <h3 className="font-extrabold text-gray-900 mb-2 text-[16px] flex items-center gap-2">
+                    {kycLoading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+                    {identityRejected ? 'Try verification again' : 'Profile verification required!'}
+                  </h3>
                   <p className="text-center text-[13px] leading-relaxed text-gray-500 mb-6 px-4">
-                    You need to verify your profile with an official government identity proof
+                    {identityRejected
+                      ? 'Your last ID check could not be completed. Submit a government ID again.'
+                      : 'You need to verify your profile with an official government identity proof'}
                   </p>
                   <Link
                     href="/account/verification"
@@ -230,41 +214,31 @@ export default function GuestProfilePage() {
               )}
             </aside>
 
-            {/* Vertical Separator */}
-            <div className="hidden lg:block w-[1px] bg-gray-900/10 mx-10 xl:mx-16 self-stretch"></div>
-
             {/* Details */}
-            <div className="flex-1 mt-10 lg:mt-0 pt-2">
+            <div className="flex-1 mt-10 lg:mt-0 lg:ml-10 xl:ml-16 pt-2">
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-[32px] md:text-[40px] font-bold text-gray-900 leading-tight">About Me</h2>
-                <Link href="/account/profile/about-me" className="w-[101px] h-[49px] rounded-[14px] border-2 border-[#004772] text-[15px] font-bold text-[#004772] flex items-center justify-center hover:bg-gray-50 transition-colors bg-white shrink-0">
+                <h2 className="text-[28px] md:text-[32px] font-bold text-gray-900 leading-tight">Personal information</h2>
+                <Link href="/account/profile/edit" className="w-[101px] h-[49px] rounded-[14px] border-2 border-[#004772] text-[15px] font-bold text-[#004772] flex items-center justify-center hover:bg-gray-50 transition-colors bg-white shrink-0">
                   Edit
                 </Link>
               </div>
-              <p className="text-[#5F5F5F] text-[15px] font-normal mb-8 max-w-[850px] leading-[1.6]">
-                Tell others a bit about yourself. Share your interests, travel style, hobbies, profession, or anything that helps hosts and guests get to know you better.
-              </p>
-              {hasAboutMe ? (
-                <div className="flex flex-wrap gap-4 mt-2">
-                  {aboutMeChips.map((chip, idx) => {
-                    const { label, icon: Icon } = mapChipToTag(chip);
-                    return (
-                      <div key={idx} className="w-[149px] h-[49px] rounded-[11px] border border-[#818181] bg-white flex items-center px-[10px] gap-2.5 shrink-0">
-                        <div className="w-[30px] h-[30px] rounded-[8px] bg-[#333333] flex items-center justify-center shrink-0">
-                          <Icon className="w-[18px] h-[18px] text-white" strokeWidth={2} />
-                        </div>
-                        <span className="text-[14px] font-semibold text-[#333333] truncate pt-0.5">
-                          {label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <Link href="/account/profile/about-me" className="inline-flex px-8 py-2.5 bg-[#004772] text-white text-[14px] font-bold rounded-[12px] hover:bg-[#003859] transition-colors">
-                  Let’s start
-                </Link>
-              )}
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[850px]">
+                {[
+                  { label: 'Full name', value: name },
+                  { label: 'Email', value: email },
+                  { label: 'Phone', value: toE164Phone(phone) ?? '' },
+                  { label: 'Age', value: age },
+                  { label: 'Emergency contact', value: emergencyContact },
+                ].map((row) => (
+                  <div key={row.label} className="bg-white rounded-[14px] border border-gray-200 px-5 py-4">
+                    <dt className="text-[12px] font-semibold text-gray-500">{row.label}</dt>
+                    <dd className="text-[15px] font-medium text-gray-900 mt-1 break-words">{row.value || 'Not added'}</dd>
+                  </div>
+                ))}
+              </dl>
+              <Link href="/account/settings" className="inline-block mt-6 text-sm text-figma-navy font-bold hover:underline">
+                Notification and privacy settings
+              </Link>
             </div>
           </div>
 
