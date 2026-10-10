@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { forbiddenResponse, requireUserId } from "@/lib/auth-server";
+import { toE164Phone } from "@/lib/phoneFormat";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
     const responseData = {
       name: user.name || "Host",
       email: user.email,
-      phone: user.phone,
+      phone: toE164Phone(user.phone),
       avatar: user.profile_pic_url || host.photo || null,
       about: host.about || "",  // From host table
       isVerified: host.is_verified || false,

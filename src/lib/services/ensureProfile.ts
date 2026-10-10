@@ -1,4 +1,5 @@
 import { usersAPI } from "@/lib/services/user";
+import { toE164Phone } from "@/lib/phoneFormat";
 
 // Shared by every auth route (OTP, password) that can hand back a brand-new
 // Supabase Auth user with no matching row in our own `users` table yet --
@@ -16,7 +17,7 @@ export const ensureProfile = async (user: {
     user_id: user.id,
     name: user.user_metadata?.full_name || user.user_metadata?.name || "",
     email: user.email || user.user_metadata?.email || "",
-    phone: user.phone || null,
+    phone: toE164Phone(user.phone),
     age: user.user_metadata?.age || null,
     emergency_contact: user.user_metadata?.emergency_contact || null,
     // A brand-new user hasn't verified any government ID -- identity
