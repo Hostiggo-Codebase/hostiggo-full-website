@@ -3,7 +3,7 @@
 import PropertyCard from "@/components/features/PropertyCard";
 import PropertyCardHomeSkeleton from "@/components/features/PropertyCardHomeSkeleton";
 import type { Property } from "@/types";
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -27,12 +27,15 @@ export default function PopularStays({
   const city = properties[0]?.city ?? "";
   const viewAllHref = `/search?destination=${encodeURIComponent(city)}`;
   const rowRef = useRef<HTMLDivElement>(null);
-  // Only show the arrow when the row actually has cards off to the right.
-  const [overflows, setOverflows] = useState(false);
+  // Each arrow shows only when there are cards off that side of the row.
+  const [canPrev, setCanPrev] = useState(false);
+  const [canNext, setCanNext] = useState(false);
 
   const measure = useCallback(() => {
     const row = rowRef.current;
-    if (row) setOverflows(row.scrollWidth > row.clientWidth + 2);
+    if (!row) return;
+    setCanPrev(row.scrollLeft > 2);
+    setCanNext(row.scrollLeft + row.clientWidth < row.scrollWidth - 2);
   }, []);
 
   useEffect(() => {
@@ -41,21 +44,25 @@ export default function PopularStays({
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(row);
-    return () => ro.disconnect();
+    row.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      ro.disconnect();
+      row.removeEventListener("scroll", measure);
+    };
   }, [measure, properties.length, isLoading]);
 
-  // The arrow steps the row to the next card in place (wrapping back to the
-  // first card at the end). It used to be a link to the full results list.
-  const showNext = () => {
+  // The arrows step the row one card at a time and hide at either end, so the
+  // row never jumps back on its own. The right arrow used to be a link to the
+  // full results list, then wrapped to the first card at the end.
+  const step = (direction: 1 | -1) => {
     const row = rowRef.current;
     if (!row) return;
     const first = row.firstElementChild as HTMLElement | null;
     const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
-    const step = (first?.offsetWidth ?? row.clientWidth) + gap;
-    const atEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 2;
+    const amount = (first?.offsetWidth ?? row.clientWidth) + gap;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     row.scrollTo({
-      left: atEnd ? 0 : row.scrollLeft + step,
+      left: row.scrollLeft + direction * amount,
       behavior: reduce ? "auto" : "smooth",
     });
   };
@@ -108,10 +115,20 @@ export default function PopularStays({
                 </div>
               ))}
         </div>
-        {!isLoading && overflows && (
+        {!isLoading && canPrev && (
           <button
             type="button"
-            onClick={showNext}
+            onClick={() => step(-1)}
+            aria-label="Show previous stay"
+            className="absolute -left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white shadow-lg hover:shadow-xl flex items-center justify-center text-figma-ink hover:text-figma-navy transition-all group z-10"
+          >
+            <ArrowLeft className="w-[18px] h-[18px] group-hover:-translate-x-0.5 transition-transform" />
+          </button>
+        )}
+        {!isLoading && canNext && (
+          <button
+            type="button"
+            onClick={() => step(1)}
             aria-label="Show next stay"
             className="absolute -right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white shadow-lg hover:shadow-xl flex items-center justify-center text-figma-ink hover:text-figma-navy transition-all group z-10"
           >
