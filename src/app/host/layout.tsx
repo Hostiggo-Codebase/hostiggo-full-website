@@ -5,13 +5,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Building2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
-// A real user row from the DB, used only as a dev shortcut so the host area
-// is reviewable locally (production sign-in is phone OTP). Never shown in prod.
-const DEMO_HOST_ID = '7701820c-50fe-4ee8-a4e6-e18068c1fb0b';
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
 export default function HostLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading, signInAsDemoHost } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const router = useRouter();
   // usePathname (not useSearchParams -- that requires a Suspense boundary
   // and this layout wraps statically-prerendered pages like /host/account)
@@ -47,21 +44,6 @@ export default function HostLayout({ children }: { children: React.ReactNode }) 
           >
             Sign in
           </Link>
-          {IS_DEV && (
-            <button
-              onClick={async () => {
-                try {
-                  await signInAsDemoHost(DEMO_HOST_ID);
-                  router.refresh();
-                } catch (err) {
-                  console.error('[dev] failed to establish demo host session:', err);
-                }
-              }}
-              className="mt-3 w-full border border-gray-200 text-gray-600 font-semibold py-3 rounded-xl hover:bg-gray-50 transition-all"
-            >
-              Continue as demo host (dev)
-            </button>
-          )}
         </div>
       </div>
     );
