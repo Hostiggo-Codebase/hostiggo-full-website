@@ -10,6 +10,8 @@
  * Rule: for an existing row, a blank value (null / "" / missing) never
  * overwrites a stored value. Non-blank values still update (onboarding).
  */
+import { toE164Phone } from "../phoneFormat";
+
 type Existing = Record<string, any> | null | undefined;
 
 const isBlank = (v: unknown) => v === undefined || v === null || String(v).trim() === "";
@@ -26,7 +28,7 @@ export function buildProfileUpsert(body: Record<string, any>, existing: Existing
     name: keepExisting("name", name) ? existing!.name : name,
     email: keepExisting("email", email) ? existing!.email : email,
     ...(body.phone !== undefined &&
-      !keepExisting("phone", body.phone) && { phone: body.phone ? String(body.phone).slice(0, 20) : null }),
+      !keepExisting("phone", body.phone) && { phone: toE164Phone(body.phone)?.slice(0, 20) ?? null }),
     ...(body.age !== undefined && !keepExisting("age", age) && { age }),
     ...(body.emergency_contact !== undefined &&
       !keepExisting("emergency_contact", body.emergency_contact) && {
