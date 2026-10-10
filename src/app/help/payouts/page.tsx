@@ -95,8 +95,9 @@ export default function PayoutsHelpPage() {
           body: (
             <>
               <P>
-                Your payout is based on the property price plus any breakfast and add-on services the
-                guest booked. From that amount Hostiggo deducts:
+                Your payout is the booking (stay) amount plus any breakfast and add-on services the
+                guest booked. Only the booking amount carries deductions; add-ons are paid to you in
+                full with no commission. From the booking amount Hostiggo deducts:
               </P>
               <List
                 items={[

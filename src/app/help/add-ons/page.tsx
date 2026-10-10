@@ -99,8 +99,8 @@ export default function AddOnsHelpPage() {
           title: "Hosts: how add-ons are paid",
           body: (
             <P>
-              Add-on revenue counts towards your payout together with the property price, with the same
-              deductions (5% commission, 1% TCS, 1% TDS). See <A href="/help/payouts">Payouts &amp; bank details</A>.
+              Add-on payments carry no commission: Hostiggo&apos;s commission, TCS and TDS apply only
+              to the booking (stay) amount, and add-on revenue is added to your payout in full. See <A href="/help/payouts">Payouts &amp; bank details</A>.
             </P>
           ),
         },

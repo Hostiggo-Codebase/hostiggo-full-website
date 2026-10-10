@@ -20,4 +20,17 @@ describe("calculateHostPayout", () => {
     });
     expect(result.payoutBasePaise).toBe(1_150_000); // ₹11,500
   });
+
+  it("applies commission, TCS and TDS to the stay amount only, not add-ons", () => {
+    const result = calculateHostPayout({
+      propertyPrice: 10000,
+      breakfastPrice: 500,
+      otherServicesPrice: 1000,
+    });
+    expect(result.commissionPaise).toBe(50_000); // 5% of ₹10,000 only
+    expect(result.tcsPaise).toBe(10_000);
+    expect(result.tdsPaise).toBe(10_000);
+    // 11500 - 500 - 100 - 100 = 10800 (add-ons paid out in full)
+    expect(result.netHostPayoutRupees).toBe(10800);
+  });
 });
