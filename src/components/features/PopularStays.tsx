@@ -7,9 +7,11 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Card width = (row width - gaps) / cards per view, for 2 / 3 / 4 per view.
+// Card width = (row width - gaps) / cards per view: 2.3 on phones (the extra
+// 0.3 lets the next card peek in so it's clear the row swipes), then 3 / 4 on
+// tablet / desktop.
 const CARD_SLOT =
-  "shrink-0 snap-start min-w-0 w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] lg:w-[calc((100%-3.75rem)/4)]";
+  "shrink-0 snap-start min-w-0 w-[calc((100%-1.25rem)/2.3)] sm:w-[calc((100%-2.5rem)/3)] lg:w-[calc((100%-3.75rem)/4)]";
 
 interface PopularStaysProps {
   title: string;
@@ -97,11 +99,12 @@ export default function PopularStays({
         </Link>
       </div>
       <div className="relative">
-        {/* One scrollable row: 2 / 3 / 4 cards visible at phone / tablet /
-            desktop widths, the rest reached with the arrow or a swipe. */}
+        {/* One scrollable row: about 2 (with a peek of the next) / 3 / 4 cards
+            visible at phone / tablet / desktop widths, the rest reached with
+            the arrows or a swipe. On phones the row bleeds to the screen edge. */}
         <div
           ref={rowRef}
-          className="flex gap-5 overflow-x-auto snap-x snap-mandatory scrollbar-hide overscroll-x-contain py-4 -my-4"
+          className="flex gap-5 overflow-x-auto snap-x snap-mandatory scrollbar-hide overscroll-x-contain py-4 -my-4 -mr-4 pr-4 scroll-pr-4 sm:mr-0 sm:pr-0 sm:scroll-pr-0"
         >
           {isLoading
             ? Array.from({ length: itemsPerRow }).map((_, i) => (
