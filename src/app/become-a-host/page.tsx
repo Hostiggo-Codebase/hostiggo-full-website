@@ -150,7 +150,7 @@ export default function BecomeAHostPage() {
           </div>
         </section>
 
-        <section id="why-hostiggo" className="scroll-mt-24 mt-14 md:mt-20">
+        <section id="why-hostiggo" className="anchor-below-header mt-14 md:mt-20">
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-2">Why host with Hostiggo</h2>
           <p className="text-gray-600 mb-8 max-w-2xl">
             Everything you need to list your homestay and start receiving bookings.
@@ -160,7 +160,7 @@ export default function BecomeAHostPage() {
               <div
                 key={id}
                 id={id}
-                className="scroll-mt-24 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm"
+                className="anchor-below-header bg-white rounded-2xl border border-gray-200 p-6 shadow-sm"
               >
                 <div className="w-10 h-10 rounded-xl bg-figma-navy/10 text-figma-navy flex items-center justify-center mb-4">
                   <Icon className="w-5 h-5" />
