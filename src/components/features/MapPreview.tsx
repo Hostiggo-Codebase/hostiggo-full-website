@@ -173,7 +173,6 @@ export default function MapPreview({
       map.setZoom(4);
     }
     markerRef.current?.setPosition(center);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city, coordinates, stateBounds, allProperties, mapLoaded]);
 
   return (
