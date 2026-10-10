@@ -1,5 +1,6 @@
 import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "../supabase";
 import { supabaseAdmin } from "../supabase-admin";
+import { toE164Phone } from "../phoneFormat";
 
 const PROFILE_IMAGE_BUCKET = "profile-images";
 
@@ -107,6 +108,7 @@ export const usersAPI = {
       }
     }
     
+    if (data?.phone) data.phone = toE164Phone(data.phone);
     return data ?? null;
   },
 
