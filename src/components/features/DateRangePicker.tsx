@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { blockedStayDates } from "@/lib/stayDates";
@@ -63,7 +63,7 @@ function CalendarMonth({
   const rangeEnd = checkOut ?? (selecting === "checkout" && hoverDate ? hoverDate : null);
 
   const cells: React.ReactNode[] = [];
-  for (let i = 0; i < startOffset; i++) cells.push(<div key={`empty-${i}`} className="h-7 sm:h-9 w-full" />);
+  for (let i = 0; i < startOffset; i++) cells.push(<div key={`empty-${i}`} className="h-[var(--dp-cell,28px)] w-full" />);
 
   for (let day = 1; day <= totalDays; day++) {
     const date = new Date(year, month, day);
@@ -96,7 +96,7 @@ function CalendarMonth({
         onMouseEnter={() => !isDisabled && onDayHover(date)}
         onMouseLeave={() => onDayHover(null)}
         className={cn(
-          "relative w-full h-7 sm:h-9 p-0 flex items-center justify-center text-sm select-none transition-colors",
+          "relative w-full h-[var(--dp-cell,28px)] p-0 flex items-center justify-center text-sm select-none transition-colors",
           inRange && "bg-[#8DA8B9]",
           hasRangeConnectionRight && "before:absolute before:right-0 before:top-0 before:bottom-0 before:w-1/2 before:bg-[#8DA8B9]",
           hasRangeConnectionLeft && "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1/2 before:bg-[#8DA8B9]",
@@ -105,7 +105,7 @@ function CalendarMonth({
       >
         <span
           className={cn(
-            "relative z-10 w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center text-sm font-medium transition-all",
+            "relative z-10 w-[var(--dp-cell,28px)] h-[var(--dp-cell,28px)] flex items-center justify-center text-sm font-medium transition-all",
             (isStart || isEndOrHover) && "rounded-full bg-figma-navy text-white font-bold shadow-md",
             inRange && "text-gray-900 font-medium",
             !isStart && !isEndOrHover && !inRange && !isDisabled && "rounded-full text-gray-800 hover:bg-gray-100 font-medium",
@@ -175,6 +175,30 @@ export default function DateRangePicker({
   useEffect(() => {
     panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, []);
+
+  // Fit the popup to the screen: day cells start at 28px on phones / 36px
+  // otherwise and shrink (down to 22px) until the whole panel is shorter
+  // than the viewport, so it never needs scrolling to reach "Done".
+  const fitToViewport = useCallback(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    let cell = window.innerWidth >= 640 ? 36 : 28;
+    panel.style.setProperty("--dp-cell", `${cell}px`);
+    // Room actually visible: the sticky site header covers the top of the page.
+    const headerH =
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--site-header-h")) || 0;
+    const maxHeight = window.innerHeight - headerH - 24;
+    while (panel.offsetHeight > maxHeight && cell > 22) {
+      cell -= 1;
+      panel.style.setProperty("--dp-cell", `${cell}px`);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    fitToViewport();
+    window.addEventListener("resize", fitToViewport);
+    return () => window.removeEventListener("resize", fitToViewport);
+  }, [fitToViewport, baseYear, baseMonth, rangeError]);
 
   // Click-and-drag range selection
   const dragStartRef = useRef<Date | null>(null);
@@ -252,7 +276,12 @@ export default function DateRangePicker({
     <div
       ref={panelRef}
       className="dropdown-panel !relative shrink-0 animate-fade-in-down p-4 sm:p-6"
-      style={{ width: "min(720px, 95vw)" }}
+      style={{
+        width: "min(720px, 95vw)",
+        // Keep it clear of the sticky header / screen bottom when scrolled into view.
+        scrollMarginTop: "calc(var(--site-header-h, 0px) + 12px)",
+        scrollMarginBottom: "12px",
+      }}
     >
       {/* Two-month calendars with edge navigation */}
       <div className="relative">
@@ -288,18 +317,22 @@ export default function DateRangePicker({
             onDayHover={setHoverDate}
             onDayMouseDown={handleDayMouseDown}
           />
-          <CalendarMonth
-            year={nextYear}
-            month={nextMonth}
-            checkIn={checkIn}
-            checkOut={checkOut}
-            hoverDate={hoverDate}
-            selecting={selecting}
-            blockedDates={blockedDates}
-            onDayClick={handleDayClick}
-            onDayHover={setHoverDate}
-            onDayMouseDown={handleDayMouseDown}
-          />
+          {/* Second month only from tablet width up; phones page through
+              months with the arrows so the popup stays short. */}
+          <div className="hidden sm:block flex-1 min-w-0">
+            <CalendarMonth
+              year={nextYear}
+              month={nextMonth}
+              checkIn={checkIn}
+              checkOut={checkOut}
+              hoverDate={hoverDate}
+              selecting={selecting}
+              blockedDates={blockedDates}
+              onDayClick={handleDayClick}
+              onDayHover={setHoverDate}
+              onDayMouseDown={handleDayMouseDown}
+            />
+          </div>
         </div>
       </div>
 
