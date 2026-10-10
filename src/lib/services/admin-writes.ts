@@ -1271,6 +1271,8 @@ export async function resolveLocationId(
   return created.location_id;
 }
 
+const LISTING_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
+
 export async function createListing(draft: ListingDraft) {
   // Ensure the user has a host profile (auto-create if needed)
   const hostUuid = await ensureHostProfile(draft.userId);
@@ -1323,6 +1325,33 @@ export async function createListing(draft: ListingDraft) {
       .eq("type_id", draft.propertyType)
       .maybeSingle();
     if (propType) row.property_type_id = propType.id;
+  }
+
+  // Idempotency: repeated Submit clicks (or a retried request) used to create
+  // one identical listing per click. If this host created a listing with the
+  // same title, description and weekday price in the last few minutes, treat
+  // this as the same submission and return that listing instead of inserting.
+  const dedupeSince = new Date(Date.now() - LISTING_DEDUPE_WINDOW_MS).toISOString();
+  const { data: recentDup } = await supabaseAdmin
+    .from("listings")
+    .select("listing_id, title")
+    .eq("host_uuid", hostUuid)
+    .eq("title", row.title)
+    .eq("description", row.description)
+    .eq("price_weekday", row.price_weekday)
+    .gte("created_at", dedupeSince)
+    .order("listing_id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (recentDup) {
+    return {
+      listing_id: recentDup.listing_id,
+      title: recentDup.title,
+      warnings: [] as string[],
+      live: readiness.ready,
+      payoutBlockers: readiness.blockers,
+      duplicate: true,
+    };
   }
 
   // listings.listing_id is NOT NULL with no default in the schema, so it has
