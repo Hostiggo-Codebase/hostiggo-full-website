@@ -5,6 +5,7 @@ import WizardShell from '../_components/WizardShell';
 import { useListingDraft } from '@/context/ListingDraftContext';
 import { calculateBookingInvoice } from '@/lib/billing/invoice';
 import { calculateHostPayout } from '@/lib/billing/payout';
+import { weekendPriceHint } from '@/lib/weekendPriceHint';
 import { formatINR } from '@/lib/format';
 
 // Same bounds the server enforces on publish (/api/host/listings).
@@ -49,8 +50,7 @@ export default function PricingPage() {
 
   // Calculate percentage difference
   const effectiveWeekend = sameAsWeekday ? weekdayPrice : weekendPrice;
-  const diffPercent =
-    weekdayPrice > 0 ? Math.round(((effectiveWeekend - weekdayPrice) / weekdayPrice) * 100) : 0;
+  const priceHint = weekendPriceHint(weekdayPrice, effectiveWeekend);
 
   // Payout preview from the real billing functions -- the exact invoice a
   // guest is charged and the exact payout the host receives.
@@ -162,10 +162,12 @@ export default function PricingPage() {
                   </div>
                 </div>
                 {weekendError && <p className="text-[13px] font-medium text-red-600">{weekendError}</p>}
-                {!weekendError && diffPercent !== 0 && (
-                  <p className={`text-[13px] font-bold flex items-center gap-2 ml-1 ${diffPercent > 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] text-white ${diffPercent > 0 ? 'bg-emerald-500' : 'bg-amber-500'}`}>!</span>
-                    {Math.abs(diffPercent)}% {diffPercent > 0 ? 'higher' : 'lower'} than weekday price
+                {!weekendError && priceHint.kind !== 'none' && (
+                  <p className={`text-[13px] font-bold flex items-center gap-2 ml-1 ${priceHint.kind === 'higher' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] text-white ${priceHint.kind === 'higher' ? 'bg-emerald-500' : 'bg-amber-500'}`}>!</span>
+                    {priceHint.kind === 'extreme'
+                      ? priceHint.message
+                      : `${priceHint.percent}% ${priceHint.kind} than weekday price`}
                   </p>
                 )}
               </div>
