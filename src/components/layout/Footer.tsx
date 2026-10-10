@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "./ReloadingLink";
 import CopyrightBar from "./CopyrightBar";
 import CookieSettingsButton from "./CookieSettingsButton";
 import { SOCIAL_LINKS, SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, WHATSAPP_URL } from "@/lib/site";
