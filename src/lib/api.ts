@@ -642,6 +642,10 @@ export const api = {
     comment?: string;
   }) =>
     request<any>(`/api/reviews`, { method: "POST", body: JSON.stringify(payload) }),
+  getReviewEligibility: (listingId: string | number) =>
+    request<{ canReview: boolean; reason: string | null }>(
+      `/api/reviews?listingId=${encodeURIComponent(String(listingId))}`,
+    ),
   uploadPhoto: async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append("file", file);
