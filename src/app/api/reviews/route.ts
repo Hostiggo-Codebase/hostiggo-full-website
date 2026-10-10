@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createReview, ReviewNotAllowedError } from "@/lib/services/admin-writes";
+import { createReview, getReviewEligibility, ReviewNotAllowedError } from "@/lib/services/admin-writes";
 import { forbiddenResponse, readJsonBody, requireUserId } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
+
+/** GET /api/reviews?listingId= -- may the signed-in user review this listing? */
+export async function GET(req: NextRequest) {
+  try {
+    const userId = await requireUserId(req);
+    if (userId instanceof NextResponse) return userId;
+    const listingId = Number(req.nextUrl.searchParams.get("listingId"));
+    if (!Number.isInteger(listingId) || listingId <= 0) {
+      return NextResponse.json({ error: "listingId is required" }, { status: 400 });
+    }
+    const data = await getReviewEligibility(listingId, userId);
+    return NextResponse.json({ data });
+  } catch (err: any) {
+    console.error("[/api/reviews GET] error:", err?.message, err?.code);
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {

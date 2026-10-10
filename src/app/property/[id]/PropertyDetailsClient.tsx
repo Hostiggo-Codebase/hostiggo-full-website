@@ -544,6 +544,21 @@ function WriteReview({
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // The form is only for guests whose confirmed stay here has ended (the
+  // server enforces the same rule on submit). null = still checking.
+  const [eligibility, setEligibility] = useState<{ userId: string; canReview: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || !userId) return;
+    let cancelled = false;
+    api
+      .getReviewEligibility(listingId)
+      .then((r) => !cancelled && setEligibility({ userId, canReview: !!r?.canReview }))
+      .catch(() => !cancelled && setEligibility({ userId, canReview: false }));
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, userId, listingId]);
 
   if (!isAuthenticated) {
     return (
@@ -561,6 +576,10 @@ function WriteReview({
         </p>
       </div>
     );
+  }
+
+  if (!eligibility || eligibility.userId !== userId || !eligibility.canReview) {
+    return null;
   }
 
   const submit = async () => {
