@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
-import { Check, Lightbulb, MapPin } from 'lucide-react';
-import WizardShell from '../_components/WizardShell';
-import AmenityGrid from '@/components/features/AmenityGrid';
-import { LABELS, dbIdsFromStringIds, stringIdsFromDbIds } from '@/lib/amenityCatalog';
+import { HelpCircle, Check } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { CATEGORIES, dbIdsFromStringIds, stringIdsFromDbIds } from '@/lib/amenityCatalog';
 import { useListingDraft } from '@/context/ListingDraftContext';
 
 export default function AmenitiesPage() {
+  const router = useRouter();
   const { draft, update } = useListingDraft();
+  
   const [selected, setSelected] = useState<Set<string>>(() => {
     const fromDraft = stringIdsFromDbIds(draft.amenityIds);
     return fromDraft.size > 0 ? fromDraft : new Set(['wifi', 'kitchen']);
@@ -20,86 +21,136 @@ export default function AmenitiesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  };
+
+  const handleNext = () => {
+    router.push('/host/list/addons');
+  };
+
+  const handlePrev = () => {
+    router.push('/host/list/capacity');
+  };
 
   return (
-    <WizardShell
-      step={6}
-      title="Tell guests what your place has to offer"
-      subtitle="Select all the amenities you provide. You can update these anytime after publishing."
-    >
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-        {/* Left: categories */}
-        <div className="md:col-span-8">
-          <AmenityGrid selected={selected} onToggle={toggle} />
+    <div className="min-h-screen flex flex-col bg-white text-gray-800">
+      {/* Header */}
+      <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 md:px-16 lg:px-20 h-20 bg-white shadow-sm border-b border-gray-100">
+        <Link
+          href="/"
+          className="text-xl font-extrabold tracking-tight text-gray-900 flex items-center"
+        >
+          <span>HOSTI<span className="text-[#003B5C]">GGO</span></span>
+        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/host/listings"
+            className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors px-4 py-2 rounded-lg hover:bg-gray-50"
+          >
+            Save &amp; Exit
+          </Link>
+          <Link
+            href="/support"
+            className="text-[#003B5C] hover:bg-[#003B5C]/10 transition-colors p-2 rounded-full"
+            aria-label="Help"
+          >
+            <HelpCircle className="w-5 h-5" />
+          </Link>
         </div>
+      </header>
 
-        {/* Right: sticky preview */}
-        <div className="md:col-span-4 hidden md:block">
-          <div className="sticky top-28">
-            <div className="bg-white rounded-2xl shadow-card p-6 border border-gray-200">
-              <div className="relative w-full h-48 rounded-xl mb-4 overflow-hidden bg-gray-100 flex items-center justify-center">
-                {draft.photoUrls?.[0] ? (
-                  <Image
-                    fill
-                    src={draft.photoUrls[0]}
-                    alt="Listing preview"
-                    sizes="(max-width: 1024px) 100vw, 33vw"
-                    className="object-cover"
-                  />
-                ) : (
-                  <span className="text-xs text-gray-400">Photos added later will show here</span>
-                )}
-                <div className="absolute top-3 right-3 bg-white/80 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold">
-                  Listing Preview
-                </div>
-              </div>
-              <h3 className="text-lg font-bold text-gray-800 mb-2">
-                {draft.title || 'Your listing title'}
-              </h3>
-              <div className="flex items-center gap-1.5 text-sm text-gray-500 mb-4">
-                <MapPin className="w-4 h-4" />
-                {draft.addressLine1 || 'Location added earlier in the wizard'}
-              </div>
-              <div className="space-y-3">
-                <div className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  Selected Amenities
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {selected.size === 0 ? (
-                    <span className="text-sm text-gray-400 italic">
-                      No amenities selected yet
-                    </span>
-                  ) : (
-                    [...selected].map((id) => (
-                      <span
-                        key={id}
-                        className="bg-figma-navy/5 text-figma-navy px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1"
-                      >
-                        <Check className="w-3 h-3" />
-                        {LABELS[id]}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-              <div className="mt-8 p-4 bg-gray-50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <Lightbulb className="w-5 h-5 text-figma-navy shrink-0" />
-                  <p className="text-sm text-gray-700">
-                    Guests often search for WiFi, Kitchen, and Free Parking.
-                  </p>
-                </div>
+      {/* Main Content */}
+      <main className="flex-grow pt-32 pb-32 px-6 md:px-16 lg:px-20 w-full max-w-4xl mx-auto flex flex-col items-start">
+        <div className="bg-gray-800 text-white rounded-lg px-4 py-2 text-sm font-medium inline-block">
+          Step 6/8 &gt;
+        </div>
+        
+        <h1 className="text-3xl font-bold text-gray-900 mt-6">
+          Available facilities
+        </h1>
+        <p className="text-sm text-gray-500 mt-2 mb-8">
+          Select amenities that your property offers, more amenities will appear after you publish your listing
+        </p>
+
+        <div className="w-full pb-10">
+          {CATEGORIES.map((category) => (
+            <div key={category.title} className="mb-8">
+              <h2 className="text-lg font-bold text-gray-800 mt-8 mb-4">
+                {category.title}
+              </h2>
+              
+              <div className="flex flex-wrap gap-4">
+                {category.items.map((item) => {
+                  const Icon = item.icon;
+                  const isSelected = selected.has(item.id);
+                  
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => toggle(item.id)}
+                      className={`w-36 h-24 p-4 relative flex flex-col justify-between rounded-xl border transition-all text-left ${
+                        isSelected 
+                          ? 'border-[#003B5C] bg-white text-[#003B5C] shadow-sm ring-1 ring-[#003B5C]' 
+                          : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      <Icon className="w-6 h-6" />
+                      <span className="text-sm font-medium leading-tight">{item.label}</span>
+                      
+                      {isSelected && (
+                        <Check 
+                          className="w-5 h-5 text-[#003B5C] absolute top-3 right-3" 
+                          strokeWidth={3} 
+                        />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
+          ))}
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="fixed bottom-0 left-0 w-full z-50 bg-white flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        {/* Progress bar injected directly at the top edge */}
+        <div className="w-full h-1 bg-gray-200">
+          <div 
+            className="h-full bg-[#003B5C] transition-all duration-500" 
+            style={{ width: `${(6 / 8) * 100}%` }} 
+          />
+        </div>
+        
+        <div className="flex justify-between items-center px-6 md:px-16 lg:px-20 py-5">
+          <button
+            onClick={handlePrev}
+            className="px-6 py-2.5 rounded-xl text-sm font-semibold border border-[#003B5C] text-[#003B5C] hover:bg-[#003B5C]/5 transition-all"
+          >
+            Previous
+          </button>
+          
+          <div className="flex items-center gap-4">
+            <Link
+              href="/support"
+              className="hidden md:block text-sm font-medium text-gray-500 hover:underline"
+            >
+              Need help?
+            </Link>
+            <button
+              onClick={handleNext}
+              className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#003B5C] text-white hover:bg-[#003B5C]/90 transition-all shadow-sm"
+            >
+              Next
+            </button>
           </div>
         </div>
-      </div>
-    </WizardShell>
+      </footer>
+    </div>
   );
 }
