@@ -129,11 +129,14 @@ export default function Navbar() {
             href="/"
             className="flex items-center gap-3 flex-shrink-0 group"
           >
-            <div className="w-11 h-11 rounded-full bg-[#004772] flex items-center justify-center flex-shrink-0 shadow-xs transition-transform group-hover:scale-105">
-              <span className="text-white text-[22px] font-bold font-['Poppins'] leading-none">
-                H
-              </span>
-            </div>
+            <Image
+              src="/logo-circle.png"
+              alt="Hostiggo"
+              width={44}
+              height={44}
+              priority
+              className="w-11 h-11 rounded-full flex-shrink-0 shadow-xs transition-transform group-hover:scale-105"
+            />
             <div className="flex items-baseline tracking-tight">
               <span
                 className="font-bold text-[#004772] text-[22px] md:text-[24px] uppercase"
