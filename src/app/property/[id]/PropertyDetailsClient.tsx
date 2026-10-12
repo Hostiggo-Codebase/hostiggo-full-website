@@ -1223,6 +1223,11 @@ function BookingWidget({
         setStatus("available");
         return;
       }
+      if (err instanceof ApiError && err.code === "HOST_PAYOUT_MISSING") {
+        toast.error(err.message, { duration: 10000 });
+        setStatus("available");
+        return;
+      }
       toast.error(
         err instanceof Error ? err.message : "Could not complete the booking.",
       );

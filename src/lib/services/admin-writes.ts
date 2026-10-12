@@ -5,7 +5,7 @@ import { SCHEMA } from "../schema.constants";
 import { canonicalPlaceName } from "../destinationAliases";
 import { calculateBookingInvoice } from "../billing/invoice";
 import { discountedStaySubtotal, pickStayDiscount, type StayDiscountRow } from "../billing/stayDiscounts";
-import { getHostPayoutReadiness } from "./hostPayoutReadiness";
+import { getHostPayoutReadiness, hostHasPayoutAccount, HostPayoutMissingError } from "./hostPayoutReadiness";
 import { DatesUnavailableError, isDatabaseAvailabilityError } from "../stayDates";
 
 const DB_SCHEMA = SCHEMA.testingSchema;
@@ -288,6 +288,13 @@ export async function validateAndPriceBooking(input: BookingInput) {
   // be booked, even by someone holding a direct link.
   if (!listing.is_active || listing.delisted_at) {
     throw new Error("This property isn't available for booking right now.");
+  }
+  // A listing can be live without its host having payouts (listed before the
+  // payout gate existed, or the payout account was rejected later). Booking it
+  // would take a guest's money with nowhere to route the host's share. This
+  // runs at reserve time and again at finalize, where a rejection refunds.
+  if (!(await hostHasPayoutAccount(listing.host_uuid))) {
+    throw new HostPayoutMissingError();
   }
 
   const numAdults = input.numAdults ?? 1;
