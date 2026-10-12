@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Building2, ChevronLeft, Mail, MessageSquareWarning, Phone, ShieldAlert } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import EmailLink from "@/components/support/EmailLink";
 
 const channels = [
   {
@@ -68,12 +69,19 @@ export default function ContactPage() {
                 <p className="text-[15px] leading-7 text-figma-ink/70 mb-4 flex-1">
                   {c.body}
                 </p>
-                <a
-                  href={c.action.href}
-                  className="text-sm font-semibold text-figma-navy underline underline-offset-2"
-                >
-                  {c.action.label}
-                </a>
+                {c.action.href.startsWith("mailto:") ? (
+                  <EmailLink
+                    email={c.action.href.slice("mailto:".length)}
+                    className="text-sm font-semibold text-figma-navy underline underline-offset-2"
+                  />
+                ) : (
+                  <a
+                    href={c.action.href}
+                    className="text-sm font-semibold text-figma-navy underline underline-offset-2"
+                  >
+                    {c.action.label}
+                  </a>
+                )}
               </div>
             );
           })}

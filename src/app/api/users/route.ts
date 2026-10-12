@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { usersAPI } from "@/lib/services/user";
 import { updateUserProfile, deactivateUserAccount } from "@/lib/services/admin-writes";
+import { buildProfileUpsert } from "@/lib/services/profileUpsert";
 import { errorMessage } from "@/lib/api-error";
 import {
   forbiddenResponse,
@@ -72,27 +73,9 @@ export async function POST(req: NextRequest) {
     // this is actually an insert; an existing row keeps whatever
     // deactivateUserAccount last set.
     const existing = await usersAPI.getUserById(String(body.user_id));
-    // Optional fields are only included when actually sent, so an upsert
-    // that omits them can't null out values a previous save wrote.
-    const data = await usersAPI.upsertUser({
-      user_id: String(body.user_id),
-      name: String(body.name).slice(0, 200),
-      email: body.email ? String(body.email).slice(0, 320) : "",
-      ...(body.phone !== undefined && { phone: body.phone ? String(body.phone).slice(0, 20) : null }),
-      ...(body.age !== undefined && { age }),
-      ...(body.emergency_contact !== undefined && {
-        emergency_contact: body.emergency_contact
-          ? String(body.emergency_contact).slice(0, 200)
-          : null,
-      }),
-      // Google sign-in can provide the initial avatar, but must never replace
-      // a photo the user has already uploaded from their account.
-      ...(body.profile_pic_url !== undefined && !existing?.profile_pic_url && {
-        profile_pic_url: body.profile_pic_url ? String(body.profile_pic_url) : null,
-      }),
-      ...(body.is_verified !== undefined && { is_verified: body.is_verified === true }),
-      ...(body.is_active !== undefined && !existing && { is_active: body.is_active === true }),
-    });
+    // Blank values from sign-in callers never overwrite stored ones (see
+    // buildProfileUpsert -- this used to wipe saved phone numbers on login).
+    const data = await usersAPI.upsertUser(buildProfileUpsert(body, existing));
     return NextResponse.json({ data });
   } catch (err) {
     return jsonError(err);

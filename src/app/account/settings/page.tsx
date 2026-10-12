@@ -298,7 +298,7 @@ export default function GuestSettingsPage() {
           <button
             type="button"
             onClick={handleBack}
-            className="w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow transition-all flex items-center justify-center text-gray-700 hover:text-gray-900 shrink-0"
+            className="w-10 h-10 rounded-full bg-[#FFFFFF] border border-gray-200 shadow-sm hover:shadow transition-all flex items-center justify-center text-gray-700 hover:text-gray-900 shrink-0"
             aria-label="Go back"
           >
             <ArrowLeft className="w-5 h-5" />

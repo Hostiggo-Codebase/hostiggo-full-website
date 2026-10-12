@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
@@ -112,26 +112,34 @@ export function ListingDraftProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Synchronous re-entry guard: `submitting` state only flips after the
+  // awaited profile check, so fast repeated clicks each created a listing.
+  const inFlight = useRef(false);
+
   const submit = useCallback(async () => {
+    if (inFlight.current) return;
     if (!isAuthenticated || !userId) {
       toast('Please sign in to publish your listing.');
       router.push('/signin?redirect=/host/list/house-rules');
       return;
     }
 
+    inFlight.current = true;
+    setSubmitting(true);
     // Check if user has a phone number
     try {
       const userResponse = await api.getUser(userId);
       if (!userResponse?.phone) {
         toast.error('Please add a phone number to your profile before publishing listings.');
         router.push('/host/settings?tab=personal');
+        inFlight.current = false;
+        setSubmitting(false);
         return;
       }
     } catch (err) {
       console.error('Failed to check user profile:', err);
     }
 
-    setSubmitting(true);
     try {
       const result = await api.createListing({ userId, ...draft });
       reset();
@@ -148,6 +156,7 @@ export function ListingDraftProvider({ children }: { children: ReactNode }) {
       console.error('[listing-draft] submit failed:', err);
       toast.error(err instanceof Error ? err.message : 'Could not create the listing.');
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   }, [draft, userId, isAuthenticated, reset, router]);

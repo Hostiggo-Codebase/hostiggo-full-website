@@ -1103,35 +1103,50 @@ function eachDateInRange(startDate: string, endDate: string): string[] {
 // ── Reviews ──────────────────────────────────────────────────────────────────
 export class ReviewNotAllowedError extends Error {}
 
+/**
+ * Only verified guests review: a confirmed (not cancelled) stay at this
+ * listing whose check-out date has passed, and at most one review per
+ * completed stay -- so ratings can't be stuffed by the host's friends or by
+ * one guest reviewing repeatedly. Shared by the review form (to decide
+ * whether to show it at all) and createReview (which enforces it).
+ */
+export async function getReviewEligibility(
+  listingId: number,
+  userId: string,
+): Promise<{ canReview: boolean; reason: string | null }> {
+  const today = todayInIndia();
+  const { count: completedStays, error: eligErr } = await supabaseAdmin
+    .from("bookings")
+    .select("booking_id", { count: "exact", head: true })
+    .eq("listing_id", listingId)
+    .eq("user_id", userId)
+    .eq("status_id", 2) // CONFIRMED
+    .lte("end_date", today); // checked out
+  if (eligErr) throw eligErr;
+  if (!completedStays) {
+    return { canReview: false, reason: "You can review a stay once you've checked out." };
+  }
+  const { count: existingReviews, error: countErr } = await supabaseAdmin
+    .from("review")
+    .select("review_id", { count: "exact", head: true })
+    .eq("listing_id", listingId)
+    .eq("user_id", userId);
+  if (countErr) throw countErr;
+  if ((existingReviews ?? 0) >= completedStays) {
+    return { canReview: false, reason: "You've already reviewed this stay." };
+  }
+  return { canReview: true, reason: null };
+}
+
 export async function createReview(input: {
   listingId: number;
   userId: string;
   rating: number;
   comment?: string | null;
 }) {
-  // Only verified guests review: a confirmed stay at this listing that has
-  // ended, and at most one review per completed stay -- so ratings can't be
-  // stuffed by the host's friends or by one guest reviewing repeatedly.
-  const today = todayInIndia();
-  const { count: completedStays, error: eligErr } = await supabaseAdmin
-    .from("bookings")
-    .select("booking_id", { count: "exact", head: true })
-    .eq("listing_id", input.listingId)
-    .eq("user_id", input.userId)
-    .eq("status_id", 2) // CONFIRMED
-    .lte("end_date", today); // checked out
-  if (eligErr) throw eligErr;
-  if (!completedStays) {
-    throw new ReviewNotAllowedError("You can review a stay once you've checked out.");
-  }
-  const { count: existingReviews, error: countErr } = await supabaseAdmin
-    .from("review")
-    .select("review_id", { count: "exact", head: true })
-    .eq("listing_id", input.listingId)
-    .eq("user_id", input.userId);
-  if (countErr) throw countErr;
-  if ((existingReviews ?? 0) >= completedStays) {
-    throw new ReviewNotAllowedError("You've already reviewed this stay.");
+  const eligibility = await getReviewEligibility(input.listingId, input.userId);
+  if (!eligibility.canReview) {
+    throw new ReviewNotAllowedError(eligibility.reason ?? "You can't review this stay.");
   }
 
   const { data, error } = await supabaseAdmin
@@ -1278,6 +1293,8 @@ export async function resolveLocationId(
   return created.location_id;
 }
 
+const LISTING_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
+
 export async function createListing(draft: ListingDraft) {
   // Ensure the user has a host profile (auto-create if needed)
   const hostUuid = await ensureHostProfile(draft.userId);
@@ -1330,6 +1347,33 @@ export async function createListing(draft: ListingDraft) {
       .eq("type_id", draft.propertyType)
       .maybeSingle();
     if (propType) row.property_type_id = propType.id;
+  }
+
+  // Idempotency: repeated Submit clicks (or a retried request) used to create
+  // one identical listing per click. If this host created a listing with the
+  // same title, description and weekday price in the last few minutes, treat
+  // this as the same submission and return that listing instead of inserting.
+  const dedupeSince = new Date(Date.now() - LISTING_DEDUPE_WINDOW_MS).toISOString();
+  const { data: recentDup } = await supabaseAdmin
+    .from("listings")
+    .select("listing_id, title")
+    .eq("host_uuid", hostUuid)
+    .eq("title", row.title)
+    .eq("description", row.description)
+    .eq("price_weekday", row.price_weekday)
+    .gte("created_at", dedupeSince)
+    .order("listing_id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (recentDup) {
+    return {
+      listing_id: recentDup.listing_id,
+      title: recentDup.title,
+      warnings: [] as string[],
+      live: readiness.ready,
+      payoutBlockers: readiness.blockers,
+      duplicate: true,
+    };
   }
 
   // listings.listing_id is NOT NULL with no default in the schema, so it has
