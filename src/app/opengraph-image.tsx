@@ -1,10 +1,15 @@
 import { ImageResponse } from 'next/og';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site';
 
 // Default share card for links to the site (WhatsApp, Instagram, X, Facebook).
 export const alt = `${SITE_NAME}: ${SITE_TAGLINE}`;
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
+
+// Brand logo inlined so the share card renders without a network fetch.
+const LOGO_DATA_URI = `data:image/png;base64,${readFileSync(join(process.cwd(), 'public', 'logo-circle.png')).toString('base64')}`;
 
 export default function OpenGraphImage() {
   return new ImageResponse(
@@ -23,22 +28,7 @@ export default function OpenGraphImage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div
-            style={{
-              width: '54px',
-              height: '54px',
-              borderRadius: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: '#0f172a',
-              color: '#ffffff',
-              fontSize: '28px',
-              fontWeight: 700,
-            }}
-          >
-            H
-          </div>
+          <img src={LOGO_DATA_URI} width={54} height={54} alt="" style={{ borderRadius: '27px' }} />
           <div style={{ fontSize: '28px', fontWeight: 700 }}>{SITE_NAME}</div>
         </div>
 
