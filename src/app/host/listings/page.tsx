@@ -4,6 +4,7 @@ import { formatINR } from '@/lib/format';
 import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { MapPin, Pencil, Plus, RotateCcw, Pause, Play } from 'lucide-react';
 import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboardShell';
@@ -127,6 +128,8 @@ export default function MyListingsPage() {
     }
   }, []);
 
+  const router = useRouter();
+
   const handleToggleListing = async (listingId: string, currentActive: boolean) => {
     if (!userId) return;
     setTogglingId(listingId);
@@ -155,7 +158,14 @@ export default function MyListingsPage() {
         ),
       );
 
-      toast.success(data.isActive ? 'Listing is now live!' : 'Listing paused');
+      if (data.payoutPending) {
+        toast.warning("Listing resumed, but guests can't book it until you set up payouts.", {
+          duration: 12000,
+          action: { label: 'Set up payouts', onClick: () => router.push('/host/settings?tab=payouts') },
+        });
+      } else {
+        toast.success(data.isActive ? 'Listing is now live!' : 'Listing paused');
+      }
     } catch (err) {
       console.error('[toggle] Error:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to toggle listing');
