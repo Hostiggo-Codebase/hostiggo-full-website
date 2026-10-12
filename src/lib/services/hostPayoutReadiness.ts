@@ -96,6 +96,43 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
   return { ready: blockers.length === 0, blockers, kycVerified, bankVerified, payoutCreated, phoneAdded };
 }
 
+/**
+ * Whether money for a booking can actually be routed to this host: a complete,
+ * non-rejected Razorpay Route account. This is the check a booking must pass;
+ * it is narrower than getHostPayoutReadiness (which also gates going live), so
+ * an established host isn't blocked by e.g. a later phone/KYC change.
+ */
+export async function hostHasPayoutAccount(hostUuid: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("host_payout_methods")
+    .select("razorpay_account_id, razorpay_stakeholder_id, razorpay_product_id, status")
+    .eq("host_uuid", hostUuid)
+    .maybeSingle();
+  if (error) throw error;
+  return (
+    !!data?.razorpay_account_id &&
+    !!data?.razorpay_stakeholder_id &&
+    !!data?.razorpay_product_id &&
+    data.status !== "rejected"
+  );
+}
+
+/** Shown to a guest who tries to book a listing whose host can't be paid yet. */
+export const HOST_PAYOUT_MISSING_MESSAGE =
+  "Sorry for the inconvenience! This host hasn't set up payouts yet, so this property can't be booked right now. Please look at other properties, or check back soon.";
+
+/**
+ * Deliberately has no `.code`: finalizeBookingFromRazorpayOrder treats a coded
+ * error as a transient database failure and retries, whereas this is a business
+ * rejection that must refund the guest.
+ */
+export class HostPayoutMissingError extends Error {
+  constructor() {
+    super(HOST_PAYOUT_MISSING_MESSAGE);
+    this.name = "HostPayoutMissingError";
+  }
+}
+
 export class PayoutNotReadyError extends Error {
   readonly blockers: PayoutBlocker[];
   constructor(blockers: PayoutBlocker[]) {

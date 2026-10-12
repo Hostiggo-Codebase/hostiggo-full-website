@@ -270,7 +270,14 @@ export default function ManageListingPage() {
       const { data } = await res.json();
       setFormData((prev) => (prev ? { ...prev, is_active: data.isActive } : prev));
       setListing((prev) => (prev ? { ...prev, is_active: data.isActive } : prev));
-      toast.success(data.isActive ? 'Listing is now live!' : 'Listing paused');
+      if (data.payoutPending) {
+        toast.warning("Listing resumed, but guests can't book it until you set up payouts.", {
+          duration: 12000,
+          action: { label: 'Set up payouts', onClick: () => router.push('/host/settings?tab=payouts') },
+        });
+      } else {
+        toast.success(data.isActive ? 'Listing is now live!' : 'Listing paused');
+      }
     } catch (err) {
       console.error('Toggle pause error:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to update listing status');

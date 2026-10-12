@@ -17,9 +17,9 @@ export default function PayoutSetupBanner({ blockers }: { blockers: PayoutBlocke
   if (blockers.length === 0) return null;
   return (
     <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
-      <h2 className="text-base font-bold text-amber-900">Finish payout setup to go live</h2>
+      <h2 className="text-base font-bold text-amber-900">Finish payout setup to receive bookings</h2>
       <p className="mt-1 text-sm text-amber-800">
-        Your listings stay hidden from guests until we can pay you. This takes a few minutes.
+        Guests can&apos;t book your listings until we can pay you, and new listings stay paused. This takes a few minutes.
       </p>
       <ol className="mt-4 space-y-2">
         {STEPS.map((s) => {
