@@ -129,7 +129,7 @@ export const metadata: Metadata = {
     },
   },
   verification: {
-    google: 'yJ2GTaeO8I9ru-KsphZroJ8BDbUfDH5X5IwALPG787I',
+    google: '6qp93YtWHfB1Hhh61ct8DSuK7a2gKQJECYycFlOB9jg',
   },
   icons: {
     icon: '/favicon.ico',
