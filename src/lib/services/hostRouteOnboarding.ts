@@ -361,7 +361,7 @@ export async function maybeAutoOnboardHostToRoute(userId: string): Promise<strin
 
     const { data: payout } = await supabaseAdmin
       .from("host_payout_methods")
-      .select("razorpay_account_id, razorpay_stakeholder_id, status")
+      .select("razorpay_account_id, razorpay_stakeholder_id, bank_account_number, status")
       .eq("host_uuid", hostUuid)
       .maybeSingle();
     // No bank details on file yet, or already onboarded with nothing new to
@@ -376,15 +376,10 @@ export async function maybeAutoOnboardHostToRoute(userId: string): Promise<strin
       return null;
     }
 
-    const { data: bankRequest } = await supabaseAdmin
-      .from("kyc_requests")
-      .select("status")
-      .eq("user_id", userId)
-      .eq("service_type", "bank")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (bankRequest?.status !== "success") return null;
+    // The saved account must have a successful SurePass verification on
+    // record. Any one counts -- a later throttled or failed re-check of the
+    // same account must not stop its details reaching Razorpay.
+    if (!payout.bank_account_number || !(await verifiedBankRecord(userId, payout.bank_account_number))) return null;
 
     // Any verified PAN counts, even if a later retry was rejected -- same
     // rule as /api/kyc/status and the payout-methods save check.

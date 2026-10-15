@@ -81,12 +81,18 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
     !!p?.razorpay_product_id &&
     p.status !== "rejected";
 
-  // Phone number must be first, then KYC, bank, and payout
+  // A payout account that already exists on Razorpay was created from a
+  // verified PAN, bank account and phone, so it is never asked for again: a
+  // later throttled/failed re-check or a profile change must not send the host
+  // back through setup. Only a rejected or half-created account does.
+  // Otherwise: phone first, then KYC, bank, and payout.
   const blockers: PayoutBlocker[] = [];
-  if (!phoneAdded) blockers.push("phone");
-  if (!kycVerified) blockers.push("kyc");
-  if (!bankVerified) blockers.push("bank");
-  if (!payoutCreated) blockers.push("payout");
+  if (!payoutCreated) {
+    if (!phoneAdded) blockers.push("phone");
+    if (!kycVerified) blockers.push("kyc");
+    if (!bankVerified) blockers.push("bank");
+    blockers.push("payout");
+  }
 
   return { ready: blockers.length === 0, blockers, kycVerified, bankVerified, payoutCreated, phoneAdded };
 }
