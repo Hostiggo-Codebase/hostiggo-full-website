@@ -82,11 +82,19 @@ describe("getHostPayoutReadiness", () => {
     expect(r.blockers).toEqual(["phone", "kyc", "bank", "payout"]);
   });
 
-  it("only a missing phone blocks an otherwise complete host", async () => {
-    tables.userPhone = null;
+  it("asks only for the phone when everything else is verified but no payout account exists yet", async () => {
     tables.authPhone = null;
+    tables.payout = null;
     const r = await getHostPayoutReadiness("u1");
-    expect(r).toMatchObject({ ready: false, blockers: ["phone"] });
+    expect(r).toMatchObject({ ready: false, blockers: ["phone", "payout"] });
+  });
+
+  it("never sends a host with an existing payout account back through setup", async () => {
+    tables.authPhone = null;
+    tables.pan = null;
+    tables.bank = { status: "failed" }; // e.g. a later throttled re-check
+    const r = await getHostPayoutReadiness("u1");
+    expect(r).toMatchObject({ ready: true, blockers: [] });
   });
 
   it("accepts a phone that is only on the auth user", async () => {
@@ -99,8 +107,9 @@ describe("getHostPayoutReadiness", () => {
   it("does not count a phone that is only on the unverified profile", async () => {
     tables.userPhone = "+919888888888";
     tables.authPhone = null;
+    tables.payout = null;
     const r = await getHostPayoutReadiness("u1");
-    expect(r).toMatchObject({ ready: false, phoneAdded: false, blockers: ["phone"] });
+    expect(r).toMatchObject({ ready: false, phoneAdded: false, blockers: ["phone", "payout"] });
   });
 
   it("blocks on KYC first, in the order the host has to do things", async () => {
@@ -112,17 +121,14 @@ describe("getHostPayoutReadiness", () => {
     expect(r.blockers).toEqual(["kyc", "bank", "payout"]);
   });
 
-  it("does not count a payout account created without verified bank details", async () => {
-    tables.bank = { status: "failed" };
-    const r = await getHostPayoutReadiness("u1");
-    expect(r.blockers).toEqual(["bank"]);
-  });
 
   it("does not count a half-created or rejected payout account", async () => {
     tables.payout = { ...fullPayout, razorpay_product_id: null };
     expect((await getHostPayoutReadiness("u1")).blockers).toEqual(["payout"]);
     tables.payout = { ...fullPayout, status: "rejected" };
     expect((await getHostPayoutReadiness("u1")).blockers).toEqual(["payout"]);
+    tables.bank = { status: "failed" };
+    expect((await getHostPayoutReadiness("u1")).blockers).toEqual(["bank", "payout"]);
   });
 
   it("treats a user who is not a host yet as not ready", async () => {
