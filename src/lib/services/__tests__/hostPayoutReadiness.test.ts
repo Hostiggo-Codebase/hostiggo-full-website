@@ -7,9 +7,9 @@ type Tables = {
   pan: { id: number } | null;
   bank: { status: string } | null;
   payout: Record<string, unknown> | null;
-  /** users.phone for the signed-in user. */
+  /** users.phone (unverified profile copy) -- must not count. */
   userPhone: string | null;
-  /** auth.users.phone, the fallback when users.phone is empty. */
+  /** auth.users.phone, the OTP-verified number that counts. */
   authPhone: string | null;
 };
 let tables: Tables;
@@ -61,7 +61,7 @@ beforeEach(() => {
     bank: { status: "success" },
     payout: fullPayout,
     userPhone: "+919999999999",
-    authPhone: null,
+    authPhone: "+919999999999",
   };
 });
 
@@ -94,6 +94,13 @@ describe("getHostPayoutReadiness", () => {
     tables.authPhone = "+919888888888";
     const r = await getHostPayoutReadiness("u1");
     expect(r).toMatchObject({ ready: true, phoneAdded: true, blockers: [] });
+  });
+
+  it("does not count a phone that is only on the unverified profile", async () => {
+    tables.userPhone = "+919888888888";
+    tables.authPhone = null;
+    const r = await getHostPayoutReadiness("u1");
+    expect(r).toMatchObject({ ready: false, phoneAdded: false, blockers: ["phone"] });
   });
 
   it("blocks on KYC first, in the order the host has to do things", async () => {
