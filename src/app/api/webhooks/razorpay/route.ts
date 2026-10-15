@@ -121,6 +121,26 @@ async function processEvent(event: string | undefined, payload: any): Promise<Ne
     return NextResponse.json({ ok: true });
   }
 
+  // Route linked-account lifecycle (account.activated, product.route.activated,
+  // ...): re-read the live status from Razorpay for that account rather than
+  // trusting the payload, so the host's payout status flips to active at once.
+  if (typeof event === "string" && (event.startsWith("account.") || event.startsWith("product.route."))) {
+    const entity = payload?.payload?.account?.entity ?? payload?.payload?.product?.entity;
+    const accountId: string | undefined = entity?.account_id ?? entity?.id;
+    if (accountId?.startsWith("acc_")) {
+      const { data: row } = await supabaseAdmin
+        .from("host_payout_methods")
+        .select("host_uuid")
+        .eq("razorpay_account_id", accountId)
+        .maybeSingle();
+      if (row?.host_uuid) {
+        const { syncRouteStatus } = await import("@/lib/services/hostRouteOnboarding");
+        await syncRouteStatus(row.host_uuid);
+      }
+    }
+    return NextResponse.json({ ok: true });
+  }
+
   // Route split-payment lifecycle (see createHostTransferForBooking in
   // admin-writes.ts, which creates the transfer this event confirms).
   // Idempotent by construction: both are plain status/id updates keyed by

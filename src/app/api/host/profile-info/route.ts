@@ -24,6 +24,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // The phone lives only on the Supabase Auth user: OTP-verified and unique
+    // across accounts. It is never copied into the users table.
+    const { data: authData } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const authPhone = toE164Phone(authData?.user?.phone);
+
     // Fetch host profile
     const { data: hostData, error: hostError } = await supabaseAdmin
       .from("host")
@@ -72,7 +77,8 @@ export async function GET(req: NextRequest) {
     const responseData = {
       name: user.name || "Host",
       email: user.email,
-      phone: toE164Phone(user.phone),
+      phone: authPhone,
+      phoneVerified: Boolean(authPhone),
       avatar: user.profile_pic_url || host.photo || null,
       about: host.about || "",  // From host table
       isVerified: host.is_verified || false,

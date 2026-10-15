@@ -31,6 +31,7 @@ import KycModal from '@/components/features/KycModal';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { formatPanInput } from '@/lib/pan';
+import { supabase } from '@/lib/supabase';
 
 const NAV: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'personal', label: 'Personal Info', icon: User },
@@ -43,7 +44,8 @@ const NAV: { id: string; label: string; icon: LucideIcon }[] = [
 interface ProfileData {
   name: string;
   email: string;
-  phone: string;
+  phone: string | null;
+  phoneVerified?: boolean;
   avatar: string;
   about: string;
   isVerified: boolean;
@@ -108,6 +110,10 @@ export default function HostSettingsPage() {
   const [phone, setPhone] = useState('');
   const [about, setAbout] = useState('');
   const [saving, setSaving] = useState(false);
+  // Phone is saved only on the Supabase Auth account, via an SMS code.
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [phoneBusy, setPhoneBusy] = useState(false);
 
   // Payouts & Taxes tab.
   const [payoutMethod, setPayoutMethod] = useState<Awaited<
@@ -251,6 +257,7 @@ export default function HostSettingsPage() {
       setName(json.data.name ?? '');
       setEmail(json.data.email ?? '');
       setPhone(json.data.phone ?? '');
+      setOtpSent(false);
       setAbout(json.data.about ?? '');
     } catch (err) {
       console.error('[host/settings] load failed:', err);
@@ -265,6 +272,60 @@ export default function HostSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  const toAuthPhone = () => `+91${phone.replace(/\D/g, '').slice(-10)}`;
+  const phoneValid = phone.replace(/\D/g, '').slice(-10).length === 10;
+  const phoneVerified = Boolean(
+    profile?.phoneVerified && profile.phone && profile.phone.replace(/\D/g, '').slice(-10) === phone.replace(/\D/g, '').slice(-10),
+  );
+
+  const sendPhoneOtp = async () => {
+    if (!phoneValid) {
+      toast.error('Enter a valid 10-digit phone number.');
+      return;
+    }
+    setPhoneBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ phone: toAuthPhone() });
+      if (error) throw error;
+      setOtpSent(true);
+      toast.success('We sent a 6-digit code to your phone.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      toast.error(
+        /already|registered|exists/i.test(msg)
+          ? 'This number is already linked to another Hostiggo account. Each person can have only one account.'
+          : msg || 'Could not send the code.',
+      );
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
+  const confirmPhoneOtp = async () => {
+    setPhoneBusy(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        phone: toAuthPhone(),
+        token: otpCode.trim(),
+        type: 'phone_change',
+      });
+      if (error) throw error;
+      setOtpSent(false);
+      setOtpCode('');
+      toast.success('Phone number verified.');
+      await loadProfile();
+      if (payoutMethod && payoutMethod.status !== 'active') {
+        const result = await api.updatePayoutMethod({});
+        setPayoutSetupError(result.onboardingError ?? null);
+        await loadPayoutMethod();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'That code did not work.');
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!userId) return;
     const missing = [
@@ -278,14 +339,14 @@ export default function HostSettingsPage() {
       toast.error(`Please fill in: ${missing.join(', ')}.`);
       return;
     }
-    if (phone.replace(/\D/g, '').slice(-10).length !== 10) {
-      toast.error('Enter a valid 10-digit phone number.');
+    if (!phoneVerified) {
+      toast.error('Verify your phone number with the SMS code first.');
       return;
     }
     setSaving(true);
     try {
       await Promise.all([
-        api.updateProfile(userId, { name, email, phone }),
+        api.updateProfile(userId, { name, email }),
         fetch('/api/host/profile', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -460,6 +521,35 @@ export default function HostSettingsPage() {
                       onChange={(e) => setPhone(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-figma-navy focus:border-transparent outline-none text-sm"
                     />
+                    {phoneVerified ? (
+                      <VerifiedBadge ok />
+                    ) : (
+                      <div className="flex gap-2">
+                        {otpSent && (
+                          <input
+                            inputMode="numeric"
+                            maxLength={6}
+                            placeholder="6-digit code"
+                            value={otpCode}
+                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                            className="w-36 px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          disabled={phoneBusy || (otpSent && otpCode.length < 6)}
+                          onClick={otpSent ? confirmPhoneOtp : sendPhoneOtp}
+                          className="px-4 py-2 rounded-xl bg-figma-navy text-white text-sm font-bold disabled:opacity-60"
+                        >
+                          {phoneBusy ? 'Please wait…' : otpSent ? 'Verify code' : 'Send code'}
+                        </button>
+                        {otpSent && (
+                          <button type="button" disabled={phoneBusy} onClick={sendPhoneOtp} className="text-xs underline text-gray-500">
+                            Resend
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <p
                       className={`ml-1 text-xs ${
                         phone.trim() && phone.replace(/\D/g, '').slice(-10).length !== 10
@@ -514,7 +604,7 @@ export default function HostSettingsPage() {
                 </div>
 
                 {(() => {
-                  const savedPhoneOk = (profile?.phone ?? '').replace(/\D/g, '').slice(-10).length === 10;
+                  const savedPhoneOk = Boolean(profile?.phoneVerified);
                   return savedPhoneOk ? (
                     <div className="mb-6 flex items-start gap-2 p-4 rounded-xl bg-figma-navy/5 border border-figma-navy/15">
                       <Landmark className="w-4 h-4 text-figma-navy shrink-0 mt-0.5" />

@@ -6,7 +6,16 @@ import {
   submitRouteSettlementDetails,
   updateLinkedAccount,
   updateStakeholder,
+  fetchLinkedAccount,
+  fetchRouteProduct,
 } from "@/lib/billing/razorpayRoute";
+import {
+  authPhoneTenDigits,
+  cleanPersonName,
+  findPayoutConflict,
+  verifiedBankRecord,
+  verifiedPanName,
+} from "@/lib/services/payoutIdentity";
 
 /**
  * The actual 4-step Route setup -- Account -> Stakeholder -> create Product
@@ -64,17 +73,40 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
     throw new Error("Add your address, city, state and postal code in Settings to finish payout setup -- Razorpay requires them.");
   }
 
+  const conflict = await findPayoutConflict(hostUuid, {
+    pan: payout.pan_number,
+    accountNumber: payout.bank_account_number,
+  });
+  if (conflict) throw new Error(conflict);
+
   const { data: userRow, error: userError } = await supabaseAdmin
     .from("users")
-    .select("email, phone")
+    .select("email")
     .eq("user_id", userId)
     .maybeSingle();
   if (userError) throw userError;
-  // Razorpay wants a bare 10-digit number -- stored phones may carry spaces,
-  // dashes or a +91 / 0 prefix.
-  const phone = String(userRow?.phone ?? "").replace(/\D/g, "").slice(-10);
-  if (!userRow?.email || phone.length !== 10) {
-    throw new Error("Add your email and a 10-digit phone number in Settings -> Personal Info to finish payout setup.");
+  if (!userRow?.email) {
+    throw new Error("Add your email in Settings -> Personal Info to finish payout setup.");
+  }
+  // The phone must be the OTP-verified one on the Supabase Auth user (unique
+  // across accounts) -- the profile copy is unverified. Razorpay wants a bare
+  // 10-digit number.
+  const phone = await authPhoneTenDigits(userId);
+  if (!phone) {
+    throw new Error("Verify your mobile number with an OTP in Settings -> Personal Info to finish payout setup.");
+  }
+
+  // Send what SurePass verified, not what was typed: the bank account must be
+  // one SurePass confirmed (with the IFSC it confirmed), and the name is the
+  // one on the verified PAN -- the legal name Razorpay's KYC and the
+  // settlement beneficiary are checked against.
+  const bank = await verifiedBankRecord(userId, payout.bank_account_number);
+  if (!bank) {
+    throw new Error("Verify your bank account in Settings to finish payout setup.");
+  }
+  const legalName = (await verifiedPanName(userId)) ?? bank.holderName ?? cleanPersonName(payout.account_holder_name);
+  if (!legalName) {
+    throw new Error("Verify your PAN in Settings to finish payout setup.");
   }
 
   let accountId = payout.razorpay_account_id;
@@ -83,15 +115,15 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
 
   const accountDetails = {
     phone,
-    legalBusinessName: payout.account_holder_name,
-    contactName: payout.account_holder_name,
+    legalBusinessName: legalName,
+    contactName: legalName,
     addressLine1: payout.address_line1,
     city: payout.city,
     state: payout.state,
     postalCode: payout.postal_code,
   };
   const stakeholderDetails = {
-    name: payout.account_holder_name,
+    name: legalName,
     email: userRow.email,
     panNumber: payout.pan_number,
   };
@@ -129,8 +161,8 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
 
   const resolved = await submitRouteSettlementDetails(accountId, productId, {
     accountNumber: payout.bank_account_number,
-    ifscCode: payout.bank_ifsc,
-    beneficiaryName: payout.account_holder_name,
+    ifscCode: bank.ifsc,
+    beneficiaryName: legalName,
   });
   // 'needs_clarification' is the expected status right after submitting --
   // Razorpay penny-tests the account asynchronously and only reaches
@@ -372,4 +404,42 @@ export async function maybeAutoOnboardHostToRoute(userId: string): Promise<strin
     console.error(`[maybeAutoOnboardHostToRoute] failed for user ${userId}:`, err);
     return err instanceof Error ? err.message : "Payout setup failed.";
   }
+}
+
+/**
+ * Brings host_payout_methods.status in line with what Razorpay says right now.
+ * Razorpay activates the account some time after setup (and ops can activate it
+ * in the dashboard), so the stored 'submitted' / 'onboarding' goes stale unless
+ * something asks. Called wherever the status is read. Never throws -- on any
+ * Razorpay/DB error the stored status is returned as is.
+ */
+export async function syncRouteStatus(hostUuid: string): Promise<string | null> {
+  const { data: payout } = await supabaseAdmin
+    .from("host_payout_methods")
+    .select("razorpay_account_id, razorpay_product_id, status")
+    .eq("host_uuid", hostUuid)
+    .maybeSingle();
+  if (!payout) return null;
+  if (payout.status === "active" || !payout.razorpay_account_id) return payout.status;
+  try {
+    const [account, product] = await Promise.all([
+      fetchLinkedAccount(payout.razorpay_account_id).catch(() => null),
+      payout.razorpay_product_id
+        ? fetchRouteProduct(payout.razorpay_account_id, payout.razorpay_product_id).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    const activated = product?.activation_status === "activated" || account?.status === "activated";
+    const rejected = !activated && (product?.activation_status === "rejected" || account?.status === "rejected");
+    const next = activated ? "active" : rejected ? "rejected" : null;
+    if (next && next !== payout.status) {
+      await supabaseAdmin
+        .from("host_payout_methods")
+        .update({ status: next, updated_at: new Date().toISOString() })
+        .eq("host_uuid", hostUuid);
+      return next;
+    }
+  } catch (err) {
+    console.error(`[syncRouteStatus] failed for host ${hostUuid}:`, err);
+  }
+  return payout.status;
 }

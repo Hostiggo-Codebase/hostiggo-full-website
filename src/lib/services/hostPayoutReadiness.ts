@@ -37,7 +37,7 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
     .maybeSingle();
   if (hostErr) throw hostErr;
 
-  const [pan, bank, payout, user, authUser] = await Promise.all([
+  const [pan, bank, payout, authUser] = await Promise.all([
     supabaseAdmin
       .from("kyc_requests")
       .select("id")
@@ -63,20 +63,15 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
           .eq("host_uuid", hostRow.host_uuid)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    supabaseAdmin
-      .from("users")
-      .select("phone")
-      .eq("user_id", userId)
-      .maybeSingle(),
     supabaseAdmin.auth.admin.getUserById(userId),
   ]);
   if (pan.error) throw pan.error;
   if (bank.error) throw bank.error;
   if (payout.error) throw payout.error;
-  if (user.error) throw user.error;
 
-  // Check phone in users table first, then fall back to auth.users
-  const phoneAdded = !!(user.data?.phone || authUser.data?.user?.phone);
+  // Only the phone on the Supabase Auth user counts: it is OTP-verified and
+  // unique across accounts. The profile copy (users.phone) is unverified.
+  const phoneAdded = !!authUser.data?.user?.phone;
   const kycVerified = !!pan.data;
   const bankVerified = bank.data?.status === "success";
   const p = payout.data;

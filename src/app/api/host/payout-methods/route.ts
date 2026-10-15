@@ -4,6 +4,7 @@ import { ensureHostProfile, findHostUuid } from "@/lib/services/admin-writes";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { maskMiddle, sha256Hex } from "@/lib/surepass";
 import { samePerson, verifyBankAccount, verifyPanNumber } from "@/lib/services/kycVerify";
+import { findPayoutConflict } from "@/lib/services/payoutIdentity";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,10 @@ export async function GET(req: NextRequest) {
     // Read-only: opening this screen as a guest must not create a host row.
     const hostUuid = await findHostUuid(userId);
     if (!hostUuid) return NextResponse.json({ data: null });
+
+    // Pick up an activation Razorpay completed since the status was stored.
+    const { syncRouteStatus } = await import("@/lib/services/hostRouteOnboarding");
+    await syncRouteStatus(hostUuid);
 
     const readPayout = () =>
       supabaseAdmin
@@ -276,6 +281,11 @@ export async function PATCH(req: NextRequest) {
     if (missing.length > 0) {
       return NextResponse.json({ error: `Please fill in: ${missing.join(", ")}.` }, { status: 400 });
     }
+
+    // One person, one account: neither the PAN nor the bank account may
+    // already back another host's payouts.
+    const conflict = await findPayoutConflict(hostUuid, { pan: final.pan_number, accountNumber });
+    if (conflict) return NextResponse.json({ error: conflict }, { status: 409 });
 
     // Both lookups must match the name payouts will be made out to.
     const holderName = changes.account_holder_name ?? existing?.account_holder_name ?? null;
