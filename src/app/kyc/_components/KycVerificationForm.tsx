@@ -189,7 +189,9 @@ export function KycVerificationForm({
           bankName: body.bankName ?? null,
         });
         toast.success('Your bank account has been verified!');
-        setPayoutPromptOpen(true);
+        // Only offer payout setup when there is no payout account yet.
+        const readiness = await api.getPayoutReadiness().catch(() => null);
+        if (!readiness?.payoutCreated) setPayoutPromptOpen(true);
       } else {
         setBankResult({ verified: false, reason: body?.reason ?? null });
         toast.error(body?.reason || 'Could not verify that bank account.');
