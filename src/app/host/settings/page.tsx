@@ -449,7 +449,7 @@ export default function HostSettingsPage() {
                   </div>
                   <div className="text-center sm:text-left">
                     <h2 className="text-xl font-bold text-gray-800">{profile?.name}</h2>
-                    <p className="text-sm text-gray-500 mb-4">{profile?.isVerified ? 'Verified host' : 'Host on Hostiggo'}</p>
+                    <p className="text-sm text-gray-500 mb-4">{(profile?.isVerified || kycStatus === 'verified') ? 'Verified host' : 'Host on Hostiggo'}</p>
                     <div className="flex items-center gap-6 justify-center sm:justify-start">
                       <div className="text-center">
                         <p className="text-lg font-bold text-gray-800">
@@ -688,12 +688,18 @@ export default function HostSettingsPage() {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setKycModalOpen(true)}
-                      className="text-xs font-bold text-figma-navy hover:underline"
-                    >
-                      Update bank verification
-                    </button>
+                    {payoutMethod.verification.bank.verified && payoutMethod.verification.pan.verified ? (
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-green-700">
+                        <CheckCircle2 className="w-4 h-4" /> Bank account and PAN verification complete
+                      </p>
+                    ) : (
+                      <button
+                        onClick={() => setKycModalOpen(true)}
+                        className="text-xs font-bold text-figma-navy hover:underline"
+                      >
+                        Update bank verification
+                      </button>
+                    )}
                     <div className="flex items-center gap-2 p-4 rounded-xl bg-amber-50 border border-amber-200">
                       <Landmark className="w-4 h-4 text-amber-600 shrink-0" />
                       <p className="text-xs text-amber-800">
