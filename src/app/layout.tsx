@@ -179,8 +179,8 @@ export default function RootLayout({
             <Toaster position="top-center" richColors closeButton />
             <NotificationProvider>{children}</NotificationProvider>
           </ListingFilterProvider>
+          <SupportButton />
         </AuthProvider>
-        <SupportButton />
         <JsonLd data={ORGANIZATION_JSON_LD} />
         <ConsentAnalytics />
       </body>
