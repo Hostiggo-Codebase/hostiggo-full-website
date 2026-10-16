@@ -6,6 +6,7 @@ import { ListingFilterProvider } from '@/context/ListingFilterContext';
 import { Toaster } from 'sonner';
 import { NotificationProvider } from '@/context/NotificationContext';
 import ConsentAnalytics from '@/components/ConsentAnalytics';
+import SupportButton from '@/components/layout/SupportButton';
 import JsonLd from '@/components/JsonLd';
 import {
   COMPANY_LEGAL_NAME,
@@ -179,6 +180,7 @@ export default function RootLayout({
             <NotificationProvider>{children}</NotificationProvider>
           </ListingFilterProvider>
         </AuthProvider>
+        <SupportButton />
         <JsonLd data={ORGANIZATION_JSON_LD} />
         <ConsentAnalytics />
       </body>
