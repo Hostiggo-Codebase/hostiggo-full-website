@@ -16,6 +16,12 @@ const STATIC_PATHS = [
   "/become-a-host",
   "/about",
   "/help",
+  "/help/refunds",
+  "/help/payouts",
+  "/help/add-ons",
+  "/help/verify-identity",
+  "/help/chat-guidelines",
+  "/help/delisting",
   "/faq",
   "/safety",
   "/support",
@@ -31,7 +37,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const pages: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
     url: `${SITE}${path}`,
-    lastModified: now,
+    // No lastModified: these pages change on deploy, not daily, and a
+    // constantly-fresh date teaches crawlers to ignore the field.
     changeFrequency: path === "" || path === "/search" ? "daily" : "monthly",
     priority: path === "" ? 1 : 0.5,
   }));
