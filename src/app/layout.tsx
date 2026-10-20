@@ -16,6 +16,7 @@ import {
   SITE_URL,
   SOCIAL_LINKS,
   SUPPORT_EMAIL,
+  SUPPORT_PHONE_DISPLAY,
 } from '@/lib/site';
 
 // Figma "Website Guest UI/UX" uses Poppins (Regular/Medium/SemiBold/Bold)
@@ -136,7 +137,18 @@ const ORGANIZATION_JSON_LD = {
       legalName: COMPANY_LEGAL_NAME,
       url: SITE_URL,
       logo: `${SITE_URL}/logo.png`,
+      description: SITE_DESCRIPTION,
+      areaServed: { '@type': 'Country', name: 'India' },
       email: SUPPORT_EMAIL,
+      contactPoint: [
+        {
+          '@type': 'ContactPoint',
+          contactType: 'customer support',
+          email: SUPPORT_EMAIL,
+          telephone: SUPPORT_PHONE_DISPLAY,
+          areaServed: 'IN',
+        },
+      ],
       ...(SOCIAL_LINKS.length ? { sameAs: SOCIAL_LINKS.map((s) => s.url) } : {}),
     },
     {
