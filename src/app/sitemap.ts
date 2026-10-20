@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { SITE_URL } from "@/lib/site";
+import { DESTINATIONS, MIN_INDEXABLE_LISTINGS } from "@/lib/destinations";
+import { getDestinationCounts } from "@/lib/services/destinationStays";
 
 // Regenerated hourly. Listing rows come from the database; if it can't be
 // reached (e.g. during a build without credentials) the static pages still ship.
@@ -13,6 +15,7 @@ const SITE = SITE_URL;
 const STATIC_PATHS = [
   "",
   "/search",
+  "/stays",
   "/become-a-host",
   "/about",
   "/help",
@@ -42,6 +45,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: path === "" || path === "/search" ? "daily" : "monthly",
     priority: path === "" ? 1 : 0.5,
   }));
+
+  try {
+    const counts = await getDestinationCounts();
+    for (const d of DESTINATIONS) {
+      if ((counts[d.slug] ?? 0) >= MIN_INDEXABLE_LISTINGS) {
+        pages.push({ url: `${SITE}/stays/${d.slug}`, changeFrequency: "weekly", priority: 0.7 });
+      }
+    }
+  } catch (err) {
+    console.error("[sitemap] destination counts failed:", err);
+  }
 
   try {
     const { data, error } = await supabaseAdmin
