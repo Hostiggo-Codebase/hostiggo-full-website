@@ -5,6 +5,7 @@ import Footer from '@/components/layout/Footer';
 import HeroSection from '@/components/features/HeroSection';
 import HomeSections, { type HomeSection } from '@/components/features/HomeSections';
 import { mapListingToProperty } from '@/lib/api';
+import { SITE_URL } from '@/lib/site';
 import {
   getCachedLocations,
   getCachedHotelsTeaser,
@@ -71,7 +72,7 @@ async function loadHomeSections(): Promise<{ sections: HomeSection[]; error: boo
 export default async function HomePage() {
   const { sections, error } = await loadHomeSections();
 
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.hostiggo.com').replace(/\/$/, '');
+  const siteUrl = SITE_URL;
   const schema = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
