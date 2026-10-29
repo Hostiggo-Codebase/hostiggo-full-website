@@ -122,11 +122,11 @@ export default function ReviewsPage() {
         <>
           {/* Summary */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-            <div className="lg:col-span-4 bg-white rounded-3xl p-8 shadow-card border border-gray-200 flex flex-col items-center justify-center text-center">
+            <div className="lg:col-span-4 bg-white rounded-3xl p-5 sm:p-8 shadow-card border border-gray-200 flex flex-col items-center justify-center text-center">
               <p className="text-xs text-gray-500 uppercase tracking-[0.2em] mb-4">
                 Overall Rating
               </p>
-              <h2 className="text-6xl font-bold text-gray-900 leading-none mb-3">
+              <h2 className="text-5xl sm:text-6xl font-bold text-gray-900 leading-none mb-3">
                 {overallRating !== null ? overallRating.toFixed(1) : 'N/A'}
               </h2>
               <Stars n={overallRating !== null ? Math.round(overallRating) : 0} />
@@ -134,7 +134,7 @@ export default function ReviewsPage() {
                 Based on {reviews.length} review{reviews.length !== 1 ? 's' : ''}
               </p>
             </div>
-            <div className="lg:col-span-8 bg-white rounded-3xl p-8 shadow-card border border-gray-200">
+            <div className="lg:col-span-8 bg-white rounded-3xl p-5 sm:p-8 shadow-card border border-gray-200">
               <p className="text-xs text-gray-500 uppercase tracking-[0.2em] mb-6">
                 Rating Distribution
               </p>

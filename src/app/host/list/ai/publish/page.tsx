@@ -138,7 +138,7 @@ export default function AiPublishPage() {
     return (
       <AiFlowShell stage="publish" onBack={() => router.push('/host/list/ai/review')}>
         <div className="flex items-center justify-center py-16">
-          <div className="bg-white rounded-3xl shadow-card border border-gray-200 max-w-md w-full p-10">
+          <div className="bg-white rounded-3xl shadow-card border border-gray-200 max-w-md w-full p-6 sm:p-10">
             <div className="text-center mb-6">
               <div className="w-16 h-16 rounded-full bg-figma-navy/10 flex items-center justify-center mx-auto mb-5">
                 <Rocket className="w-8 h-8 text-figma-navy" />
@@ -186,7 +186,7 @@ export default function AiPublishPage() {
   return (
     <AiFlowShell stage="publish" onBack={() => router.push('/host/list/ai/review')}>
       <div className="flex items-center justify-center py-16">
-        <div className="bg-white rounded-3xl shadow-card border border-gray-200 max-w-md w-full p-10 text-center">
+        <div className="bg-white rounded-3xl shadow-card border border-gray-200 max-w-md w-full p-6 sm:p-10 text-center">
           <div className="w-16 h-16 rounded-full bg-figma-navy/10 flex items-center justify-center mx-auto mb-5">
             <Rocket className="w-8 h-8 text-figma-navy" />
           </div>

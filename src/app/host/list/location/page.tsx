@@ -11,7 +11,7 @@ import { reverseGeocode, resolveLocationId } from '@/lib/services/geocoding';
 const MapPicker = dynamic(() => import('../_components/MapPicker'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[480px] md:h-[600px] rounded-2xl bg-gray-100 animate-pulse" />
+    <div className="w-full h-[380px] md:h-[600px] rounded-2xl bg-gray-100 animate-pulse" />
   ),
 });
 

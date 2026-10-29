@@ -238,7 +238,7 @@ function ProcessingContent() {
   return (
     <AiFlowShell stage="processing" showBack={false}>
       <div className="flex items-center justify-center py-16">
-        <div className="bg-white rounded-3xl shadow-card border border-gray-200 max-w-md w-full p-10 text-center">
+        <div className="bg-white rounded-3xl shadow-card border border-gray-200 max-w-md w-full p-6 sm:p-10 text-center">
           {outcome === 'loading' && (
             <>
               <Loader2 className="w-12 h-12 text-figma-navy animate-spin mx-auto mb-6" />

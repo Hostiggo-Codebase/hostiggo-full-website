@@ -361,112 +361,8 @@ export default function ManageListingPage() {
 
   const selectedLocation = locations.find((l) => l.location_id === formData?.location_id);
 
-  return (
-    <HostDashboardShell active="listings">
-      <div className="min-h-screen flex flex-col bg-gray-50">
-        {/* Header */}
-        <div className="flex items-center justify-between px-8 py-4 border-b border-gray-200 bg-white sticky top-0 z-40">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Edit Listing</h1>
-            <p className="text-sm text-gray-500 mt-1">{formData?.title || 'Loading...'}</p>
-          </div>
-          <div className="flex items-center gap-4">
-            {formData && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100">
-                <span className={cn('w-2 h-2 rounded-full', formData.is_active ? 'bg-green-500' : 'bg-gray-400')} />
-                <span className="text-xs font-semibold text-gray-700">
-                  {formData.is_active ? 'Live' : 'Paused'}
-                </span>
-              </div>
-            )}
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-6 py-2.5 bg-figma-navy text-white rounded-lg font-semibold hover:bg-figma-navy/90 disabled:opacity-60 flex items-center gap-2"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar Navigation */}
-          <div className="w-72 border-r border-gray-200 bg-white overflow-y-auto flex flex-col">
-            {/* Listing Preview Card - Sticky */}
-            <div className="sticky top-0 p-5 bg-gradient-to-b from-white to-gray-50 border-b border-gray-200 z-10">
-              <div className="space-y-4">
-                {/* Photo Preview */}
-                <div className="aspect-video bg-gray-300 rounded-xl overflow-hidden shadow-sm">
-                  <button
-                    onClick={() => setActiveSection('photos')}
-                    className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 transition-colors cursor-pointer group relative"
-                  >
-                    <div className="text-center">
-                      <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-2 group-hover:text-gray-600 transition-colors" />
-                    </div>
-                  </button>
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 text-base line-clamp-2">
-                    {formData?.title || 'Untitled Listing'}
-                  </h3>
-                  <p className="text-xs text-gray-600 mt-2">
-                    {selectedLocation?.district && selectedLocation?.state && (
-                      <>
-                        📍 {selectedLocation.district}, {selectedLocation.state}
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-                  <div>
-                    <p className="text-xs text-gray-600">Base Price</p>
-                    <p className="text-base font-bold text-figma-navy">
-                      {formatINR(formData?.price_weekday)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Weekend</p>
-                    <p className="text-base font-bold text-figma-navy">
-                      {formatINR(formData?.price_weekend)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Section Navigation */}
-            <nav className="p-3 space-y-1">
-              {SECTIONS.map((section) => (
-                <button
-                  key={section.id}
-                  onClick={() => setActiveSection(section.id)}
-                  className={cn(
-                    'w-full flex items-center justify-between px-3 py-3 rounded-lg transition-all text-left',
-                    activeSection === section.id
-                      ? 'bg-figma-navy/10 text-figma-navy'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  )}
-                >
-                  <div className="flex items-center gap-3 flex-1">
-                    <span className={activeSection === section.id ? 'text-figma-navy' : 'text-gray-500'}>
-                      {section.icon}
-                    </span>
-                    <span className="font-medium text-sm">{section.label}</span>
-                  </div>
-                  {activeSection === section.id && (
-                    <ChevronRight className="w-4 h-4 text-figma-navy" />
-                  )}
-                </button>
-              ))}
-
-              {/* Divider */}
-              <div className="border-t border-gray-200" />
-
-              {/* Listing Status Section */}
-              <div className="space-y-1">
+  const statusBlock = (
+    <div className="space-y-1">
                 <button
                   onClick={handleTogglePause}
                   disabled={pausing || removing}
@@ -509,12 +405,115 @@ export default function ManageListingPage() {
                   </button>
                 )}
               </div>
+  );
+
+  return (
+    <HostDashboardShell active="listings">
+      <div className="flex flex-col bg-gray-50">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-8 py-3 sm:py-4 border-b border-gray-200 bg-white sticky top-16 z-20">
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Edit Listing</h1>
+            <p className="text-sm text-gray-500 mt-0.5 sm:mt-1 truncate">{formData?.title || 'Loading...'}</p>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            {formData && (
+              <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100">
+                <span className={cn('w-2 h-2 rounded-full', formData.is_active ? 'bg-green-500' : 'bg-gray-400')} />
+                <span className="text-xs font-semibold text-gray-700">
+                  {formData.is_active ? 'Live' : 'Paused'}
+                </span>
+              </div>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 sm:px-6 py-2.5 bg-figma-navy text-white rounded-lg font-semibold hover:bg-figma-navy/90 disabled:opacity-60 flex items-center gap-2 whitespace-nowrap"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex flex-1 flex-col lg:flex-row">
+          {/* Section navigation: a scrolling tab strip on phones, a sidebar on desktop */}
+          <div className="w-full lg:w-72 shrink-0 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white flex flex-col">
+            {/* Listing Preview Card - Sticky */}
+            <div className="hidden lg:block lg:sticky lg:top-0 p-5 bg-gradient-to-b from-white to-gray-50 border-b border-gray-200 z-10">
+              <div className="space-y-4">
+                {/* Photo Preview */}
+                <div className="aspect-video bg-gray-300 rounded-xl overflow-hidden shadow-sm">
+                  <button
+                    onClick={() => setActiveSection('photos')}
+                    className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 transition-colors cursor-pointer group relative"
+                  >
+                    <div className="text-center">
+                      <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-2 group-hover:text-gray-600 transition-colors" />
+                    </div>
+                  </button>
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-base line-clamp-2">
+                    {formData?.title || 'Untitled Listing'}
+                  </h3>
+                  <p className="text-xs text-gray-600 mt-2">
+                    {selectedLocation?.district && selectedLocation?.state && (
+                      <>
+                        📍 {selectedLocation.district}, {selectedLocation.state}
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                  <div>
+                    <p className="text-xs text-gray-600">Base Price</p>
+                    <p className="text-base font-bold text-figma-navy">
+                      {formatINR(formData?.price_weekday)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600">Weekend</p>
+                    <p className="text-base font-bold text-figma-navy">
+                      {formatINR(formData?.price_weekend)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section Navigation */}
+            <nav className="p-2 lg:p-3 flex lg:block gap-1 lg:space-y-1 overflow-x-auto lg:overflow-visible scrollbar-hide">
+              {SECTIONS.map((section) => (
+                <button
+                  key={section.id}
+                  onClick={() => setActiveSection(section.id)}
+                  className={cn(
+                    'shrink-0 lg:w-full whitespace-nowrap flex items-center justify-between px-3 py-2.5 lg:py-3 rounded-lg transition-all text-left',
+                    activeSection === section.id
+                      ? 'bg-figma-navy/10 text-figma-navy'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  )}
+                >
+                  <div className="flex items-center gap-2 lg:gap-3 flex-1">
+                    <span className={activeSection === section.id ? 'text-figma-navy' : 'text-gray-500'}>
+                      {section.icon}
+                    </span>
+                    <span className="font-medium text-sm">{section.label}</span>
+                  </div>
+                  {activeSection === section.id && (
+                    <ChevronRight className="hidden lg:block w-4 h-4 text-figma-navy" />
+                  )}
+                </button>
+              ))}
             </nav>
+            <div className="hidden lg:block border-t border-gray-200 p-3">{statusBlock}</div>
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-12 max-w-4xl mx-auto w-full">
+          <div className="flex-1 min-w-0">
+            <div className="p-4 sm:p-8 lg:p-12 max-w-4xl mx-auto w-full">
               <SectionRenderer
                 section={activeSection}
                 formData={formData}
@@ -524,6 +523,7 @@ export default function ManageListingPage() {
                 selectedLocation={selectedLocation}
                 listingId={listingId ? parseInt(listingId) : 0}
               />
+              <div className="lg:hidden mt-8 pt-4 border-t border-gray-200">{statusBlock}</div>
             </div>
           </div>
         </div>
@@ -652,13 +652,13 @@ function SectionRenderer({
   const config = sectionConfig[section];
 
   return (
-    <div className="space-y-8">
-      <div className="border-b border-gray-200 pb-6">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">{config.title}</h2>
-        <p className="text-base text-gray-600">{config.description}</p>
+    <div className="space-y-5 sm:space-y-8">
+      <div className="border-b border-gray-200 pb-4 sm:pb-6">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{config.title}</h2>
+        <p className="text-sm sm:text-base text-gray-600">{config.description}</p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-8 space-y-6 shadow-sm">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-8 space-y-6 shadow-sm">
         {section === 'photos' && listingId ? (
           <ListingPhotosManager listingId={listingId} />
         ) : null}
@@ -706,7 +706,7 @@ function SectionRenderer({
         )}
 
         {section === 'pricing' && (
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
               <label className={labelClasses}>Weekday Price (₹/night)</label>
               <input
@@ -783,7 +783,7 @@ function SectionRenderer({
         )}
 
         {section === 'capacity' && (
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             {[
               { label: 'Max Guests', key: 'num_guests' },
               { label: 'Bedrooms', key: 'num_bedrooms' },

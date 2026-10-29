@@ -105,7 +105,7 @@ export default function HouseRulesPage() {
               <select
                 value={checkInTime}
                 onChange={(e) => handleTimeChange('check_in', e.target.value)}
-                className="w-[180px] border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-figma-navy"
+                className="w-full sm:w-[180px] border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-figma-navy"
               >
                 {TIME_SLOTS.map((t) => (
                   <option key={t} value={t}>{formatTime12h(t)}</option>
@@ -117,7 +117,7 @@ export default function HouseRulesPage() {
               <select
                 value={checkOutTime}
                 onChange={(e) => handleTimeChange('check_out', e.target.value)}
-                className="w-[180px] border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-figma-navy"
+                className="w-full sm:w-[180px] border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-figma-navy"
               >
                 {TIME_SLOTS.map((t) => (
                   <option key={t} value={t}>{formatTime12h(t)}</option>

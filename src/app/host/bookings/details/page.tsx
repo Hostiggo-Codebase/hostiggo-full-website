@@ -200,17 +200,17 @@ function DetailsInner() {
   return (
     <>
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 sm:mb-8 gap-4">
         <div>
-          <nav className="flex items-center gap-2 text-sm text-gray-400 mb-2">
+          <nav className="flex flex-wrap items-center gap-2 text-sm text-gray-400 mb-2">
             <Link href="/host/bookings" className="hover:text-figma-navy">
               Reservations
             </Link>
             <ChevronRight className="w-3.5 h-3.5" />
             <span className="text-gray-600">Booking #{view.id}</span>
           </nav>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Booking Details</h1>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Booking Details</h1>
             <span
               className={cn(
                 'px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider',
@@ -225,7 +225,7 @@ function DetailsInner() {
             </span>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="hidden sm:flex gap-3">
           <button
             onClick={() => window.print()}
             className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-all flex items-center gap-2"
@@ -237,10 +237,10 @@ function DetailsInner() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left */}
-        <div className="lg:col-span-8 space-y-6">
+        <div className="lg:col-span-8 space-y-4 sm:space-y-6 min-w-0">
           {/* Guest overview */}
-          <section className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
-            <div className="flex flex-col md:flex-row gap-8 items-start">
+          <section className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
+            <div className="flex flex-col sm:flex-row gap-5 sm:gap-8 items-center sm:items-start text-center sm:text-left">
               <div className="relative">
                 <UserAvatar
                   src={view.guestPic}
@@ -254,8 +254,8 @@ function DetailsInner() {
                   </div>
                 )}
               </div>
-              <div className="flex-grow">
-                <div className="flex justify-between items-start mb-4">
+              <div className="flex-grow w-full min-w-0">
+                <div className="flex flex-col sm:flex-row sm:justify-between items-center sm:items-start gap-2 mb-4">
                   <div>
                     <h2 className="text-xl font-bold text-gray-800">{view.guestName}</h2>
                     <div className="flex items-center gap-2 mt-1">
@@ -270,7 +270,7 @@ function DetailsInner() {
                     </span>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-3 mt-6">
+                <div className="flex flex-wrap gap-3 mt-6 justify-center sm:justify-start [&>a]:max-sm:w-full [&>a]:max-sm:justify-center">
                   <Link
                     href="/host/chat"
                     className="flex items-center gap-2 px-5 py-2.5 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90"
@@ -283,9 +283,9 @@ function DetailsInner() {
           </section>
 
           {/* Timeline */}
-          <section className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
-            <h3 className="text-lg font-bold text-figma-navy mb-8">Booking Timeline</h3>
-            <div className="relative flex flex-col md:flex-row justify-between gap-8">
+          <section className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
+            <h3 className="text-lg font-bold text-figma-navy mb-6 sm:mb-8">Booking Timeline</h3>
+            <div className="relative flex flex-col md:flex-row justify-between gap-5 md:gap-8">
               <div className="hidden md:block absolute top-4 left-0 w-full h-0.5 bg-gray-200 z-0" />
               {view.timeline.map((t) => {
                 const Icon = t.icon;
@@ -299,7 +299,7 @@ function DetailsInner() {
                   >
                     <div
                       className={cn(
-                        'w-8 h-8 rounded-full flex items-center justify-center shadow-md',
+                        'w-8 h-8 shrink-0 rounded-full flex items-center justify-center shadow-md',
                         t.state === 'future' ? 'bg-gray-200 text-gray-500' : 'bg-figma-navy text-white',
                         t.state === 'active' && 'animate-pulse',
                       )}
@@ -324,8 +324,8 @@ function DetailsInner() {
           </section>
 
           {/* Stay + property */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <section className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+            <section className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
               <div className="flex items-center gap-3 mb-6">
                 <CalendarDays className="w-5 h-5 text-figma-navy" />
                 <h3 className="text-base font-bold text-gray-800">Stay Details</h3>
@@ -351,7 +351,7 @@ function DetailsInner() {
               </div>
             </section>
 
-            <section className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
+            <section className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
               <div className="flex items-center gap-3 mb-6">
                 <Building2 className="w-5 h-5 text-figma-navy" />
                 <h3 className="text-base font-bold text-gray-800">Property</h3>
@@ -394,7 +394,7 @@ function DetailsInner() {
 
         {!view.isPastBooking && !view.cancelled && (
           <aside className="lg:col-span-4">
-            <div className="sticky top-24 bg-white rounded-2xl p-6 shadow-card border border-gray-200">
+            <div className="lg:sticky lg:top-24 bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
               <h3 className="text-lg font-bold text-figma-navy mb-6">Payment Summary</h3>
               <div className="space-y-4 mb-6">
                 <div className="flex justify-between text-sm">

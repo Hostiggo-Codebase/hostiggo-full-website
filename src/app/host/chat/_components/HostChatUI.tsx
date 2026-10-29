@@ -199,7 +199,7 @@ export default function HostChatUI() {
   const inboxEmpty = !loading && conversations.length === 0;
 
   return (
-    <div className="flex h-[calc(100dvh-220px)] min-h-[520px] gap-4">
+    <div className="flex h-[calc(100dvh-190px)] min-h-[420px] md:h-[calc(100dvh-220px)] md:min-h-[520px] gap-4">
       {/* Conversations sidebar -- on mobile, hidden while a thread is open */}
       <aside
         className={`${
@@ -318,19 +318,19 @@ export default function HostChatUI() {
             <header className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
               <button
                 onClick={() => setMobileShowChat(false)}
-                className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-gray-100"
+                className="md:hidden p-2.5 -ml-2 rounded-lg hover:bg-gray-100"
                 aria-label="Back to conversations"
               >
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
               <Avatar name={selectedConversation.name} src={selectedConversation.avatar} />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h3 className="font-bold text-gray-900 truncate">{selectedConversation.name}</h3>
                 <p className="text-xs text-gray-500">Guest</p>
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto px-4 py-5 space-y-3 bg-[#f7f8fa]">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-3 sm:px-4 py-4 sm:py-5 space-y-3 bg-[#f7f8fa]">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <MessageSquare className="w-8 h-8 text-gray-300 mb-2" />
@@ -342,7 +342,7 @@ export default function HostChatUI() {
                 messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`max-w-[75%] lg:max-w-md px-4 py-2.5 rounded-2xl shadow-sm ${
+                      className={`max-w-[85%] sm:max-w-[75%] lg:max-w-md px-4 py-2.5 rounded-2xl shadow-sm ${
                         msg.isFromMe
                           ? 'bg-figma-navy text-white rounded-br-md'
                           : 'bg-white text-gray-900 border border-gray-100 rounded-bl-md'

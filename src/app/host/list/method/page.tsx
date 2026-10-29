@@ -19,7 +19,7 @@ export default function ListingMethodPage() {
 
   return (
     <AiFlowShell stage="method" showBack={false}>
-      <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
+      <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-3">
         How would you like to create your listing?
       </h1>
       <p className="text-gray-600 text-lg mb-10 max-w-2xl">
@@ -32,7 +32,7 @@ export default function ListingMethodPage() {
         <button
           type="button"
           onClick={startAiFlow}
-          className="relative text-left rounded-3xl p-8 bg-gradient-to-br from-figma-navy to-[#0B6FA8] text-white shadow-xl hover:-translate-y-1 transition-transform overflow-hidden flex flex-col"
+          className="relative text-left rounded-3xl p-5 sm:p-8 bg-gradient-to-br from-figma-navy to-[#0B6FA8] text-white shadow-xl hover:-translate-y-1 transition-transform overflow-hidden flex flex-col"
         >
           <span className="absolute top-5 right-5 text-[11px] font-bold uppercase tracking-wide bg-white/20 rounded-full px-3 py-1">
             Recommended
@@ -60,7 +60,7 @@ export default function ListingMethodPage() {
         <button
           type="button"
           onClick={() => router.push('/host/list/property-type')}
-          className="text-left rounded-3xl p-8 bg-white border border-gray-200 shadow-card hover:-translate-y-1 transition-transform flex flex-col"
+          className="text-left rounded-3xl p-5 sm:p-8 bg-white border border-gray-200 shadow-card hover:-translate-y-1 transition-transform flex flex-col"
         >
           <div className="w-11 h-11 rounded-xl bg-figma-navy/10 flex items-center justify-center text-figma-navy mb-4">
             <PenSquare className="w-5 h-5" />

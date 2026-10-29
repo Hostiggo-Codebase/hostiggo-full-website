@@ -87,7 +87,7 @@ export default function PhotosPage() {
             handleFiles(e.dataTransfer.files);
           }}
           className={cn(
-            'border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center bg-white transition-all cursor-pointer min-h-[280px] mb-8 group',
+            'border-2 border-dashed rounded-2xl p-6 sm:p-12 flex flex-col items-center justify-center bg-white transition-all cursor-pointer min-h-[280px] mb-8 group',
             dragOver ? 'border-figma-navy bg-figma-navy/5' : 'border-gray-300 hover:border-figma-navy/60 hover:bg-figma-navy/3',
             uploading && 'pointer-events-none opacity-70',
           )}

@@ -599,18 +599,18 @@ export default function AiReviewPage() {
         </aside>
       </div>
 
-      <div className="fixed bottom-0 left-0 w-full z-50 flex justify-between items-center px-6 md:px-16 lg:px-20 py-5 bg-white border-t border-gray-200 shadow-lg">
+      <div className="fixed bottom-0 left-0 w-full z-50 flex justify-between items-center px-4 sm:px-6 md:px-16 lg:px-20 py-3 sm:py-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white border-t border-gray-200 shadow-lg">
         <button
           type="button"
           onClick={() => router.push('/host/listings')}
-          className="px-6 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
+          className="px-5 sm:px-6 py-3 sm:py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
         >
           Discard
         </button>
         <button
           type="button"
           onClick={handleContinue}
-          className="rounded-lg px-8 py-2.5 text-sm font-bold text-white bg-figma-navy hover:bg-figma-navy/90 transition-all active:scale-95 shadow-sm"
+          className="rounded-lg px-6 sm:px-8 py-3 sm:py-2.5 text-sm font-bold text-white bg-figma-navy hover:bg-figma-navy/90 transition-all active:scale-95 shadow-sm"
         >
           {isMulti ? `Save & Continue to Publish (${listings.length})` : 'Save Changes and Continue'}
         </button>

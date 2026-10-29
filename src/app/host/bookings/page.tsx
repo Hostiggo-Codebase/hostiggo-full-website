@@ -111,13 +111,13 @@ export default function BookingsPage() {
       />
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-8 overflow-x-auto scrollbar-hide">
+      <div className="flex border-b border-gray-200 mb-6 sm:mb-8 overflow-x-auto scrollbar-hide">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={cn(
-              'flex-shrink-0 px-6 py-4 text-sm border-b-2 -mb-px transition-all',
+              'flex-shrink-0 flex-1 sm:flex-none px-4 sm:px-6 py-3.5 sm:py-4 text-sm whitespace-nowrap border-b-2 -mb-px transition-all',
               tab === t.key
                 ? 'font-bold text-figma-navy border-figma-navy'
                 : 'font-medium text-gray-500 border-transparent hover:text-figma-navy',
@@ -132,7 +132,7 @@ export default function BookingsPage() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-card">
               <div className="h-4 bg-gray-100 rounded animate-pulse w-1/2 mb-4" />
@@ -157,7 +157,7 @@ export default function BookingsPage() {
           </button>
         </div>
       ) : visible.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-dashed border-gray-200">
+        <div className="flex flex-col items-center justify-center py-16 sm:py-24 px-4 text-center bg-white rounded-3xl border border-dashed border-gray-200">
           <div className="h-20 w-20 bg-gray-100 flex items-center justify-center rounded-full mb-4 text-gray-300">
             <CalendarDays className="w-10 h-10" />
           </div>
@@ -171,7 +171,7 @@ export default function BookingsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {visible.map((b) => (
             <div
               key={b.id}
@@ -189,7 +189,7 @@ export default function BookingsPage() {
               <div className="space-y-3 mb-6 flex-grow">
                 <div className="flex items-center gap-3 text-gray-500">
                   <CalendarDays className="w-5 h-5 shrink-0" />
-                  <span className="text-sm">{fmtRange(b.start, b.end)}</span>
+                  <span className="text-sm min-w-0">{fmtRange(b.start, b.end)}</span>
                 </div>
                 <div className="flex items-center gap-3 text-gray-500">
                   <Users className="w-5 h-5 shrink-0" />
@@ -204,7 +204,7 @@ export default function BookingsPage() {
               </div>
               <Link
                 href={`/host/bookings/details?id=${b.id}`}
-                className="w-full py-2.5 bg-figma-navy text-white font-bold rounded-xl text-sm text-center transition-all hover:bg-figma-navy/90 active:scale-[0.98]"
+                className="w-full py-3 bg-figma-navy text-white font-bold rounded-xl text-sm text-center transition-all hover:bg-figma-navy/90 active:scale-[0.98]"
               >
                 View Details
               </Link>

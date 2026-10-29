@@ -10,7 +10,7 @@ import dynamic from 'next/dynamic';
 const GoogleMap = dynamic(() => import('./GoogleMap'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[480px] md:h-[600px] bg-gray-100 rounded-2xl flex items-center justify-center">
+    <div className="w-full h-[380px] md:h-[600px] bg-gray-100 rounded-2xl flex items-center justify-center">
       <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
     </div>
   ),

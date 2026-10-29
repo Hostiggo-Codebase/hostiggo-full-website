@@ -99,7 +99,7 @@ export default function ProfileCompletionCard({
   return (
     <section
       aria-labelledby="profile-completion-title"
-      className="mb-6 rounded-3xl border border-figma-navy/15 bg-figma-navy/5 p-6"
+      className="mb-6 rounded-3xl border border-figma-navy/15 bg-figma-navy/5 p-4 sm:p-6"
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
