@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Script from 'next/script';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import HeroSection from '@/components/features/HeroSection';
@@ -71,28 +70,8 @@ async function loadHomeSections(): Promise<{ sections: HomeSection[]; error: boo
 export default async function HomePage() {
   const { sections, error } = await loadHomeSections();
 
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.hostiggo.com').replace(/\/$/, '');
-  const schema = {
-    '@context': 'https://schema.org',
-    '@type': 'WebSite',
-    name: 'Hostiggo',
-    url: siteUrl,
-    description:
-      'Hostiggo helps guests discover verified homestays and unique stays across India with secure booking and transparent policies.',
-    publisher: {
-      '@type': 'Organization',
-      name: 'Hostiggo',
-      url: siteUrl,
-    },
-  };
-
   return (
     <>
-      <Script
-        id="home-json-ld"
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-      />
       <div className="min-h-screen bg-figma-cream">
         <Navbar />
         <HeroSection />

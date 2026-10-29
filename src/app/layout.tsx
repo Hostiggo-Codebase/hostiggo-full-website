@@ -6,6 +6,7 @@ import { ListingFilterProvider } from '@/context/ListingFilterContext';
 import { Toaster } from 'sonner';
 import { NotificationProvider } from '@/context/NotificationContext';
 import ConsentAnalytics from '@/components/ConsentAnalytics';
+import SupportButton from '@/components/layout/SupportButton';
 import JsonLd from '@/components/JsonLd';
 import {
   COMPANY_LEGAL_NAME,
@@ -15,6 +16,7 @@ import {
   SITE_URL,
   SOCIAL_LINKS,
   SUPPORT_EMAIL,
+  SUPPORT_PHONE_DISPLAY,
 } from '@/lib/site';
 
 // Figma "Website Guest UI/UX" uses Poppins (Regular/Medium/SemiBold/Bold)
@@ -67,20 +69,6 @@ export const metadata: Metadata = {
     'travel booking',
     'trip planning',
     'holiday packages India',
-    'makemytrip',
-    'make my trip alternative',
-    'goibibo',
-    'booking.com alternative',
-    'airbnb alternative India',
-    'oyo alternative',
-    'agoda',
-    'trivago',
-    'cleartrip',
-    'yatra',
-    'easemytrip',
-    'treebo',
-    'fabhotels',
-    'stayvista',
     'vacation homes',
     'farmstays',
     'cottages',
@@ -149,7 +137,18 @@ const ORGANIZATION_JSON_LD = {
       legalName: COMPANY_LEGAL_NAME,
       url: SITE_URL,
       logo: `${SITE_URL}/logo.png`,
+      description: SITE_DESCRIPTION,
+      areaServed: { '@type': 'Country', name: 'India' },
       email: SUPPORT_EMAIL,
+      contactPoint: [
+        {
+          '@type': 'ContactPoint',
+          contactType: 'customer support',
+          email: SUPPORT_EMAIL,
+          telephone: SUPPORT_PHONE_DISPLAY,
+          areaServed: 'IN',
+        },
+      ],
       ...(SOCIAL_LINKS.length ? { sameAs: SOCIAL_LINKS.map((s) => s.url) } : {}),
     },
     {
@@ -178,6 +177,7 @@ export default function RootLayout({
             <Toaster position="top-center" richColors closeButton />
             <NotificationProvider>{children}</NotificationProvider>
           </ListingFilterProvider>
+          <SupportButton />
         </AuthProvider>
         <JsonLd data={ORGANIZATION_JSON_LD} />
         <ConsentAnalytics />

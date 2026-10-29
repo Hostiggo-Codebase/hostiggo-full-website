@@ -1,5 +1,8 @@
 import type { MetadataRoute } from "next";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { SITE_URL } from "@/lib/site";
+import { DESTINATIONS, MIN_INDEXABLE_LISTINGS } from "@/lib/destinations";
+import { getDestinationCounts } from "@/lib/services/destinationStays";
 
 // Regenerated hourly. Listing rows come from the database; if it can't be
 // reached (e.g. during a build without credentials) the static pages still ship.
@@ -7,14 +10,21 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 // prerendered (the build was silently serving a sitemap with no listings).
 export const dynamic = "force-dynamic";
 
-const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.hostiggo.com").replace(/\/$/, "");
+const SITE = SITE_URL;
 
 const STATIC_PATHS = [
   "",
   "/search",
+  "/stays",
   "/become-a-host",
   "/about",
   "/help",
+  "/help/refunds",
+  "/help/payouts",
+  "/help/add-ons",
+  "/help/verify-identity",
+  "/help/chat-guidelines",
+  "/help/delisting",
   "/faq",
   "/safety",
   "/support",
@@ -30,10 +40,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const pages: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
     url: `${SITE}${path}`,
-    lastModified: now,
+    // No lastModified: these pages change on deploy, not daily, and a
+    // constantly-fresh date teaches crawlers to ignore the field.
     changeFrequency: path === "" || path === "/search" ? "daily" : "monthly",
     priority: path === "" ? 1 : 0.5,
   }));
+
+  try {
+    const counts = await getDestinationCounts();
+    for (const d of DESTINATIONS) {
+      if ((counts[d.slug] ?? 0) >= MIN_INDEXABLE_LISTINGS) {
+        pages.push({ url: `${SITE}/stays/${d.slug}`, changeFrequency: "weekly", priority: 0.7 });
+      }
+    }
+  } catch (err) {
+    console.error("[sitemap] destination counts failed:", err);
+  }
 
   try {
     const { data, error } = await supabaseAdmin
