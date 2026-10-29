@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { useAutoRetry } from '@/hooks/useAutoRetry';
 import BankProcessingNotice from '@/components/features/BankProcessingNotice';
 import { calculateHostPayout } from '@/lib/billing/payout';
+import { isUnpaidRequest } from '@/lib/billing/bookingRequest';
 import { expectedSettlementDate, formatSettlementDate } from '@/lib/billing/settlement';
 
 // Bookings are instant-confirmed on creation, status_id is only ever
@@ -161,7 +162,7 @@ export default function EarningsPage() {
         api.hostPaymentHistory(),
       ]);
       if (bookingsRes.status === 'rejected') throw bookingsRes.reason;
-      setRows(bookingsRes.value.map(mapEarn));
+      setRows(bookingsRes.value.filter((r: any) => !isUnpaidRequest(r)).map(mapEarn));
       if (payoutRes.status === 'fulfilled') setPayoutMethod(payoutRes.value);
       if (historyRes.status === 'fulfilled') setHistory(historyRes.value);
       const partial = payoutRes.status === 'rejected' || historyRes.status === 'rejected';

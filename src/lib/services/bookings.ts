@@ -3,6 +3,8 @@
 // caller scopes by the verified user id (see getAuthenticatedUserId).
 import { supabaseAdmin } from "../supabase-admin";
 import { todayInIndia } from "../booking-config";
+import { PENDING_STATUS_ID, requestPhase } from "../billing/bookingRequest";
+import { findPaymentHolds } from "./admin-writes";
 const supabase = supabaseAdmin;
 
 // None of updateBookingStatus/updateBookingDates/updateBookingGuests ever
@@ -65,7 +67,29 @@ export const bookingsAPI = {
       .order("start_date", { ascending: bookingLabel === "upcoming" });
 
     if (error) throw error;
-    const rows = data || [];
+    let rows = data || [];
+
+    // The view files anything that isn't CONFIRMED under 'cancelled', which
+    // would bury a pending request in the Cancelled tab. Requests (status 1,
+    // unpaid) are shown under 'upcoming' instead, ahead of the confirmed stays.
+    const { data: requestIds } = await supabase
+      .from("bookings")
+      .select("booking_id")
+      .eq("user_id", userId)
+      .eq("status_id", PENDING_STATUS_ID)
+      .is("razorpay_payment_id", null);
+    const pendingIds = new Set((requestIds ?? []).map((r: any) => r.booking_id));
+    if (bookingLabel === "cancelled") {
+      rows = rows.filter((r: any) => !pendingIds.has(r.booking_id));
+    } else if (bookingLabel === "upcoming" && page === 0 && pendingIds.size) {
+      const { data: pendingRows } = await supabase
+        .from("user_bookings_detailed")
+        .select("booking_id, start_date, end_date, status_name, listing_title, cover_photo_url, booking_label")
+        .eq("user_id", userId)
+        .in("booking_id", [...pendingIds])
+        .order("start_date", { ascending: true });
+      rows = [...(pendingRows ?? []).map((r: any) => ({ ...r, booking_label: "upcoming" })), ...rows];
+    }
     if (!rows.length) return rows;
 
     // user_bookings_detailed has no listing_id/coordinates/location/price at
@@ -84,6 +108,11 @@ export const bookingsAPI = {
         amount,
         refund_amount,
         refund_status,
+        status_id,
+        booked_at,
+        razorpay_order_id,
+        razorpay_payment_id,
+        cancellation_reason,
         listings (
           latitude, longitude,
           price_weekday, price_weekend,
@@ -106,6 +135,11 @@ export const bookingsAPI = {
         amount: extra?.amount ?? null,
         refundAmount: extra?.refund_amount ?? null,
         refundStatus: extra?.refund_status ?? null,
+        status_id: extra?.status_id ?? null,
+        booked_at: extra?.booked_at ?? null,
+        razorpay_order_id: extra?.razorpay_order_id ?? null,
+        razorpay_payment_id: extra?.razorpay_payment_id ?? null,
+        cancellationReason: extra?.cancellation_reason ?? null,
         priceWeekday: listing?.price_weekday ?? null,
         priceWeekend: listing?.price_weekend ?? null,
         latitude: listing?.latitude ?? null,
@@ -274,7 +308,18 @@ export const bookingsAPI = {
       houseRules = rules?.[0] ?? null;
     }
 
-    return { ...booking, guest, host, houseRules, addons: addons ?? [] };
+    // An accepted request: the guest pays this order to confirm. The key id is
+    // public, the amount is what the host's accept priced.
+    const pendingPayment =
+      viewerIsGuest && requestPhase(booking) === "awaiting_payment"
+        ? {
+            razorpayOrderId: booking.razorpay_order_id as string,
+            razorpayKeyId: process.env.RAZORPAY_KEY_ID ?? null,
+            amountPaise: Math.round(Number(booking.amount ?? 0) * 100),
+          }
+        : null;
+
+    return { ...booking, guest, host, houseRules, addons: addons ?? [], pendingPayment };
   },
 
   async updateBookingDates(
@@ -343,6 +388,10 @@ export const bookingsAPI = {
     if (conflictsErr) throw conflictsErr;
     if (conflicts && conflicts.length > 0) {
       throw new Error("These dates are already booked.");
+    }
+    // Dates held for a guest who is paying for an accepted request.
+    if ((await findPaymentHolds(existing.listing_id, formattedCheckIn, formattedCheckOut)).length > 0) {
+      throw new Error("These dates are being held for another guest right now.");
     }
 
     const { data, error } = await supabase

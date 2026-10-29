@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { SCHEMA } from "@/lib/schema.constants";
 import { isISODate } from "@/lib/stayDates";
+import { findPaymentHolds } from "@/lib/services/admin-writes";
 
 const DB_SCHEMA = SCHEMA.testingSchema;
 
@@ -72,6 +73,17 @@ export async function GET(req: NextRequest) {
 
   if (conflicts && conflicts.length > 0) {
     return NextResponse.json({ available: false, reason: "These dates are already booked." });
+  }
+
+  // Dates held for a guest whose request the host accepted and who is paying.
+  try {
+    const holds = await findPaymentHolds(listingId, startDate, endDate);
+    if (holds.length > 0) {
+      return NextResponse.json({ available: false, reason: "These dates are being held for another guest right now." });
+    }
+  } catch (err) {
+    console.error("[check-availability] holds query failed:", err);
+    return NextResponse.json({ error: "Could not verify availability. Please try again." }, { status: 500 });
   }
 
   return NextResponse.json({ available: true });

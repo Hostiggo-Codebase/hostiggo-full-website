@@ -62,7 +62,8 @@ async function status(listingId: number) {
       .from("bookings")
       .select("booking_id", { count: "exact", head: true })
       .eq("listing_id", listingId)
-      .neq("status_id", 3)
+      // Confirmed only: unpaid requests expire on their own within 24h.
+      .eq("status_id", 2)
       .gte("end_date", today),
   ]);
   if (lErr) throw lErr;

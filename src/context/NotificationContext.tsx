@@ -30,6 +30,13 @@ import {
  */
 
 const HISTORY_LIMIT = 50;
+// Rows the DB triggers write with generic copy that the server then rewrites.
+const REWRITTEN_TEMPLATES = new Set([
+  "booking_confirmed_guest",
+  "booking_received_host",
+  "booking_cancelled_guest",
+  "booking_cancelled_host",
+]);
 const LISTING_STATUS_LIVE = 1;
 
 type NotificationContextValue = {
@@ -107,6 +114,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const { userId } = useAuth();
   const { preferences } = useNotificationPreferences();
   const generation = useRef(0);
+  const latestRows = useRef(new Map<number, NotificationRow>());
   const preferencesRef = useRef(preferences);
   useEffect(() => {
     preferencesRef.current = preferences;
@@ -146,8 +154,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         "postgres_changes",
         { event: "INSERT", schema: SCHEMA.testingSchema, table: "notifications", filter },
         (payload) => {
-          const row = payload.new as NotificationRow;
-          setAll((prev) => mergeNotificationRow(prev ?? [], row, HISTORY_LIMIT));
+          const inserted = payload.new as NotificationRow;
+          setAll((prev) => mergeNotificationRow(prev ?? [], inserted, HISTORY_LIMIT));
+          // The database writes a generic row ("Booking Confirmed!") on every booking
+          // insert/cancel, and the server then rewrites it with the real copy (a
+          // booking request is not a confirmation). Wait for that rewrite so the
+          // toast never shows the generic text.
+          const rewritten = inserted.template_id ? REWRITTEN_TEMPLATES.has(inserted.template_id) : false;
+          window.setTimeout(() => announce(latestRows.current.get(inserted.id) ?? inserted), rewritten ? 1500 : 0);
+          function announce(row: NotificationRow) {
           // Same tiering as the app: only important rows interrupt.
           const currentPreferences = preferencesRef.current;
           if (!row.is_read && currentPreferences?.channels.in_app !== false && currentPreferences?.channels.push !== false && isImportantNotification(row.type)) {
@@ -171,6 +186,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             });
             playNotificationSound();
           }
+          }
         },
       )
       .on(
@@ -178,6 +194,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         { event: "UPDATE", schema: SCHEMA.testingSchema, table: "notifications", filter },
         (payload) => {
           const row = payload.new as NotificationRow;
+          latestRows.current.set(row.id, row);
           setAll((prev) => mergeNotificationRow(prev ?? [], row, HISTORY_LIMIT));
         },
       )

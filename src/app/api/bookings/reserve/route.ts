@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateAndPriceBooking } from "@/lib/services/admin-writes";
+import { BookingRequestError, createBookingRequest, validateAndPriceBooking } from "@/lib/services/admin-writes";
+import { HOST_RESPONSE_WINDOW_MS, parseBookedAt } from "@/lib/billing/bookingRequest";
 import { createRazorpayOrder } from "@/lib/billing/razorpay";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { GUEST_ID_REQUIRED, guestHasVerifiedId } from "@/lib/services/guestVerification";
@@ -119,6 +120,20 @@ export async function POST(req: NextRequest) {
     // ALWAYS require payment - no unpaid bookings in dev or production
     const priced = await validateAndPriceBooking(bookingInput);
 
+    // Not an Instant Book listing: record a request for the host to accept
+    // within 24h. Nothing is charged yet, the guest pays after they accept.
+    if (priced.requiresHostApproval) {
+      const { booking } = await createBookingRequest(bookingInput, priced);
+      return NextResponse.json({
+        data: {
+          paymentRequired: false,
+          requested: true,
+          bookingId: booking.booking_id,
+          respondBy: new Date(parseBookedAt(booking.booked_at)! + HOST_RESPONSE_WINDOW_MS).toISOString(),
+        },
+      });
+    }
+
     // Everything finalizeBookingFromRazorpayOrder() will need to actually
     // create the booking once payment is verified travels here, in the
     // order's own `notes` -- set server-side, never editable by the client
@@ -150,6 +165,9 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     if (err instanceof DatesUnavailableError || isDatabaseAvailabilityError(err)) {
       return NextResponse.json({ error: "These dates are blocked or already booked. Please choose different dates.", code: "DATES_UNAVAILABLE", blockedDates: err.blockedDates ?? [] }, { status: 409 });
+    }
+    if (err instanceof BookingRequestError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
     if (err instanceof HostPayoutMissingError) {
       return NextResponse.json({ error: err.message, code: "HOST_PAYOUT_MISSING" }, { status: 409 });

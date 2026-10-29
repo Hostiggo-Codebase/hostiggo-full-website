@@ -1144,8 +1144,20 @@ function BookingWidget({
         numChildren: 0,
         addonIds: selectedAddonIds,
       });
-      
-      // Payment is ALWAYS required
+
+      // Not an Instant Book stay: a request was sent to the host and nothing
+      // is charged. They have 24h to accept, then the guest pays within 2h.
+      if (order?.requested) {
+        track("booking_request", { item_id: property.id, currency: "INR" });
+        toast.success("Request sent! The host has 24 hours to respond. You won't be charged unless they accept.", {
+          duration: 8000,
+        });
+        setStatus("confirmed");
+        router.push(`/booking-confirmation/${order.bookingId}`);
+        return;
+      }
+
+      // Otherwise payment is ALWAYS required
       if (!order?.razorpayOrderId || !order?.razorpayKeyId) {
         toast.error('Payment is required to complete bookings. Please contact support.');
         setStatus('available');
@@ -1500,8 +1512,10 @@ function BookingWidget({
           >
             <CalendarDays className="w-4 h-4" />
             {status === "booking"
-              ? "Booking…"
-              : `Book for ${nights} Night${nights > 1 ? "s" : ""}`}
+              ? property.isInstantBook ? "Booking…" : "Sending request…"
+              : property.isInstantBook
+                ? `Book for ${nights} Night${nights > 1 ? "s" : ""}`
+                : `Request to book · ${nights} Night${nights > 1 ? "s" : ""}`}
           </button>
         )
       ) : (
@@ -1525,6 +1539,11 @@ function BookingWidget({
         {property.freeCancellation && (
           <p className="text-center text-[11px] text-emerald-600 font-semibold flex items-center justify-center gap-1">
             <CheckCircle className="w-3 h-3" /> Free cancellation available
+          </p>
+        )}
+        {!property.isInstantBook && (
+          <p className="text-center text-[11px] text-gray-500 leading-snug">
+            You won&apos;t be charged yet. The host has 24 hours to accept; then you have 2 hours to pay.
           </p>
         )}
         {property.isInstantBook && (

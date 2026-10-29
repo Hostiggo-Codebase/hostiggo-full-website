@@ -25,11 +25,14 @@ import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { calculateHostPayout } from '@/lib/billing/payout';
+import { toast } from 'sonner';
+import BookingRequestModal from '@/components/features/BookingRequestModal';
+import { formatTimeLeft, requestDeadline, requestPhase } from '@/lib/billing/bookingRequest';
 
 const FALLBACK_PROPERTY = '/placeholder.svg';
 
-// Bookings are instant-confirmed on creation, booking_status only ever
-// defines 2 (CONFIRMED) and 3 (CANCELLED), there is no pending/approval step.
+// Instant Book stays are confirmed on payment; other stays start as a request
+// (status 1, labelled below from the request phase) the host accepts or declines.
 const STATUS_LABEL: Record<number, string> = { 2: 'Confirmed', 3: 'Cancelled' };
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -45,6 +48,13 @@ function DetailsInner() {
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<'none' | 'load' | 'missing'>('none');
+  const [reviewing, setReviewing] = useState(false);
+  const [responding, setResponding] = useState<'accept' | 'reject' | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -100,9 +110,12 @@ function DetailsInner() {
     const cancelled = statusId === 3;
     const isPastBooking = !!end && startOfDay(end) < today;
 
+    const phase = requestPhase(booking);
+    const deadline = requestDeadline(booking);
+
     const timeline = [
       {
-        label: 'Booked',
+        label: phase ? 'Requested' : 'Booked',
         date: booking.booked_at ? fmtDate(new Date(booking.booked_at)) : 'N/A',
         icon: Check,
         state: 'done' as const,
@@ -147,12 +160,40 @@ function DetailsInner() {
       bedrooms: prop.num_bedrooms,
       beds: prop.num_beds,
       cover,
-      statusLabel: STATUS_LABEL[statusId] || 'Booked',
+      statusLabel:
+        phase === 'awaiting_host'
+          ? 'Awaiting your response'
+          : phase === 'awaiting_payment'
+            ? 'Awaiting guest payment'
+            : STATUS_LABEL[statusId] || 'Booked',
+      phase,
+      deadline,
       cancelled,
       isPastBooking,
       timeline,
     };
   }, [booking]);
+
+  const respond = async (decision: 'accept' | 'reject') => {
+    if (!view) return;
+    setResponding(decision);
+    try {
+      await api.respondToBookingRequest(view.id, decision);
+      toast.success(
+        decision === 'accept'
+          ? 'Request accepted. The guest has 2 hours to pay and confirm.'
+          : 'Request declined. The guest was not charged.',
+      );
+      setReviewing(false);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the request.');
+      setReviewing(false);
+      await load();
+    } finally {
+      setResponding(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -234,6 +275,39 @@ function DetailsInner() {
           </button>
         </div>
       </div>
+
+      {view.phase && (
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-200">
+          <p className="text-sm text-amber-900">
+            {view.phase === 'awaiting_host' ? (
+              <>
+                <span className="font-bold">
+                  {view.deadline != null && view.deadline > now
+                    ? `${formatTimeLeft(view.deadline - now)} left to respond.`
+                    : 'This request is about to expire.'}
+                </span>{' '}
+                Accept or decline this request. If you don&apos;t respond within 24 hours it is declined
+                automatically and the guest isn&apos;t charged.
+              </>
+            ) : (
+              <>
+                <span className="font-bold">You accepted this request.</span> The guest has{' '}
+                {view.deadline != null && view.deadline > now ? formatTimeLeft(view.deadline - now) : 'a few minutes'}{' '}
+                left to pay; the dates are held for them until then.
+              </>
+            )}
+          </p>
+          {view.phase === 'awaiting_host' && (
+            <button
+              type="button"
+              onClick={() => setReviewing(true)}
+              className="shrink-0 px-5 py-2.5 bg-figma-navy text-white rounded-xl text-sm font-bold hover:bg-figma-navy/90"
+            >
+              Accept or decline
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left */}
@@ -408,7 +482,7 @@ function DetailsInner() {
                 <span className="font-bold text-gray-800">Total payout</span>
                 <span className="text-xl font-bold text-figma-navy">{inr(view.payoutAmount)}</span>
               </div>
-              {!view.cancelled && (
+              {!view.cancelled && view.phase !== 'awaiting_host' && (
                 <Link
                   href={`/host/bookings/cancel?id=${view.id}`}
                   className="block w-full text-center py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition-all"
@@ -420,6 +494,26 @@ function DetailsInner() {
           </aside>
         )}
       </div>
+
+      <BookingRequestModal
+        request={
+          reviewing
+            ? {
+                id: view.id,
+                title: view.title,
+                guestName: view.guestName,
+                dates: `${fmtDate(view.start)} → ${fmtDate(view.end)}`,
+                guests: view.guests,
+                amount: view.amount,
+                deadline: view.deadline,
+              }
+            : null
+        }
+        busy={responding}
+        onAccept={() => respond('accept')}
+        onDecline={() => respond('reject')}
+        onClose={() => setReviewing(false)}
+      />
     </>
   );
 }

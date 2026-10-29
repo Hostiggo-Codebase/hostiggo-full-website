@@ -74,6 +74,29 @@ export async function PATCH(req: NextRequest) {
     const body = await readJsonBody(req);
     if (body instanceof NextResponse) return body;
     if (body.userId && body.userId !== userId) return forbiddenResponse();
+
+    // Instant Book toggle: applies to all of this host's listings. NULL (the
+    // default) means guests send a request the host has to accept.
+    if (typeof body.instantBooking === "boolean" && body.about === undefined) {
+      const { data: host, error: hostErr } = await supabaseAdmin
+        .from("host")
+        .select("host_uuid")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+      if (hostErr) return NextResponse.json({ error: hostErr.message }, { status: 500 });
+      if (!host) return NextResponse.json({ error: "Host profile not found" }, { status: 404 });
+      const { error: modeErr } = await supabaseAdmin
+        .from("listings")
+        .update({ booking_mode: body.instantBooking ? "auto" : null })
+        .eq("host_uuid", host.host_uuid);
+      if (modeErr) {
+        console.error("[PATCH /api/host/profile] booking_mode update error:", modeErr);
+        return NextResponse.json({ error: "Couldn't update your booking setting. Please try again." }, { status: 500 });
+      }
+      return NextResponse.json({ data: { success: true, instantBooking: body.instantBooking } });
+    }
+
     const about = typeof body.about === "string" ? body.about : "";
     if (about.length > 2000) {
       return NextResponse.json({ error: "About must be 2000 characters or fewer." }, { status: 400 });

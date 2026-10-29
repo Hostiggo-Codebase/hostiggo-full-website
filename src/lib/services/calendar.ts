@@ -85,7 +85,8 @@ export const calendarServiceAPI = {
       .select("booking_id, start_date, end_date, status_id, amount, user_id")
       .eq("listing_id", listingId)
       .or(`start_date.lte.${endDate},end_date.gte.${startDate}`)
-      .neq("status_id", 3)
+      // Confirmed only: an unpaid booking request doesn't occupy the calendar yet.
+      .eq("status_id", 2)
       .order("start_date", { ascending: true });
 
     if (error) {

@@ -2,6 +2,7 @@ import type { AmenityItem, Host, Property, Review, SearchFilters } from "@/types
 import { supabase } from "@/lib/supabase";
 import { toISODate } from "@/lib/utils";
 import type { NotificationRow } from "@/lib/notificationRules";
+import { requestDeadline, requestPhase } from "@/lib/billing/bookingRequest";
 
 /** notification_preferences row -- shared with the mobile app. */
 export type NotificationPreferences = {
@@ -354,6 +355,9 @@ export function mapBooking(item: any) {
       rooms: 1,
       pets: false,
     },
+    // Set while this is an unpaid booking request (host to respond, or guest to pay).
+    requestPhase: requestPhase(item),
+    requestDeadline: requestDeadline(item),
     amount: item.amount != null ? Number(item.amount) : null,
     refundAmount: item.refundAmount != null ? Number(item.refundAmount) : null,
     refundStatus: (item.refundStatus ?? null) as string | null,
@@ -483,16 +487,33 @@ export const api = {
     // real charge from the listing's own prices, see
     // validateAndPriceBooking() in src/lib/services/admin-writes.ts
   }) =>
-    request<{
-      paymentRequired: true;
-      razorpayOrderId: string;
-      razorpayKeyId: string;
-      amountPaise: number;
-      amountRupees: number;
-      currency: string;
-    }>(`/api/bookings/reserve`, {
+    request<
+      | {
+          paymentRequired: true;
+          requested?: false;
+          razorpayOrderId: string;
+          razorpayKeyId: string;
+          amountPaise: number;
+          amountRupees: number;
+          currency: string;
+        }
+      // Host approval listing: a request was recorded, nothing is charged yet.
+      | { paymentRequired: false; requested: true; bookingId: number; respondBy: string }
+    >(`/api/bookings/reserve`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  // Host accepts or declines a booking request (24h window).
+  respondToBookingRequest: (bookingId: string | number, decision: "accept" | "reject") =>
+    request<any>("/api/bookings", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "respond", bookingId, decision }),
+    }),
+  // Guest withdraws their own unpaid request.
+  withdrawBookingRequest: (bookingId: string | number) =>
+    request<any>("/api/bookings", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "withdraw", bookingId }),
     }),
   // The booking is only actually created here, after the payment signature
   // Razorpay Checkout returns has been verified server-side.
