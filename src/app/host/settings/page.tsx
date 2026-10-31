@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   Loader2,
   Activity,
+  CalendarDays,
   ChevronRight,
   Mail,
   ShieldAlert,
@@ -35,6 +36,7 @@ import { supabase } from '@/lib/supabase';
 
 const NAV: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'personal', label: 'Personal Info', icon: User },
+  { id: 'booking', label: 'Booking Preferences', icon: CalendarDays },
   { id: 'payouts', label: 'Payouts & Taxes', icon: Landmark },
   { id: 'security', label: 'Login & Security', icon: Shield },
   { id: 'feedback', label: 'Feedback', icon: MessageSquareText },
@@ -114,6 +116,60 @@ export default function HostSettingsPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [phoneBusy, setPhoneBusy] = useState(false);
+  const [bookingMode, setBookingMode] = useState<'auto' | 'manual' | 'mixed'>('manual');
+  const [bookingListingCount, setBookingListingCount] = useState(0);
+  const [loadingBookingMode, setLoadingBookingMode] = useState(true);
+  const [savingBookingMode, setSavingBookingMode] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    fetch('/api/host/booking-preferences')
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not load booking preferences.');
+        return result;
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setBookingMode(result.bookingMode);
+        setBookingListingCount(result.listingCount);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[host/settings] booking preferences load failed:', err);
+          toast.error(err instanceof Error ? err.message : 'Could not load booking preferences.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBookingMode(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const handleBookingModeChange = async () => {
+    if (savingBookingMode || bookingListingCount === 0) return;
+    const nextMode = bookingMode === 'auto' ? 'manual' : 'auto';
+    setSavingBookingMode(true);
+    try {
+      const response = await fetch('/api/host/booking-preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingMode: nextMode }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save booking preferences.');
+      setBookingMode(result.bookingMode);
+      setBookingListingCount(result.listingCount);
+      toast.success(nextMode === 'manual' ? 'Booking requests will need your approval.' : 'Bookings will be confirmed automatically.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save booking preferences.');
+    } finally {
+      setSavingBookingMode(false);
+    }
+  };
 
   // Payouts & Taxes tab.
   const [payoutMethod, setPayoutMethod] = useState<Awaited<
@@ -576,6 +632,70 @@ export default function HostSettingsPage() {
               </div>
             </>
           ))}
+
+          {tab === 'booking' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
+                <div className="mb-5">
+                  <h2 className="text-lg font-bold text-gray-800">Booking approval</h2>
+                  <p className="mt-1 text-sm text-gray-500">Choose how guests can book your listings. This preference applies to all your listings.</p>
+                </div>
+                {loadingBookingMode ? (
+                  <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between gap-6">
+                      <div className="max-w-xl">
+                        <h3 className="text-sm font-bold text-gray-800">Review each booking request</h3>
+                        <p className="mt-1 text-sm leading-6 text-gray-500">
+                          Turn this on to review every request and accept or reject it yourself. Turn it off to confirm bookings automatically.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={bookingMode === 'manual'}
+                        aria-label="Require approval for booking requests"
+                        onClick={handleBookingModeChange}
+                        disabled={savingBookingMode || bookingListingCount === 0}
+                        className={cn(
+                          'relative mt-1 h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-figma-navy focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+                          bookingMode === 'manual' ? 'bg-figma-navy' : 'bg-gray-300',
+                        )}
+                      >
+                        <span className={cn(
+                          'absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform',
+                          bookingMode === 'manual' ? 'translate-x-5' : 'translate-x-0',
+                        )} />
+                      </button>
+                    </div>
+                    <div className={cn(
+                      'mt-5 flex items-start gap-3 rounded-xl p-4',
+                      bookingMode === 'manual' ? 'bg-emerald-50 text-emerald-900' : 'bg-gray-50 text-gray-700',
+                    )} aria-live="polite">
+                      <CheckCircle2 className={cn('mt-0.5 h-4 w-4 shrink-0', bookingMode === 'manual' ? 'text-emerald-700' : 'text-gray-500')} />
+                      <div>
+                        <p className="text-sm font-bold">
+                          {bookingMode === 'mixed' ? 'Booking preferences vary by listing' : bookingMode === 'manual' ? 'Manual approval is on' : 'Automatic confirmation is on'}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 opacity-80">
+                          {bookingMode === 'mixed'
+                            ? 'Use the switch to apply one booking preference to all your listings.'
+                            : bookingMode === 'manual'
+                              ? 'Guests will wait for your response before a booking is confirmed.'
+                              : 'New bookings for your listings will be confirmed automatically.'}
+                        </p>
+                      </div>
+                    </div>
+                    {bookingListingCount === 0 && (
+                      <p className="mt-4 text-sm text-amber-700">Create a listing before choosing its booking approval setting.</p>
+                    )}
+                    {savingBookingMode && <p className="mt-3 text-xs text-gray-500" role="status">Saving your preference…</p>}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {tab === 'payouts' && (
             <>
