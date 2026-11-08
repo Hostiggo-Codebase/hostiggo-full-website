@@ -27,7 +27,8 @@ const channels = [
 
 export const metadata = {
   title: "Contact Us",
-  description: "How to reach the Hostiggo team for support, feedback, or grievances.",
+  description:
+    "Contact Hostiggo for booking help, refunds, host support, feedback or grievances. Reach the team by email, phone or WhatsApp.",
 };
 
 export default function ContactPage() {
