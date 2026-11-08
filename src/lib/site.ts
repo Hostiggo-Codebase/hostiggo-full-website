@@ -12,6 +12,13 @@ export const SITE_TAGLINE = "Book homestays across India";
 export const SITE_DESCRIPTION =
   "Book verified homestays across India with all-in nightly prices, exact refund dates, secure Razorpay payments and WhatsApp booking updates.";
 export const COMPANY_LEGAL_NAME = "Hostiggo Trips Private Limited";
+export const REGISTERED_ADDRESS = {
+  streetAddress: "C-72, Plot H-584, Shivaji Park, Punjabi Bagh, West Delhi",
+  addressLocality: "New Delhi",
+  addressRegion: "Delhi",
+  postalCode: "110026",
+  addressCountry: "IN",
+};
 export const SUPPORT_EMAIL = "support@hostiggo.com";
 export const SUPPORT_PHONE_DISPLAY = "+91 84483 37674";
 
