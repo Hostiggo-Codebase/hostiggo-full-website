@@ -78,6 +78,11 @@ export default async function DestinationPage({ params }: Props) {
     .map((s) => DESTINATIONS_BY_SLUG[s])
     .filter((x): x is Destination => !!x);
   const pageUrl = `${SITE_URL}/stays/${slug}`;
+  const to = stays.length ? Math.max(...stays.map((s) => s.nightlyFrom)) : 0;
+  const guestCaps = stays.map((s) => s.guests).filter((g): g is number => !!g);
+  const maxGuests = guestCaps.length ? Math.max(...guestCaps) : 0;
+  const checkedOn = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+  const isoToday = new Date().toISOString().slice(0, 10);
 
   const schema = {
     "@context": "https://schema.org",
@@ -96,6 +101,7 @@ export default async function DestinationPage({ params }: Props) {
         url: pageUrl,
         name: `Homestays in ${d.name}, ${d.state}`,
         inLanguage: "en-IN",
+        dateModified: isoToday,
         isPartOf: { "@id": `${SITE_URL}/#website` },
         about: { "@type": "Place", name: d.name, address: { "@type": "PostalAddress", addressRegion: d.state, addressCountry: "IN" } },
         mainEntity: {
@@ -149,6 +155,35 @@ export default async function DestinationPage({ params }: Props) {
           <p className="mt-3 text-[16px] text-gray-700 max-w-[760px]">{d.summary}</p>
         )}
         {d.areaNote ? <p className="mt-2 text-[14px] text-gray-500 max-w-[760px]">{d.areaNote}</p> : null}
+
+        {stays.length > 0 ? (
+          <section aria-labelledby="glance-heading" className="mt-6 max-w-[760px]">
+            <h2 id="glance-heading" className="sr-only">
+              {d.name} homestays at a glance
+            </h2>
+            <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[14px]">
+              <div className="bg-white rounded-2xl border border-gray-100 p-3">
+                <dt className="text-gray-500">Stays listed</dt>
+                <dd className="font-semibold text-[#111827]">{stays.length}</dd>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-3">
+                <dt className="text-gray-500">Price per night</dt>
+                <dd className="font-semibold text-[#111827]">
+                  {from === to ? rupees(from) : `${rupees(from)} – ${rupees(to)}`}
+                </dd>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-3">
+                <dt className="text-gray-500">Largest stay sleeps</dt>
+                <dd className="font-semibold text-[#111827]">{maxGuests ? `${maxGuests} guests` : "See listings"}</dd>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-3">
+                <dt className="text-gray-500">Prices checked</dt>
+                <dd className="font-semibold text-[#111827]">{checkedOn}</dd>
+              </div>
+            </dl>
+            <p className="mt-2 text-[12px] text-gray-500">Nightly prices include taxes and fees. Final price depends on your dates.</p>
+          </section>
+        ) : null}
 
         <section aria-labelledby="stays-heading" className="mt-8">
           <h2 id="stays-heading" className="text-[22px] font-semibold text-[#111827] mb-4">

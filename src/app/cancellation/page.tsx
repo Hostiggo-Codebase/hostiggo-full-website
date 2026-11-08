@@ -2,6 +2,38 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import JsonLd from "@/components/JsonLd";
+
+// Short, answer-first summaries of the three policies below. Shown on the page
+// and reused as FAQ structured data, so both always say the same thing.
+const QUICK_ANSWERS = [
+  {
+    q: "What is the Flexible cancellation policy?",
+    a: "With the Flexible policy, a guest gets a full refund if they cancel at least 24 hours before check-in. Cancellations within 24 hours of check-in are non-refundable.",
+  },
+  {
+    q: "What is the Moderate cancellation policy?",
+    a: "With the Moderate policy, a guest gets a full refund if they cancel at least 5 days before check-in. Within 5 days of check-in the refund is partial and excludes Hostiggo's service fees.",
+  },
+  {
+    q: "What is the Strict cancellation policy?",
+    a: "With the Strict policy, a guest may get a partial refund if they cancel at least 7 days before check-in. Cancellations within 7 days of check-in are non-refundable.",
+  },
+  {
+    q: "How are refunds calculated on Hostiggo?",
+    a: "Refunds are calculated automatically from the cancellation policy on the listing, the booking date and the time of cancellation. The policy and the refund on each date are shown before you pay.",
+  },
+];
+
+const FAQ_SCHEMA = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: QUICK_ANSWERS.map((f) => ({
+    "@type": "Question",
+    name: f.q,
+    acceptedAnswer: { "@type": "Answer", text: f.a },
+  })),
+};
 
 const sections = [
   {
@@ -67,6 +99,7 @@ export const metadata = {
 export default function CancellationPage() {
   return (
     <div className="min-h-screen bg-figma-cream">
+      <JsonLd data={FAQ_SCHEMA} />
       <Navbar />
       <main className="container-main py-10 md:py-14">
         <Link
@@ -92,6 +125,20 @@ export default function CancellationPage() {
             cancellation rules are not permitted.
           </p>
         </header>
+
+        <section aria-labelledby="quick-answers" className="mb-10 max-w-3xl">
+          <h2 id="quick-answers" className="text-xl font-semibold text-figma-ink mb-4">
+            Quick answers
+          </h2>
+          <dl className="space-y-4">
+            {QUICK_ANSWERS.map((f) => (
+              <div key={f.q}>
+                <dt className="text-[15px] font-semibold text-figma-ink">{f.q}</dt>
+                <dd className="mt-1 text-[15px] leading-7 text-figma-ink/80">{f.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-10">
           <aside className="hidden lg:block">
