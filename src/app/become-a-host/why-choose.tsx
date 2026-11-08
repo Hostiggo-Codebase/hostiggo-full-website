@@ -20,7 +20,7 @@ export default function WhyChoose() {
             Low Commission
           </h3>
           <p className="text-[13px] text-gray-600 leading-relaxed">
-            0% on first 10 booking, 2% after 10 bookings. Lowest commission in compare to other available platforms.
+            No listing fee and one simple 5% commission on every booking. You see your exact payout before you publish.
           </p>
         </div>
 
