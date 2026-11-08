@@ -59,7 +59,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const row: any = await loadListing(id);
   if (!row) return { title: "Stay not found" };
   const place = [row.locations?.district, row.locations?.state].filter(Boolean).join(", ");
-  const description = String(row.description ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const own = String(row.description ?? "").replace(/\s+/g, " ").trim();
+  const price = Number(row.price_weekday) > 0 ? ` from ₹${Number(row.price_weekday).toLocaleString("en-IN")} a night` : "";
+  const lead = `Book ${row.title}${place ? ` in ${place}` : ""}${price}. `;
+  // Lead with what searchers look for (place, price), then the host's own words;
+  // trimmed on a word boundary so the snippet never ends mid-word.
+  const full = `${lead}${own}`.trim();
+  const description =
+    full.length <= 160 ? full : full.slice(0, 157).replace(/\s+\S*$/, "") + "...";
   const cover =
     row.listing_media?.find((m: any) => m.is_cover)?.media_url ?? row.listing_media?.[0]?.media_url;
   const title = `${row.title}${place ? ` · ${place}` : ""}`;
