@@ -16,7 +16,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import BookingRequestModal from '@/components/features/BookingRequestModal';
-import { formatTimeLeft, isUnpaidRequest, requestDeadline, requestPhase, type RequestPhase } from '@/lib/billing/bookingRequest';
+import { formatTimeLeft, isUnconfirmedRequest, requestDeadline, requestPhase, type RequestPhase } from '@/lib/billing/bookingRequest';
 
 type Booking = {
   id: string;
@@ -92,7 +92,7 @@ export default function BookingsPage() {
     setError(false);
     try {
       const rows = await api.hostBookings(userId);
-      setBookings(rows.filter((r: any) => !isUnpaidRequest(r) || requestPhase(r)).map(mapBooking));
+      setBookings(rows.filter((r: any) => !isUnconfirmedRequest(r) || requestPhase(r)).map(mapBooking));
     } catch (err) {
       console.error('[host/bookings] load failed:', err);
       setError(true);
@@ -131,8 +131,8 @@ export default function BookingsPage() {
       await api.respondToBookingRequest(reviewing.id, decision);
       toast.success(
         decision === 'accept'
-          ? 'Request accepted. The guest has 2 hours to pay and confirm.'
-          : 'Request declined. The guest was not charged.',
+          ? 'Request accepted. The booking is confirmed and the guest has been notified.'
+          : 'Request declined. The guest has been refunded in full.',
       );
       setReviewing(null);
       await load();
@@ -160,8 +160,8 @@ export default function BookingsPage() {
         <section className="mb-8">
           <h3 className="text-base font-bold text-gray-800 mb-1">Reservation requests</h3>
           <p className="text-sm text-gray-500 mb-4">
-            You have 24 hours to accept or decline each request. If you don&apos;t respond it is declined
-            automatically and the guest isn&apos;t charged.
+            These guests have already paid. Accept or decline each request within 2 hours; if you decline or
+            don&apos;t respond, the guest is refunded in full automatically.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
             {requests.map((r) => {
@@ -177,9 +177,7 @@ export default function BookingsPage() {
                       <p className="text-xs text-gray-400">Request #{r.id}</p>
                     </div>
                     <span className="shrink-0 text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                      {r.phase === 'awaiting_host'
-                        ? left != null && left > 0 ? `${formatTimeLeft(left)} left` : 'Expiring'
-                        : 'Awaiting payment'}
+                      {left != null && left > 0 ? `${formatTimeLeft(left)} left` : 'Expiring'}
                     </span>
                   </div>
                   <div className="space-y-2 mb-5 flex-grow text-sm text-gray-500">
@@ -198,20 +196,13 @@ export default function BookingsPage() {
                       <span>{formatINR(r.amount)}</span>
                     </div>
                   </div>
-                  {r.phase === 'awaiting_host' ? (
-                    <button
-                      type="button"
-                      onClick={() => setReviewing(r)}
-                      className="w-full py-3 bg-figma-navy text-white font-bold rounded-xl text-sm transition-all hover:bg-figma-navy/90 active:scale-[0.98]"
-                    >
-                      Review request
-                    </button>
-                  ) : (
-                    <p className="text-xs text-gray-500">
-                      You accepted. The guest has {left != null && left > 0 ? `${formatTimeLeft(left)} left` : 'a few minutes left'} to pay,
-                      and the dates are held for them.
-                    </p>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setReviewing(r)}
+                    className="w-full py-3 bg-figma-navy text-white font-bold rounded-xl text-sm transition-all hover:bg-figma-navy/90 active:scale-[0.98]"
+                  >
+                    Review request
+                  </button>
                 </div>
               );
             })}

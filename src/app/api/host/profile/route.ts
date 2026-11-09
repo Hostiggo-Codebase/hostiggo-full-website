@@ -75,8 +75,9 @@ export async function PATCH(req: NextRequest) {
     if (body instanceof NextResponse) return body;
     if (body.userId && body.userId !== userId) return forbiddenResponse();
 
-    // Instant Book toggle: applies to all of this host's listings. NULL (the
-    // default) means guests send a request the host has to accept.
+    // Instant Book toggle: applies to all of this host's listings. On (the
+    // default) confirms bookings on payment; off ('manual') holds each paid
+    // booking for the host to accept within 2 hours.
     if (typeof body.instantBooking === "boolean" && body.about === undefined) {
       const { data: host, error: hostErr } = await supabaseAdmin
         .from("host")
@@ -88,7 +89,7 @@ export async function PATCH(req: NextRequest) {
       if (!host) return NextResponse.json({ error: "Host profile not found" }, { status: 404 });
       const { error: modeErr } = await supabaseAdmin
         .from("listings")
-        .update({ booking_mode: body.instantBooking ? "auto" : null })
+        .update({ booking_mode: body.instantBooking ? "auto" : "manual" })
         .eq("host_uuid", host.host_uuid);
       if (modeErr) {
         console.error("[PATCH /api/host/profile] booking_mode update error:", modeErr);

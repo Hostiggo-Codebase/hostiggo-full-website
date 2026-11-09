@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BookingRequestError, createBookingRequest, validateAndPriceBooking } from "@/lib/services/admin-writes";
-import { HOST_RESPONSE_WINDOW_MS, parseBookedAt } from "@/lib/billing/bookingRequest";
+import { assertNoOpenRequest, BookingRequestError, validateAndPriceBooking } from "@/lib/services/admin-writes";
 import { createRazorpayOrder } from "@/lib/billing/razorpay";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { GUEST_ID_REQUIRED, guestHasVerifiedId } from "@/lib/services/guestVerification";
@@ -117,22 +116,14 @@ export async function POST(req: NextRequest) {
       addonIds: normalizedAddonIds,
     };
 
-    // ALWAYS require payment - no unpaid bookings in dev or production
-    const priced = await validateAndPriceBooking(bookingInput);
+    // A guest who already paid for these dates and is waiting on the host can't
+    // pay again (host-approval listings hold the dates for them).
+    await assertNoOpenRequest(bookingInput);
 
-    // Not an Instant Book listing: record a request for the host to accept
-    // within 24h. Nothing is charged yet, the guest pays after they accept.
-    if (priced.requiresHostApproval) {
-      const { booking } = await createBookingRequest(bookingInput, priced);
-      return NextResponse.json({
-        data: {
-          paymentRequired: false,
-          requested: true,
-          bookingId: booking.booking_id,
-          respondBy: new Date(parseBookedAt(booking.booked_at)! + HOST_RESPONSE_WINDOW_MS).toISOString(),
-        },
-      });
-    }
+    // ALWAYS require payment up front - no unpaid bookings in dev or production.
+    // Listings with host approval take the same payment; the booking is then
+    // held as a pending request (see finalizeBookingFromRazorpayOrder).
+    const priced = await validateAndPriceBooking(bookingInput);
 
     // Everything finalizeBookingFromRazorpayOrder() will need to actually
     // create the booking once payment is verified travels here, in the

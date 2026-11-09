@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  GUEST_PAYMENT_WINDOW_MS,
   HOST_RESPONSE_WINDOW_MS,
-  PAYMENT_GRACE_MS,
   formatTimeLeft,
+  isUnconfirmedRequest,
   parseBookedAt,
   requestDeadline,
-  requestHardExpiry,
   requestPhase,
 } from "../bookingRequest";
 
@@ -27,36 +25,43 @@ describe("parseBookedAt", () => {
 });
 
 describe("requestPhase", () => {
-  it("is awaiting_host with no order, awaiting_payment with an order and no payment", () => {
-    expect(requestPhase({ status_id: 1 })).toBe("awaiting_host");
-    expect(requestPhase({ status_id: 1, razorpay_order_id: "order_1" })).toBe("awaiting_payment");
+  it("is awaiting_host for a paid, pending booking", () => {
+    expect(requestPhase({ status_id: 1, razorpay_payment_id: "pay_1" })).toBe("awaiting_host");
   });
-  it("is null once paid, confirmed or cancelled", () => {
-    expect(requestPhase({ status_id: 1, razorpay_order_id: "o", razorpay_payment_id: "pay_1" })).toBeNull();
-    expect(requestPhase({ status_id: 2 })).toBeNull();
-    expect(requestPhase({ status_id: 3 })).toBeNull();
+  it("is null when unpaid, confirmed or cancelled", () => {
+    expect(requestPhase({ status_id: 1 })).toBeNull();
+    expect(requestPhase({ status_id: 2, razorpay_payment_id: "pay_1" })).toBeNull();
+    expect(requestPhase({ status_id: 3, razorpay_payment_id: "pay_1" })).toBeNull();
   });
 });
 
-describe("deadlines", () => {
-  it("gives the host 24h from the request", () => {
-    expect(requestDeadline({ status_id: 1, booked_at: BOOKED })).toBe(BOOKED_MS + HOST_RESPONSE_WINDOW_MS);
-    expect(requestHardExpiry({ status_id: 1, booked_at: BOOKED })).toBe(BOOKED_MS + HOST_RESPONSE_WINDOW_MS);
-  });
-  it("gives the guest 2h from acceptance, plus grace before the sweep cancels", () => {
-    const accepted = { status_id: 1, razorpay_order_id: "order_1", booked_at: BOOKED };
-    expect(requestDeadline(accepted)).toBe(BOOKED_MS + GUEST_PAYMENT_WINDOW_MS);
-    expect(requestHardExpiry(accepted)).toBe(BOOKED_MS + GUEST_PAYMENT_WINDOW_MS + PAYMENT_GRACE_MS);
+describe("deadline", () => {
+  it("gives the host 2h from the payment", () => {
+    expect(HOST_RESPONSE_WINDOW_MS).toBe(2 * 3600e3);
+    expect(requestDeadline({ status_id: 1, razorpay_payment_id: "pay_1", booked_at: BOOKED })).toBe(
+      BOOKED_MS + HOST_RESPONSE_WINDOW_MS,
+    );
   });
   it("has no deadline for anything that is not a live request", () => {
-    expect(requestDeadline({ status_id: 2, booked_at: BOOKED })).toBeNull();
-    expect(requestDeadline({ status_id: 1 })).toBeNull();
+    expect(requestDeadline({ status_id: 2, razorpay_payment_id: "pay_1", booked_at: BOOKED })).toBeNull();
+    expect(requestDeadline({ status_id: 1, razorpay_payment_id: "pay_1" })).toBeNull();
+  });
+});
+
+describe("isUnconfirmedRequest", () => {
+  it("covers pending requests and requests cancelled before ever being confirmed", () => {
+    expect(isUnconfirmedRequest({ status_id: 1, razorpay_payment_id: "pay_1" })).toBe(true);
+    expect(isUnconfirmedRequest({ status_id: 3, razorpay_payment_id: "pay_1", paid_at: null })).toBe(true);
+  });
+  it("leaves confirmed bookings, and bookings cancelled after confirmation, alone", () => {
+    expect(isUnconfirmedRequest({ status_id: 2, razorpay_payment_id: "pay_1", paid_at: "2026-10-29" })).toBe(false);
+    expect(isUnconfirmedRequest({ status_id: 3, razorpay_payment_id: "pay_1", paid_at: "2026-10-29" })).toBe(false);
   });
 });
 
 describe("formatTimeLeft", () => {
   it("formats hours and minutes, rounding up", () => {
-    expect(formatTimeLeft(23 * 3600e3 + 41 * 60e3)).toBe("23h 41m");
+    expect(formatTimeLeft(1 * 3600e3 + 41 * 60e3)).toBe("1h 41m");
     expect(formatTimeLeft(59 * 60e3 + 1)).toBe("1h 0m");
     expect(formatTimeLeft(5 * 60e3)).toBe("5m");
     expect(formatTimeLeft(0)).toBe("0m");

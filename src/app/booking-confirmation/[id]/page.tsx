@@ -29,7 +29,7 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import BackButton from '@/components/ui/back-button';
 import { useAuth } from '@/context/AuthContext';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
 import { reconstructInvoice, splitBookingAddons } from '@/lib/billing/reconstructInvoice';
 import {
   cancellationTimeline,
@@ -41,7 +41,6 @@ import {
 import { downloadBookingReceipt, type ReceiptLine } from '@/lib/bookingReceipt';
 import { formatINR, formatStayDate, formatTime12h, plural, REFUND_ARRIVAL_NOTE } from '@/lib/format';
 import { todayInIndia } from '@/lib/booking-config';
-import { openRazorpayCheckout, RazorpayUnavailableError } from '@/lib/services/razorpayCheckout';
 import { formatTimeLeft, requestDeadline, requestPhase } from '@/lib/billing/bookingRequest';
 
 const STATUS_PENDING = 1;
@@ -65,8 +64,6 @@ type BookingDetail = {
   razorpay_payment_id: string | null;
   razorpay_order_id?: string | null;
   cancellation_reason?: string | null;
-  // Present while the host has accepted and the guest still has to pay.
-  pendingPayment?: { razorpayOrderId: string; razorpayKeyId: string | null; amountPaise: number } | null;
   paid_at: string | null;
   booked_at: string | null;
   host_uuid: string | null;
@@ -241,7 +238,7 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
   const isUpcoming = booking.start_date >= todayInIndia();
   const reference = booking.invoice_number || `HG-${booking.booking_id}`;
 
-  // Unpaid booking request: waiting for the host (24h) or for this guest to pay (2h).
+  // Paid booking request: waiting for the host to accept (2h), else refunded in full.
   const phase = requestPhase(booking);
   const deadline = requestDeadline(booking);
   const [tick, setTick] = useState(() => Date.now());
@@ -250,75 +247,18 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
     const t = setInterval(() => setTick(Date.now()), 30_000);
     return () => clearInterval(t);
   }, [phase]);
-  const [requestBusy, setRequestBusy] = useState<'pay' | 'withdraw' | null>(null);
-
-  const payForRequest = async () => {
-    const pending = booking.pendingPayment;
-    if (!pending?.razorpayKeyId) {
-      toast.error('Payment is unavailable right now. Please try again in a moment.');
-      return;
-    }
-    setRequestBusy('pay');
-    try {
-      let payment;
-      try {
-        payment = await openRazorpayCheckout({
-          key: pending.razorpayKeyId,
-          amount: pending.amountPaise,
-          currency: 'INR',
-          order_id: pending.razorpayOrderId,
-          name: 'Hostiggo',
-          description: property?.title ?? 'Hostiggo stay',
-          theme: { color: '#0B2C4D' },
-        });
-      } catch (checkoutErr) {
-        if (checkoutErr instanceof RazorpayUnavailableError) {
-          toast.error(
-            "We couldn't open the payment window. Please disable ad-blockers for hostiggo.com or check your connection, then try again.",
-            { duration: 8000 },
-          );
-        }
-        return; // closed without paying: they can try again until the deadline
-      }
-      const payload = {
-        razorpayOrderId: payment.razorpay_order_id,
-        razorpayPaymentId: payment.razorpay_payment_id,
-        razorpaySignature: payment.razorpay_signature,
-      };
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await api.confirmBookingPayment(payload);
-          toast.success('Booking confirmed!');
-          window.location.reload();
-          return;
-        } catch (confirmErr) {
-          if (confirmErr instanceof ApiError && confirmErr.code === 'PAYMENT_REFUNDED') {
-            toast.error(confirmErr.message, { duration: 15000 });
-            window.location.reload();
-            return;
-          }
-          if (attempt < 2) await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-        }
-      }
-      toast.warning(
-        `Payment received (ID ${payment.razorpay_payment_id}). We're confirming your booking -- this page updates within a few minutes. Please don't pay again.`,
-        { duration: 15000 },
-      );
-    } finally {
-      setRequestBusy(null);
-    }
-  };
+  const [requestBusy, setRequestBusy] = useState(false);
 
   const withdrawRequest = async () => {
-    setRequestBusy('withdraw');
+    setRequestBusy(true);
     try {
       await api.withdrawBookingRequest(booking.booking_id);
-      toast.success('Request cancelled. You were not charged.');
+      toast.success('Request cancelled. Your payment is being refunded in full.');
       window.location.reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't cancel the request.");
     } finally {
-      setRequestBusy(null);
+      setRequestBusy(false);
     }
   };
 
@@ -418,7 +358,7 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
       await downloadBookingReceipt({
         reference,
         bookingId: booking.booking_id,
-        status: status === STATUS_CONFIRMED ? 'Confirmed' : status === STATUS_CANCELLED ? 'Cancelled' : phase === 'awaiting_host' ? 'Awaiting host' : 'Pending payment',
+        status: status === STATUS_CONFIRMED ? 'Confirmed' : status === STATUS_CANCELLED ? 'Cancelled' : phase === 'awaiting_host' ? 'Awaiting host' : 'Pending',
         paidAt: booking.paid_at,
         paymentId: booking.razorpay_payment_id,
         guestName: booking.guest?.name,
@@ -486,9 +426,7 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
         <div>
           <p className="text-[15px] font-semibold text-[#BC0024]">This booking was cancelled</p>
           <p className="text-[13px] text-[#1A1A1A]/65">
-            {!booking.razorpay_payment_id && booking.refund_status === 'not_applicable'
-              ? `${booking.cancellation_reason ? `${booking.cancellation_reason}. ` : ''}You were not charged.`
-              : booking.refund_amount && Number(booking.refund_amount) > 0
+            {booking.refund_amount && Number(booking.refund_amount) > 0
               ? `Refund of ${formatINR(booking.refund_amount)} ${
                   booking.refund_status === 'processed' ? 'has been processed' : 'is on its way'
                 } to your original payment method. ${REFUND_ARRIVAL_NOTE}`
@@ -517,33 +455,18 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
       <div className="flex items-start gap-3 rounded-2xl border border-amber-400/50 bg-amber-50 px-4 py-3.5">
         <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
         <div className="min-w-0">
-          <p className="text-[15px] font-semibold text-amber-800">
-            {phase === 'awaiting_host' ? 'Waiting for the host to respond' : 'Host accepted — complete your payment'}
-          </p>
+          <p className="text-[15px] font-semibold text-amber-800">Waiting for the host to accept</p>
           <p className="text-[13px] text-[#1A1A1A]/65">
-            {phase === 'awaiting_host'
-              ? `The host has ${deadline != null && deadline > tick ? formatTimeLeft(deadline - tick) : 'a few minutes'} left to accept. You won't be charged unless they do, and the request is cancelled automatically if they don't respond.`
-              : `Pay within ${deadline != null && deadline > tick ? formatTimeLeft(deadline - tick) : 'a few minutes'} to confirm your stay, otherwise the request is cancelled and you won't be charged.`}
+            {`You've paid ${formatINR(total)}. The host has ${deadline != null && deadline > tick ? formatTimeLeft(deadline - tick) : 'a few minutes'} left to accept. If they decline or don't respond, your booking is cancelled and you're refunded in full automatically.`}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {phase === 'awaiting_payment' && (
-              <button
-                type="button"
-                disabled={requestBusy !== null}
-                onClick={payForRequest}
-                className="inline-flex h-10 items-center gap-2 rounded-full bg-[#004772] px-6 text-[14px] font-semibold text-white hover:bg-[#003a5c] disabled:opacity-60"
-              >
-                <CreditCard className="h-4 w-4" />
-                {requestBusy === 'pay' ? 'Processing…' : `Pay ${formatINR(total)}`}
-              </button>
-            )}
             <button
               type="button"
-              disabled={requestBusy !== null}
+              disabled={requestBusy}
               onClick={withdrawRequest}
               className="inline-flex h-10 items-center rounded-full border border-black/15 bg-white px-5 text-[13px] font-semibold text-[#1A1A1A]/70 hover:bg-gray-50 disabled:opacity-60"
             >
-              {requestBusy === 'withdraw' ? 'Cancelling…' : 'Cancel request'}
+              {requestBusy ? 'Cancelling…' : 'Cancel request'}
             </button>
           </div>
         </div>
@@ -551,9 +474,7 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
     ) : phase ? (
       <div className="flex items-start gap-3 rounded-2xl border border-amber-400/50 bg-amber-50 px-4 py-3.5">
         <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
-        <p className="text-[15px] font-semibold text-amber-800">
-          {phase === 'awaiting_host' ? 'Waiting for the host to respond' : 'Waiting for the guest to pay'}
-        </p>
+        <p className="text-[15px] font-semibold text-amber-800">Waiting for the host to respond</p>
       </div>
     ) : (
       <div className="flex items-start gap-3 rounded-2xl border border-amber-400/50 bg-amber-50 px-4 py-3.5">

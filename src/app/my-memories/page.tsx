@@ -70,7 +70,7 @@ interface Booking {
   priceWeekday: number | null;
   priceWeekend: number | null;
   // Set while this is an unpaid booking request (host to respond / guest to pay).
-  requestPhase?: 'awaiting_host' | 'awaiting_payment' | null;
+  requestPhase?: 'awaiting_host' | null;
   requestDeadline?: number | null;
 }
 
@@ -1261,7 +1261,7 @@ function BookingCard({
                 onClick={() => router.push(`/booking-confirmation/${booking.id}`)}
                 className="w-full sm:w-[254px] h-[47px] rounded-[12px] bg-[#004772] hover:bg-[#003859] text-white text-[17px] font-semibold flex items-center justify-center transition-all shadow-sm font-['Poppins'] cursor-pointer"
               >
-                {booking.requestPhase === 'awaiting_payment' ? 'Pay now' : 'View request'}
+                View request
               </button>
             ) : booking.status === 'upcoming' ? (
               <button
@@ -1293,16 +1293,12 @@ function BookingCard({
                   <div className="text-[30px] sm:text-[32px] font-semibold text-[#1A1A1A] leading-tight font-['Poppins']">
                     {booking.requestPhase === 'awaiting_host'
                       ? 'Waiting for host'
-                      : booking.requestPhase === 'awaiting_payment'
-                        ? 'Accepted — pay now'
-                        : daysLeft > 0 ? `${daysLeft} days left` : daysLeft === 0 ? 'Today!' : 'Ongoing'}
+                      : daysLeft > 0 ? `${daysLeft} days left` : daysLeft === 0 ? 'Today!' : 'Ongoing'}
                   </div>
                   <div className="text-[17px] text-[#1A1A1A]/70 font-normal font-['Poppins'] mt-1">
                     {booking.requestPhase === 'awaiting_host'
-                      ? "The host has 24 hours to respond. You won't be charged unless they accept."
-                      : booking.requestPhase === 'awaiting_payment'
-                        ? 'Pay within 2 hours to confirm your stay.'
-                        : 'For a happy journey'}
+                      ? "The host has 2 hours to accept. If they don't, you're refunded in full."
+                      : 'For a happy journey'}
                   </div>
                 </div>
 

@@ -276,9 +276,11 @@ export default function HostSettingsPage() {
   }, [userId]);
 
   const [savingInstant, setSavingInstant] = useState(false);
+  // Instant Book is on unless the host has turned it off.
+  const instantOn = profile?.instantBooking !== false;
   const handleInstantBookingToggle = async () => {
     if (!profile || savingInstant) return;
-    const next = !profile.instantBooking;
+    const next = profile.instantBooking === false;
     setSavingInstant(true);
     try {
       const res = await fetch('/api/host/profile', {
@@ -291,7 +293,7 @@ export default function HostSettingsPage() {
       if (next) {
         toast.success('Instant Book is on. Guests can now book your stays without waiting for approval.');
       } else {
-        toast.success("Instant Book is off. You'll now need to accept each booking request within 24 hours.");
+        toast.success("Instant Book is off. Guests pay upfront and you'll need to accept each booking within 2 hours, otherwise they're refunded.");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not update the setting.');
@@ -611,27 +613,27 @@ export default function HostSettingsPage() {
                 <div className="min-w-0">
                   <h3 className="text-lg font-bold text-gray-800">Accept instant bookings</h3>
                   <p className="text-sm text-gray-500 mt-1">
-                    {profile?.instantBooking
+                    {instantOn
                       ? 'Guests can book your stays right away and are confirmed once they pay.'
-                      : "Guests send a request that you accept or decline. You'll have 24 hours to respond, and the guest is only charged after you accept."}
+                      : "Guests pay upfront and the booking is sent to you to accept or decline. You'll have 2 hours to respond; if you decline or don't answer, the guest is refunded in full."}
                   </p>
                 </div>
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={Boolean(profile?.instantBooking)}
+                  aria-checked={instantOn}
                   aria-label="Accept instant bookings"
                   disabled={savingInstant || !profile}
                   onClick={handleInstantBookingToggle}
                   className={cn(
                     'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-60',
-                    profile?.instantBooking ? 'bg-figma-navy' : 'bg-gray-300',
+                    instantOn ? 'bg-figma-navy' : 'bg-gray-300',
                   )}
                 >
                   <span
                     className={cn(
                       'inline-block h-5 w-5 rounded-full bg-white shadow transition-transform',
-                      profile?.instantBooking ? 'translate-x-6' : 'translate-x-1',
+                      instantOn ? 'translate-x-6' : 'translate-x-1',
                     )}
                   />
                 </button>
@@ -639,8 +641,8 @@ export default function HostSettingsPage() {
               <div className="mt-5 flex items-start gap-2 p-4 rounded-xl bg-figma-navy/5 border border-figma-navy/10">
                 <CalendarCheck className="w-4 h-4 text-figma-navy shrink-0 mt-0.5" />
                 <p className="text-xs text-gray-600">
-                  This applies to all of your listings. Requests you don&apos;t answer within 24 hours are declined
-                  automatically, and the guest is never charged.
+                  This applies to all of your listings and is on by default. With it off, requests you don&apos;t answer
+                  within 2 hours are declined automatically and the guest is refunded in full.
                 </p>
               </div>
             </div>

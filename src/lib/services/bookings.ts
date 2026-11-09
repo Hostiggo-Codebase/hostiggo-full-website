@@ -3,7 +3,7 @@
 // caller scopes by the verified user id (see getAuthenticatedUserId).
 import { supabaseAdmin } from "../supabase-admin";
 import { todayInIndia } from "../booking-config";
-import { PENDING_STATUS_ID, requestPhase } from "../billing/bookingRequest";
+import { PENDING_STATUS_ID } from "../billing/bookingRequest";
 import { findPaymentHolds } from "./admin-writes";
 const supabase = supabaseAdmin;
 
@@ -71,13 +71,12 @@ export const bookingsAPI = {
 
     // The view files anything that isn't CONFIRMED under 'cancelled', which
     // would bury a pending request in the Cancelled tab. Requests (status 1,
-    // unpaid) are shown under 'upcoming' instead, ahead of the confirmed stays.
+    // paid, awaiting the host) are shown under 'upcoming' instead, ahead of the confirmed stays.
     const { data: requestIds } = await supabase
       .from("bookings")
       .select("booking_id")
       .eq("user_id", userId)
-      .eq("status_id", PENDING_STATUS_ID)
-      .is("razorpay_payment_id", null);
+      .eq("status_id", PENDING_STATUS_ID);
     const pendingIds = new Set((requestIds ?? []).map((r: any) => r.booking_id));
     if (bookingLabel === "cancelled") {
       rows = rows.filter((r: any) => !pendingIds.has(r.booking_id));
@@ -308,18 +307,7 @@ export const bookingsAPI = {
       houseRules = rules?.[0] ?? null;
     }
 
-    // An accepted request: the guest pays this order to confirm. The key id is
-    // public, the amount is what the host's accept priced.
-    const pendingPayment =
-      viewerIsGuest && requestPhase(booking) === "awaiting_payment"
-        ? {
-            razorpayOrderId: booking.razorpay_order_id as string,
-            razorpayKeyId: process.env.RAZORPAY_KEY_ID ?? null,
-            amountPaise: Math.round(Number(booking.amount ?? 0) * 100),
-          }
-        : null;
-
-    return { ...booking, guest, host, houseRules, addons: addons ?? [], pendingPayment };
+    return { ...booking, guest, host, houseRules, addons: addons ?? [] };
   },
 
   async updateBookingDates(

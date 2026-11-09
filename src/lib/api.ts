@@ -231,7 +231,7 @@ export function mapListingToProperty(input: any): Property {
     isNew: Boolean(row.is_new),
     distanceFromCenter:
       typeof input?.distance === "number" ? `${(input.distance / 1000).toFixed(1)} km` : row.distance,
-    isInstantBook: row.booking_mode === "auto" || Boolean(row.isInstantBook),
+    isInstantBook: row.booking_mode !== "manual",
     freeCancellation: Boolean(row.freeCancellation),
     cancellationPolicy: (row.cancellation_policy ?? "moderate") as Property["cancellationPolicy"],
     strictPartialRefundPercent:
@@ -355,7 +355,7 @@ export function mapBooking(item: any) {
       rooms: 1,
       pets: false,
     },
-    // Set while this is an unpaid booking request (host to respond, or guest to pay).
+    // Set while this is a paid booking request waiting for the host to accept.
     requestPhase: requestPhase(item),
     requestDeadline: requestDeadline(item),
     amount: item.amount != null ? Number(item.amount) : null,
@@ -487,29 +487,24 @@ export const api = {
     // real charge from the listing's own prices, see
     // validateAndPriceBooking() in src/lib/services/admin-writes.ts
   }) =>
-    request<
-      | {
-          paymentRequired: true;
-          requested?: false;
-          razorpayOrderId: string;
-          razorpayKeyId: string;
-          amountPaise: number;
-          amountRupees: number;
-          currency: string;
-        }
-      // Host approval listing: a request was recorded, nothing is charged yet.
-      | { paymentRequired: false; requested: true; bookingId: number; respondBy: string }
-    >(`/api/bookings/reserve`, {
+    request<{
+      paymentRequired: true;
+      razorpayOrderId: string;
+      razorpayKeyId: string;
+      amountPaise: number;
+      amountRupees: number;
+      currency: string;
+    }>(`/api/bookings/reserve`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  // Host accepts or declines a booking request (24h window).
+  // Host accepts or declines a paid booking request (2h window; declining refunds the guest).
   respondToBookingRequest: (bookingId: string | number, decision: "accept" | "reject") =>
     request<any>("/api/bookings", {
       method: "PATCH",
       body: JSON.stringify({ action: "respond", bookingId, decision }),
     }),
-  // Guest withdraws their own unpaid request.
+  // Guest withdraws their own pending request (refunded in full).
   withdrawBookingRequest: (bookingId: string | number) =>
     request<any>("/api/bookings", {
       method: "PATCH",

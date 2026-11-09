@@ -8,16 +8,12 @@ import { discountedStaySubtotal, pickStayDiscount, type StayDiscountRow } from "
 import { getHostPayoutReadiness, hostHasPayoutAccount, HostPayoutMissingError } from "./hostPayoutReadiness";
 import { DatesUnavailableError, isDatabaseAvailabilityError } from "../stayDates";
 import {
-  GUEST_PAYMENT_WINDOW_MS,
-  GUEST_REMINDER_MARKS_MS,
   HOST_REMINDER_MARKS_MS,
   HOST_RESPONSE_WINDOW_MS,
-  PAYMENT_GRACE_MS,
   PENDING_STATUS_ID,
   formatTimeLeft,
   parseBookedAt,
   requestDeadline,
-  requestHardExpiry,
   requestPhase,
 } from "../billing/bookingRequest";
 
@@ -292,7 +288,7 @@ type BookingInput = {
  */
 export async function validateAndPriceBooking(
   input: BookingInput,
-  // The request being accepted/paid, so its own payment hold doesn't block it.
+  // The request being accepted, so its own hold doesn't block it.
   opts: { excludeBookingId?: number } = {},
 ) {
   // Resolve the owning host + real pricing/capacity from the listing,
@@ -351,8 +347,8 @@ export async function validateAndPriceBooking(
   if (conflicts && conflicts.length > 0)
     throw new DatesUnavailableError("These dates are already booked. Please choose different dates.");
 
-  // Check C: a request the host accepted holds its dates while that guest has
-  // their payment window, so a second guest can't be accepted for the same nights.
+  // Check C: a paid request awaiting the host holds its dates, so a second
+  // guest can't pay for the same nights meanwhile.
   const heldBookings = await findPaymentHolds(input.listingId, input.startDate, input.endDate, opts.excludeBookingId);
   if (heldBookings.length > 0)
     throw new DatesUnavailableError("These dates are being held for another guest. Please choose different dates.");
@@ -435,9 +431,9 @@ export async function validateAndPriceBooking(
 
   return {
     listing,
-    // Instant Book is the host's explicit opt-in (booking_mode 'auto'); everything
-    // else is a request the host has to accept.
-    requiresHostApproval: listing.booking_mode !== "auto",
+    // Instant Book is the default; a host opts in to approving each booking by
+    // turning it off (booking_mode 'manual').
+    requiresHostApproval: listing.booking_mode === "manual",
     numAdults,
     numChildren,
     stayNights,
@@ -449,31 +445,43 @@ export async function validateAndPriceBooking(
 }
 
 /**
- * Accepted requests still inside their payment window (incl. grace) that
- * overlap [startDate, endDate) on this listing. They don't block in the DB
- * (the availability trigger only knows status 2), so the app enforces them.
+ * Paid requests still waiting for the host (inside their response window) that
+ * overlap [startDate, endDate) on this listing. They don't block in the DB (the
+ * availability trigger only knows status 2), so the app holds the nights for
+ * them: no other guest can book or pay for them while the host decides.
  */
 export async function findPaymentHolds(
   listingId: number,
   startDate: string,
   endDate: string,
   excludeBookingId?: number,
-): Promise<{ booking_id: number }[]> {
-  const cutoff = new Date(Date.now() - (GUEST_PAYMENT_WINDOW_MS + PAYMENT_GRACE_MS)).toISOString();
+): Promise<{ booking_id: number; user_id: string }[]> {
+  const cutoff = new Date(Date.now() - HOST_RESPONSE_WINDOW_MS).toISOString();
   let query = supabaseAdmin
     .from("bookings")
-    .select("booking_id")
+    .select("booking_id, user_id")
     .eq("listing_id", listingId)
     .eq("status_id", PENDING_STATUS_ID)
-    .not("razorpay_order_id", "is", null)
-    .is("razorpay_payment_id", null)
+    .not("razorpay_payment_id", "is", null)
     .gt("booked_at", cutoff)
     .lt("start_date", endDate)
     .gt("end_date", startDate);
   if (excludeBookingId != null) query = query.neq("booking_id", excludeBookingId);
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []) as { booking_id: number }[];
+  return (data ?? []) as { booking_id: number; user_id: string }[];
+}
+
+/** Throws if this guest already has a paid request waiting on the host for overlapping nights. */
+export async function assertNoOpenRequest(input: BookingInput) {
+  const holds = await findPaymentHolds(input.listingId, input.startDate, input.endDate);
+  if (holds.some((h) => h.user_id === input.userId)) {
+    throw new BookingRequestError(
+      "You already have a pending request for these dates. The host has 2 hours to respond.",
+      409,
+      "REQUEST_ALREADY_PENDING",
+    );
+  }
 }
 
 /**
@@ -682,10 +690,6 @@ export async function finalizeBookingFromRazorpayOrder(params: {
     throw new Error(`Razorpay order ${params.orderId} is missing booking notes.`);
   }
 
-  // Order created when the host accepted a request: pay into that booking
-  // instead of inserting a new one.
-  if (notes.bookingId) return finalizeAcceptedRequestPayment(params, order, notes);
-
   const input: BookingInput = {
     listingId: Number(notes.listingId),
     userId: notes.userId,
@@ -730,10 +734,18 @@ export async function finalizeBookingFromRazorpayOrder(params: {
 
   let booking;
   try {
-    booking = await insertConfirmedBooking(input, priced, {
-      orderId: params.orderId,
-      paymentId: params.paymentId,
-    });
+    // Host-approval listing: the payment is held as a pending request until the host answers.
+    if (priced.requiresHostApproval) {
+      booking = await insertPaidBookingRequest(input, priced, {
+        orderId: params.orderId,
+        paymentId: params.paymentId,
+      });
+    } else {
+      booking = await insertConfirmedBooking(input, priced, {
+        orderId: params.orderId,
+        paymentId: params.paymentId,
+      });
+    }
   } catch (err: any) {
     // Callback + webhook raced past the read-then-insert idempotency check above.
     // bookings_razorpay_payment_id_uniq makes the loser fail here with a unique
@@ -750,6 +762,13 @@ export async function finalizeBookingFromRazorpayOrder(params: {
       throw await refundUnfulfillablePayment(params, order, "These dates were blocked or booked while you were paying.");
     }
     throw err;
+  }
+
+  if (priced.requiresHostApproval) {
+    await noticeRequestPlaced(booking).catch((err) => {
+      console.error(`[finalizeBookingFromRazorpayOrder] request notices failed for booking ${booking.booking_id}:`, err);
+    });
+    return booking;
   }
 
   await snapshotInvoiceOnBooking(booking, priced).catch((err) => {
@@ -780,9 +799,11 @@ export async function finalizeBookingFromRazorpayOrder(params: {
 }
 
 // ── Request to book (host approval) ──────────────────────────────────────────
-// Non-instant listings: the guest requests (no charge), the host has 24h to
-// accept, then the guest has 2h to pay. State is derived from existing columns,
-// see src/lib/billing/bookingRequest.ts.
+// Listings with host approval turned on: the guest PAYS UP FRONT, the booking is
+// held as PENDING (status 1) and the host has 2h to accept. Accepting confirms it;
+// declining, cancelling or letting the 2h pass cancels it and refunds the guest in
+// full in the same step. State is derived from existing columns, see
+// src/lib/billing/bookingRequest.ts.
 
 type BookingRow = Record<string, any>;
 
@@ -872,118 +893,44 @@ async function requestContext(booking: BookingRow) {
     title: listing?.title ?? "the property",
     guestName: guest?.name ?? "A guest",
     dates: `${longDate(booking.start_date)} to ${longDate(booking.end_date)}`,
+    guests: Number(booking.nom_guests ?? (booking.num_adults ?? 0) + (booking.num_children ?? 0)) || 1,
+    amount: formatINR(Number(booking.amount ?? 0)),
   };
 }
 
-/** Guest asks to book. No payment is taken; the host has 24h to respond. */
-export async function createBookingRequest(
-  input: BookingInput,
-  alreadyPriced?: Awaited<ReturnType<typeof validateAndPriceBooking>>,
-) {
-  const priced = alreadyPriced ?? (await validateAndPriceBooking(input));
-
-  const openSince = new Date(Date.now() - HOST_RESPONSE_WINDOW_MS).toISOString();
-  const { data: duplicate, error: dupErr } = await supabaseAdmin
-    .from("bookings")
-    .select("booking_id")
-    .eq("user_id", input.userId)
-    .eq("listing_id", input.listingId)
-    .eq("status_id", PENDING_STATUS_ID)
-    .is("razorpay_payment_id", null)
-    .gt("booked_at", openSince)
-    .lt("start_date", input.endDate)
-    .gt("end_date", input.startDate)
-    .limit(1);
-  if (dupErr) throw dupErr;
-  if (duplicate?.length) {
-    throw new BookingRequestError(
-      "You already have a pending request for these dates.",
-      409,
-      "REQUEST_ALREADY_PENDING",
-    );
-  }
-
-  const now = new Date().toISOString();
-  const { data: booking, error } = await supabaseAdmin
-    .from("bookings")
-    .insert({
-      listing_id: input.listingId,
-      user_id: input.userId,
-      start_date: input.startDate,
-      end_date: input.endDate,
-      num_adults: priced.numAdults,
-      num_children: priced.numChildren,
-      nom_guests: priced.numAdults + priced.numChildren,
-      amount: priced.amountRupees,
-      status_id: PENDING_STATUS_ID,
-      host_uuid: priced.listing.host_uuid,
-      booked_at: now,
-      // Which add-ons were asked for; re-priced when the host accepts.
-      invoice: { request: { addonIds: input.addonIds ?? [], requestedAt: now } },
-    })
-    .select()
-    .single();
-  if (error) throw error;
-
-  if (priced.resolvedAddons.length) {
-    const { error: addonsErr } = await supabaseAdmin.from("booking_addons").insert(
-      priced.resolvedAddons.map((a) => ({ booking_id: booking.booking_id, name: a.name, price: a.price, type: a.type })),
-    );
-    if (addonsErr) console.error("[createBookingRequest] booking_addons insert failed:", addonsErr.message);
-  }
-
+/**
+ * The guest has paid and the booking is held for the host. Tells the guest their
+ * money is safe and shows the host everything they need to decide.
+ */
+async function noticeRequestPlaced(booking: BookingRow) {
   const ctx = await requestContext(booking);
+  const respondBy = requestDeadline(booking);
   await noticeRequestParty(booking, "guest", {
     templateId: "booking_confirmed_guest",
     title: "Request sent",
-    message: `Your request for ${ctx.title} (${ctx.dates}) was sent. The host has 24 hours to respond. You won't be charged unless they accept.`,
+    message: `You paid ${ctx.amount} for ${ctx.title} (${ctx.dates}). The host has 2 hours to accept. If they decline or don't respond you'll get a full refund.`,
     emailLines: [
       ctx.title,
       ctx.dates,
-      "The host has 24 hours to accept or decline. You won't be charged unless they accept.",
+      `Paid: ${ctx.amount}`,
+      "The host has 2 hours to accept. If they decline or don't respond, you'll be refunded in full automatically.",
       `Booking reference: #${booking.booking_id}`,
     ],
     cta: { label: "View request", path: `/booking-confirmation/${booking.booking_id}` },
+    extraMetadata: { kind: "booking_request" },
   });
   await noticeRequestParty(booking, "host", {
     templateId: "booking_received_host",
     title: "New booking request",
-    message: `${ctx.guestName} wants to book ${ctx.title} (${ctx.dates}). Accept or decline within 24 hours or it will be declined automatically.`,
+    message: `${ctx.guestName} paid ${ctx.amount} to book ${ctx.title} (${ctx.dates}, ${ctx.guests} ${ctx.guests === 1 ? "guest" : "guests"}). Accept or decline within 2 hours or it is declined and refunded automatically.`,
     emailLines: [
-      `${ctx.guestName} requested ${ctx.title}.`,
-      ctx.dates,
-      "You have 24 hours to accept or decline. If you don't respond the request is declined automatically.",
+      `${ctx.guestName} requested ${ctx.title} and has already paid ${ctx.amount}.`,
+      `${ctx.dates} · ${ctx.guests} ${ctx.guests === 1 ? "guest" : "guests"}`,
+      "You have 2 hours to accept or decline. If you don't respond the request is declined and the guest is refunded automatically.",
     ],
-    cta: { label: "Review request", path: `/host/bookings/details?id=${booking.booking_id}` },
+    cta: { label: "Review request", path: "/notifications" },
+    extraMetadata: { kind: "booking_request", respond_by: respondBy ? new Date(respondBy).toISOString() : null },
   });
-
-  return { booking, priced };
-}
-
-/**
- * Cancels a request that has no payment (declined, expired, withdrawn).
- * Conditional on still being an unpaid request, so a payment that landed first wins.
- */
-export async function cancelUnpaidBooking(
-  bookingId: number,
-  opts: { reason: string; cancelledBy: string | null },
-): Promise<BookingRow | null> {
-  const { data, error } = await supabaseAdmin
-    .from("bookings")
-    .update({
-      status_id: 3,
-      cancellation_reason: opts.reason,
-      cancelled_at: new Date().toISOString(),
-      cancelled_by: opts.cancelledBy,
-      refund_status: "not_applicable",
-    })
-    .eq("booking_id", bookingId)
-    .eq("status_id", PENDING_STATUS_ID)
-    .is("razorpay_payment_id", null)
-    .select()
-    .maybeSingle();
-  if (error) throw error;
-  return data;
 }
 
 async function loadBooking(bookingId: number): Promise<BookingRow> {
@@ -993,35 +940,180 @@ async function loadBooking(bookingId: number): Promise<BookingRow> {
   return data;
 }
 
-/** Tells both parties a request ended without payment. */
+/**
+ * Inserts the PENDING booking for a payment that already cleared. The nights
+ * are held (findPaymentHolds); no invoice snapshot, ledger row or host transfer
+ * is made until the host accepts. If another paid request for the same nights
+ * got in first, this one is refunded.
+ */
+async function insertPaidBookingRequest(
+  input: BookingInput,
+  priced: Awaited<ReturnType<typeof validateAndPriceBooking>>,
+  razorpay: { orderId: string; paymentId: string },
+) {
+  const { listing, numAdults, numChildren, resolvedAddons, amountRupees, amountPaise } = priced;
+  const now = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("bookings")
+    .insert({
+      listing_id: input.listingId,
+      user_id: input.userId,
+      start_date: input.startDate,
+      end_date: input.endDate,
+      num_adults: numAdults,
+      num_children: numChildren,
+      nom_guests: numAdults + numChildren,
+      amount: amountRupees,
+      amount_paise: amountPaise,
+      status_id: PENDING_STATUS_ID,
+      host_uuid: listing.host_uuid,
+      booked_at: now,
+      razorpay_payment_id: razorpay.paymentId,
+      razorpay_order_id: razorpay.orderId,
+      // Which add-ons were bought; the invoice itself is frozen on accept.
+      invoice: { request: { addonIds: input.addonIds ?? [], requestedAt: now } },
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  if (resolvedAddons.length) {
+    const { error: addonsErr } = await supabaseAdmin.from("booking_addons").insert(
+      resolvedAddons.map((a) => ({ booking_id: data.booking_id, name: a.name, price: a.price, type: a.type })),
+    );
+    if (addonsErr) console.error("[insertPaidBookingRequest] booking_addons insert failed:", addonsErr.message);
+  }
+
+  // Same check-then-insert race as insertConfirmedBooking: if a confirmed booking
+  // or an earlier paid request now overlaps, we lost and the guest is refunded.
+  const earlier = await findPaymentHolds(input.listingId, input.startDate, input.endDate, data.booking_id);
+  const { data: confirmed } = await supabaseAdmin
+    .from("bookings")
+    .select("booking_id")
+    .eq("listing_id", input.listingId)
+    .eq("status_id", 2)
+    .lt("start_date", input.endDate)
+    .gt("end_date", input.startDate);
+  if ((confirmed?.length ?? 0) > 0 || earlier.some((h) => h.booking_id < data.booking_id)) {
+    await refundAndCancelRequest(data.booking_id, { reason: "Dates were booked by another guest first", cancelledBy: null });
+    throw new PaymentRefundedError("These dates were just booked by someone else. Your payment has been refunded.");
+  }
+  return data;
+}
+
+/**
+ * Cancels a paid, still-pending request and refunds the guest IN FULL in the
+ * same step. Conditional on the request still being pending and un-refunded, so
+ * a concurrent accept / decline / sweep can't double-act. A failed Razorpay
+ * refund still cancels the booking but is flagged for retry (retryFailedRefund)
+ * and raises a critical admin alert. Returns null if it was no longer pending.
+ */
+export async function refundAndCancelRequest(
+  bookingId: number,
+  opts: { reason: string; cancelledBy: string | null },
+): Promise<{ booking: BookingRow; refundStatus: "processed" | "failed" } | null> {
+  const { data: locked, error: lockErr } = await supabaseAdmin
+    .from("bookings")
+    .update({ refund_status: "processing" })
+    .eq("booking_id", bookingId)
+    .eq("status_id", PENDING_STATUS_ID)
+    .not("razorpay_payment_id", "is", null)
+    .is("refund_status", null)
+    .select()
+    .maybeSingle();
+  if (lockErr) throw lockErr;
+  if (!locked) return null;
+
+  const amountPaise = Number(locked.amount_paise ?? Math.round(Number(locked.amount ?? 0) * 100));
+  let refundId: string | null = null;
+  let refundStatus: "processed" | "failed" = "processed";
+  try {
+    const { createRazorpayRefund } = await import("../billing/razorpay");
+    const refund = await createRazorpayRefund({
+      razorpayPaymentId: locked.razorpay_payment_id,
+      amountPaise,
+      idempotencyKey: `refund:request:${bookingId}`,
+      notes: { bookingId: String(bookingId), reason: opts.reason },
+    });
+    refundId = refund.id;
+  } catch (err) {
+    refundStatus = "failed";
+    console.error(`[refundAndCancelRequest] Razorpay refund failed for booking ${bookingId}:`, err);
+    await supabaseAdmin.from("manual_settlement_flags").insert({
+      booking_id: bookingId,
+      reason: `Refund of ₹${amountPaise / 100} for a cancelled booking request failed at Razorpay -- retry or refund manually: ${
+        err instanceof Error ? err.message : "unknown error"
+      }`,
+      flagged_at: new Date().toISOString(),
+    });
+    const { sendAdminAlert } = await import("./adminAlerts");
+    await sendAdminAlert({
+      severity: "critical",
+      category: "payment",
+      message: `Refund for cancelled booking request #${bookingId} failed at Razorpay -- needs a retry or manual refund.`,
+      details: { bookingId, amountPaise },
+    });
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: cancelled, error: updErr } = await supabaseAdmin
+    .from("bookings")
+    .update({
+      status_id: 3,
+      refund_status: refundStatus,
+      refund_amount: amountPaise / 100,
+      refund_reason: opts.reason,
+      refund_transaction_id: refundId,
+      refund_processed_at: refundStatus === "processed" ? nowIso : null,
+      cancellation_reason: opts.reason,
+      cancelled_at: nowIso,
+      cancelled_by: opts.cancelledBy,
+    })
+    .eq("booking_id", bookingId)
+    .select()
+    .single();
+  if (updErr) {
+    // Release the lock so a retry can run; the idempotency key makes the refund safe to repeat.
+    await supabaseAdmin
+      .from("bookings")
+      .update({ refund_status: null })
+      .eq("booking_id", bookingId)
+      .eq("refund_status", "processing");
+    throw updErr;
+  }
+  return { booking: cancelled, refundStatus };
+}
+
+/** Tells both parties a request ended and the guest's money is on its way back. */
 async function noticeRequestEnded(
   booking: BookingRow,
-  kind: "declined" | "expired" | "unpaid" | "dates_taken" | "withdrawn",
+  kind: "declined" | "expired" | "withdrawn" | "unavailable",
+  refundStatus: "processed" | "failed",
 ) {
   const ctx = await requestContext(booking);
+  const refundLine =
+    refundStatus === "processed"
+      ? `A full refund of ${ctx.amount} has been initiated. ${REFUND_ARRIVAL_NOTE}`
+      : `Your refund of ${ctx.amount} hit a problem and our team is on it; you can also retry it from your booking.`;
   const copy = {
     declined: {
-      guest: `The host declined your request for ${ctx.title} (${ctx.dates}). You were not charged.`,
-      host: `You declined ${ctx.guestName}'s request for ${ctx.title} (${ctx.dates}).`,
+      guest: `The host declined your request for ${ctx.title} (${ctx.dates}). ${refundLine}`,
+      host: `You declined ${ctx.guestName}'s request for ${ctx.title} (${ctx.dates}). The guest was refunded.`,
     },
     expired: {
-      guest: `The host didn't respond in time, so your request for ${ctx.title} (${ctx.dates}) expired. You were not charged.`,
-      host: `${ctx.guestName}'s request for ${ctx.title} (${ctx.dates}) expired because it wasn't answered within 24 hours.`,
+      guest: `The host didn't respond within 2 hours, so your request for ${ctx.title} (${ctx.dates}) was cancelled. ${refundLine}`,
+      host: `${ctx.guestName}'s request for ${ctx.title} (${ctx.dates}) was cancelled because it wasn't answered within 2 hours. The guest was refunded.`,
     },
-    unpaid: {
-      guest: `Your request for ${ctx.title} (${ctx.dates}) was cancelled because payment wasn't completed within 2 hours. You were not charged.`,
-      host: `${ctx.guestName} didn't pay within 2 hours, so the request for ${ctx.title} (${ctx.dates}) was cancelled and the dates are open again.`,
-    },
-    dates_taken: {
-      guest: `Sorry, the dates for ${ctx.title} (${ctx.dates}) are no longer available, so your request was declined. You were not charged.`,
-      host: `${ctx.guestName}'s request for ${ctx.title} (${ctx.dates}) was declined because the dates are no longer available.`,
+    unavailable: {
+      guest: `Sorry, the dates for ${ctx.title} (${ctx.dates}) are no longer available, so your request was cancelled. ${refundLine}`,
+      host: `${ctx.guestName}'s request for ${ctx.title} (${ctx.dates}) was cancelled because the dates are no longer available. The guest was refunded.`,
     },
     withdrawn: {
-      guest: `You cancelled your request for ${ctx.title} (${ctx.dates}). You were not charged.`,
+      guest: `You cancelled your request for ${ctx.title} (${ctx.dates}). ${refundLine}`,
       host: `${ctx.guestName} withdrew their request for ${ctx.title} (${ctx.dates}).`,
     },
   }[kind];
-  const title = kind === "declined" || kind === "dates_taken" ? "Request declined" : kind === "withdrawn" ? "Request cancelled" : "Request expired";
+  const title = kind === "declined" ? "Request declined" : kind === "withdrawn" ? "Request cancelled" : "Request expired";
   await noticeRequestParty(booking, "guest", {
     templateId: "booking_cancelled_guest",
     title,
@@ -1036,21 +1128,21 @@ async function noticeRequestEnded(
   });
 }
 
-/** Guest withdraws their own unpaid request. */
+/** Guest withdraws their own pending request; they are refunded in full. */
 export async function withdrawBookingRequest(bookingId: number, userId: string) {
   const row = await loadBooking(bookingId);
   if (row.user_id !== userId) throw new BookingRequestError("Not your booking.", 403, "FORBIDDEN");
   if (!requestPhase(row)) throw new BookingRequestError("This booking is no longer a pending request.", 409, "NOT_PENDING");
-  const cancelled = await cancelUnpaidBooking(bookingId, { reason: "Cancelled by guest", cancelledBy: userId });
-  if (!cancelled) throw new BookingRequestError("This booking is no longer a pending request.", 409, "NOT_PENDING");
-  await noticeRequestEnded(cancelled, "withdrawn");
-  return cancelled;
+  const result = await refundAndCancelRequest(bookingId, { reason: "Cancelled by guest", cancelledBy: userId });
+  if (!result) throw new BookingRequestError("This booking is no longer a pending request.", 409, "NOT_PENDING");
+  await noticeRequestEnded(result.booking, "withdrawn", result.refundStatus);
+  return result.booking;
 }
 
 /**
- * The shared cancel endpoint's entry for unpaid requests (no money to refund).
- * Returns null when the booking isn't a pending request, so the caller falls
- * through to the normal paid-booking cancel + refund.
+ * The shared cancel endpoint's entry for pending requests (full refund, no
+ * cancellation policy). Returns null when the booking isn't a pending request,
+ * so the caller falls through to the normal confirmed-booking cancel + refund.
  */
 export async function cancelPendingRequestIfAny(bookingId: number, userId: string) {
   const { data: row, error } = await supabaseAdmin.from("bookings").select("*").eq("booking_id", bookingId).maybeSingle();
@@ -1062,15 +1154,16 @@ export async function cancelPendingRequestIfAny(bookingId: number, userId: strin
   if ((await hostUserId(row.host_uuid)) !== userId) {
     throw new BookingRequestError("You don't have permission to cancel this booking.", 403, "FORBIDDEN");
   }
-  const cancelled = await cancelUnpaidBooking(bookingId, { reason: "Cancelled by host", cancelledBy: userId });
-  if (!cancelled) throw new BookingRequestError("This booking is no longer a pending request.", 409, "NOT_PENDING");
-  await noticeRequestEnded(cancelled, "declined");
-  return cancelled;
+  const result = await refundAndCancelRequest(bookingId, { reason: "Cancelled by host", cancelledBy: userId });
+  if (!result) throw new BookingRequestError("This booking is no longer a pending request.", 409, "NOT_PENDING");
+  await noticeRequestEnded(result.booking, "declined", result.refundStatus);
+  return result.booking;
 }
 
 /**
- * Host accepts or declines a request within its 24h window. Accepting prices
- * the stay again, holds the dates and opens the Razorpay order the guest pays.
+ * Host accepts or declines a paid request within its 2h window. Accepting
+ * confirms the booking (invoice, host transfer, WhatsApp + email + in-app to
+ * both sides). Declining, or answering after the window, refunds the guest.
  */
 export async function respondToBookingRequest(params: {
   bookingId: number;
@@ -1082,187 +1175,72 @@ export async function respondToBookingRequest(params: {
   if ((await hostUserId(row.host_uuid)) !== params.hostUserId) {
     throw new BookingRequestError("Only the host can respond to this request.", 403, "FORBIDDEN");
   }
-  if (requestPhase(row) !== "awaiting_host") {
+  if (!requestPhase(row)) {
     throw new BookingRequestError("This request is no longer waiting for your response.", 409, "NOT_PENDING");
   }
-  const bookedAt = parseBookedAt(row.booked_at) ?? 0;
-  if (Date.now() >= bookedAt + HOST_RESPONSE_WINDOW_MS) {
-    const expired = await cancelUnpaidBooking(row.booking_id, { reason: "Host did not respond in time", cancelledBy: null });
-    if (expired) await noticeRequestEnded(expired, "expired");
-    throw new BookingRequestError("This request has expired.", 410, "EXPIRED");
+  const deadline = requestDeadline(row) ?? 0;
+  if (Date.now() >= deadline) {
+    const expired = await refundAndCancelRequest(row.booking_id, { reason: "Host did not respond in time", cancelledBy: null });
+    if (expired) await noticeRequestEnded(expired.booking, "expired", expired.refundStatus);
+    throw new BookingRequestError("This request has expired and the guest was refunded.", 410, "EXPIRED");
   }
 
   if (params.decision === "reject") {
-    const declined = await cancelUnpaidBooking(row.booking_id, { reason: "Host declined", cancelledBy: params.hostUserId });
+    const declined = await refundAndCancelRequest(row.booking_id, { reason: "Host declined", cancelledBy: params.hostUserId });
     if (!declined) throw new BookingRequestError("This request is no longer pending.", 409, "NOT_PENDING");
-    await noticeRequestEnded(declined, "declined");
-    return { booking: declined, decision: "reject" as const };
+    await noticeRequestEnded(declined.booking, "declined", declined.refundStatus);
+    return { booking: declined.booking, decision: "reject" as const };
   }
 
-  const input = requestInput(row);
+  // Accept: the nights and the price must still hold, otherwise the guest is refunded.
+  const cancelUnavailable = async (): Promise<never> => {
+    const result = await refundAndCancelRequest(row.booking_id, { reason: "Dates no longer available", cancelledBy: null });
+    if (result) await noticeRequestEnded(result.booking, "unavailable", result.refundStatus);
+    throw new BookingRequestError("These dates are no longer available. The guest has been refunded.", 409, "UNAVAILABLE");
+  };
   let priced: Awaited<ReturnType<typeof validateAndPriceBooking>>;
   try {
     if (String(row.start_date) < todayInIndia()) throw new DatesUnavailableError("These dates have passed.");
-    priced = await validateAndPriceBooking(input, { excludeBookingId: row.booking_id });
-  } catch (err: any) {
-    if (err instanceof DatesUnavailableError) {
-      const cancelled = await cancelUnpaidBooking(row.booking_id, { reason: "Dates no longer available", cancelledBy: null });
-      if (cancelled) await noticeRequestEnded(cancelled, "dates_taken");
-    }
-    if (err?.code || err instanceof DatesUnavailableError || err instanceof HostPayoutMissingError) throw err;
-    throw new BookingRequestError(err?.message ?? "This request can't be accepted right now.", 409, "UNAVAILABLE");
-  }
-
-  const { createRazorpayOrder } = await import("../billing/razorpay");
-  const order = await createRazorpayOrder({
-    amountPaise: priced.amountPaise,
-    receiptId: `booking:${row.booking_id}:${Date.now()}`,
-    notes: {
-      bookingId: String(row.booking_id),
-      listingId: String(input.listingId),
-      userId: input.userId,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      ...(input.numAdults !== undefined && { numAdults: String(input.numAdults) }),
-      ...(input.numChildren !== undefined && { numChildren: String(input.numChildren) }),
-      ...(input.addonIds?.length && { addonIds: JSON.stringify(input.addonIds) }),
-    },
-  });
-
-  // Moving booked_at to now starts the guest's 2h payment window; the order id
-  // is what marks the request as accepted.
-  const { data: accepted, error } = await supabaseAdmin
-    .from("bookings")
-    .update({ razorpay_order_id: order.id, booked_at: new Date().toISOString(), amount: priced.amountRupees })
-    .eq("booking_id", row.booking_id)
-    .eq("status_id", PENDING_STATUS_ID)
-    .is("razorpay_order_id", null)
-    .select()
-    .maybeSingle();
-  if (error) throw error;
-  if (!accepted) throw new BookingRequestError("This request is no longer pending.", 409, "NOT_PENDING");
-
-  // Other open requests for the same nights can't both be honoured. Nothing was
-  // charged for them, so they are plain declines.
-  const { data: rivals } = await supabaseAdmin
-    .from("bookings")
-    .select("booking_id")
-    .eq("listing_id", row.listing_id)
-    .eq("status_id", PENDING_STATUS_ID)
-    .is("razorpay_order_id", null)
-    .is("razorpay_payment_id", null)
-    .neq("booking_id", row.booking_id)
-    .lt("start_date", row.end_date)
-    .gt("end_date", row.start_date);
-  for (const rival of rivals ?? []) {
-    try {
-      const cancelled = await cancelUnpaidBooking(rival.booking_id, { reason: "Dates no longer available", cancelledBy: null });
-      if (cancelled) await noticeRequestEnded(cancelled, "dates_taken");
-    } catch (err) {
-      console.error(`[respondToBookingRequest] auto-decline of ${rival.booking_id} failed:`, err);
-    }
-  }
-
-  const ctx = await requestContext(accepted);
-  await noticeRequestParty(accepted, "guest", {
-    title: "Request accepted — complete your payment",
-    message: `The host accepted your request for ${ctx.title} (${ctx.dates}). Pay within 2 hours to confirm your booking.`,
-    emailLines: [
-      `The host accepted your request for ${ctx.title}.`,
-      ctx.dates,
-      "Pay within 2 hours to confirm your booking, otherwise the request is cancelled.",
-    ],
-    cta: { label: "Pay now", path: `/booking-confirmation/${accepted.booking_id}` },
-  });
-  return { booking: accepted, decision: "accept" as const };
-}
-
-/**
- * A payment arrived for an order created when the host accepted a request.
- * Confirms that booking in place; if the request has since expired or been
- * cancelled, the payment is refunded in full.
- */
-async function finalizeAcceptedRequestPayment(
-  params: { orderId: string; paymentId: string },
-  order: { amount: number | string; notes?: unknown },
-  notes: Record<string, string>,
-) {
-  const row = await loadBooking(Number(notes.bookingId)).catch(() => null);
-  if (!row || row.razorpay_order_id !== params.orderId) {
-    throw await refundUnfulfillablePayment(params, order, "We couldn't match this payment to a booking request.");
-  }
-  if (row.razorpay_payment_id === params.paymentId) return row;
-
-  const refundAndCancel = async (reason: string) => {
-    await cancelUnpaidBooking(row.booking_id, { reason, cancelledBy: null }).catch(() => {});
-    return refundUnfulfillablePayment(params, order, reason);
-  };
-
-  if (row.status_id !== PENDING_STATUS_ID || row.razorpay_payment_id) {
-    throw await refundAndCancel("This booking request had already expired or was cancelled before the payment arrived.");
-  }
-  const bookedAt = parseBookedAt(row.booked_at) ?? 0;
-  if (Date.now() > bookedAt + GUEST_PAYMENT_WINDOW_MS + PAYMENT_GRACE_MS) {
-    throw await refundAndCancel("The 2-hour payment window for this request had ended.");
-  }
-
-  let priced: Awaited<ReturnType<typeof validateAndPriceBooking>>;
-  try {
     priced = await validateAndPriceBooking(requestInput(row), { excludeBookingId: row.booking_id });
   } catch (err: any) {
-    if (err?.code) throw err; // transient database error: let the webhook retry
-    throw await refundAndCancel(err?.message ?? "The booking could not be completed.");
+    // A transient database error, or the host's own missing payout account, is theirs
+    // to fix and retry within the window; only a genuinely unbookable request refunds.
+    if (err?.code || err instanceof HostPayoutMissingError) throw err;
+    return cancelUnavailable();
   }
-  if (Math.abs(priced.amountPaise - Number(order.amount)) > 1) {
-    throw await refundAndCancel("The price for these dates changed while you were paying.");
+  if (Math.abs(priced.amountPaise - Number(row.amount_paise ?? 0)) > 1) {
+    return cancelUnavailable();
   }
 
   // Becoming CONFIRMED is what makes the DB availability trigger check the dates.
   const { data: booking, error } = await supabaseAdmin
     .from("bookings")
-    .update({
-      status_id: 2,
-      razorpay_payment_id: params.paymentId,
-      booked_at: new Date().toISOString(),
-      amount: priced.amountRupees,
-    })
+    .update({ status_id: 2 })
     .eq("booking_id", row.booking_id)
     .eq("status_id", PENDING_STATUS_ID)
-    .is("razorpay_payment_id", null)
+    .not("razorpay_payment_id", "is", null)
+    .is("refund_status", null)
     .select()
     .maybeSingle();
   if (error) {
-    if (error.code === "23505") {
-      const { data: winner } = await supabaseAdmin
-        .from("bookings")
-        .select("*")
-        .eq("razorpay_payment_id", params.paymentId)
-        .maybeSingle();
-      if (winner) return winner;
-    }
-    if (isDatabaseAvailabilityError(error)) {
-      throw await refundAndCancel("These dates were blocked or booked while you were paying.");
-    }
+    if (isDatabaseAvailabilityError(error)) return cancelUnavailable();
     throw error;
   }
-  if (!booking) {
-    // Expired and cancelled between our checks and this update.
-    throw await refundAndCancel("This booking request expired before the payment was completed.");
-  }
+  if (!booking) throw new BookingRequestError("This request is no longer pending.", 409, "NOT_PENDING");
 
   await snapshotInvoiceOnBooking(booking, priced).catch((err) => {
-    console.error(`[finalizeAcceptedRequestPayment] invoice snapshot failed for booking ${booking.booking_id}:`, err);
+    console.error(`[respondToBookingRequest] invoice snapshot failed for booking ${booking.booking_id}:`, err);
   });
-  await createHostTransferForBooking(booking, priced, params.paymentId).catch((err) => {
-    console.error(`[finalizeAcceptedRequestPayment] transfer step failed for booking ${booking.booking_id}:`, err);
+  await createHostTransferForBooking(booking, priced, booking.razorpay_payment_id).catch((err) => {
+    console.error(`[respondToBookingRequest] transfer step failed for booking ${booking.booking_id}:`, err);
   });
   await notifyBookingConfirmed(booking, priced.invoice.grandTotalPaise, true).catch(() => {});
-  return booking;
+  return { booking, decision: "accept" as const };
 }
 
 /**
- * Cron sweep: cancels requests whose host window (24h) or payment window (2h,
- * plus grace) has passed, and sends the reminders. Returns counts for logging.
+ * Cron sweep: cancels and refunds paid requests the host hasn't answered within
+ * 2h, and sends the host's reminders. Returns counts for logging.
  */
 export async function sweepBookingRequests() {
   const result = { expired: 0, reminded: 0, errors: 0 };
@@ -1270,58 +1248,43 @@ export async function sweepBookingRequests() {
     .from("bookings")
     .select("*")
     .eq("status_id", PENDING_STATUS_ID)
-    .is("razorpay_payment_id", null)
+    .not("razorpay_payment_id", "is", null)
+    .is("refund_status", null)
     .limit(500);
   if (error) throw error;
 
   for (const row of rows ?? []) {
     try {
-      const phase = requestPhase(row);
       const bookedAt = parseBookedAt(row.booked_at);
-      const hardExpiry = requestHardExpiry(row);
-      if (!phase || bookedAt == null || hardExpiry == null) continue;
+      const deadline = requestDeadline(row);
+      if (bookedAt == null || deadline == null) continue;
 
-      if (Date.now() >= hardExpiry) {
-        const cancelled = await cancelUnpaidBooking(row.booking_id, {
-          reason: phase === "awaiting_host" ? "Host did not respond in time" : "Payment not completed in time",
-          cancelledBy: null,
-        });
-        if (cancelled) {
-          await noticeRequestEnded(cancelled, phase === "awaiting_host" ? "expired" : "unpaid");
+      if (Date.now() >= deadline) {
+        const expired = await refundAndCancelRequest(row.booking_id, { reason: "Host did not respond in time", cancelledBy: null });
+        if (expired) {
+          await noticeRequestEnded(expired.booking, "expired", expired.refundStatus);
           result.expired++;
         }
         continue;
       }
 
-      const marks = phase === "awaiting_host" ? HOST_REMINDER_MARKS_MS : GUEST_REMINDER_MARKS_MS;
       const elapsed = Date.now() - bookedAt;
-      const dueIndex = marks.filter((m) => elapsed >= m).length - 1;
+      const dueIndex = HOST_REMINDER_MARKS_MS.filter((m) => elapsed >= m).length - 1;
       if (dueIndex < 0) continue;
       // Only the latest mark, and only shortly after it: a missed one isn't
       // replayed, and a user with in-app rows off can't be re-sent every sweep.
-      if (elapsed - marks[dueIndex] > REMINDER_SEND_WINDOW_MS) continue;
-      if (await reminderAlreadySent(row, phase, dueIndex)) continue;
+      if (elapsed - HOST_REMINDER_MARKS_MS[dueIndex] > REMINDER_SEND_WINDOW_MS) continue;
+      if (await reminderAlreadySent(row, dueIndex)) continue;
 
       const ctx = await requestContext(row);
-      const left = formatTimeLeft(requestDeadline(row)! - Date.now());
-      const extraMetadata = { reminder_phase: phase, reminder_mark: dueIndex };
-      if (phase === "awaiting_host") {
-        await noticeRequestParty(row, "host", {
-          title: "Reminder: respond to a booking request",
-          message: `${ctx.guestName} is waiting to hear about ${ctx.title} (${ctx.dates}). ${left} left to accept or decline.`,
-          emailLines: dueIndex >= 2 ? [`${ctx.guestName} is waiting to hear about ${ctx.title}.`, ctx.dates, `${left} left to respond.`] : undefined,
-          cta: { label: "Review request", path: `/host/bookings/details?id=${row.booking_id}` },
-          extraMetadata,
-        });
-      } else {
-        await noticeRequestParty(row, "guest", {
-          title: "Reminder: complete your payment",
-          message: `Your request for ${ctx.title} (${ctx.dates}) was accepted. ${left} left to pay before it is cancelled.`,
-          emailLines: [`${left} left to pay for ${ctx.title} (${ctx.dates}).`],
-          cta: { label: "Pay now", path: `/booking-confirmation/${row.booking_id}` },
-          extraMetadata,
-        });
-      }
+      const left = formatTimeLeft(deadline - Date.now());
+      await noticeRequestParty(row, "host", {
+        title: "Reminder: respond to a booking request",
+        message: `${ctx.guestName} has paid for ${ctx.title} (${ctx.dates}) and is waiting. ${left} left to accept or decline before it is refunded automatically.`,
+        emailLines: dueIndex >= 1 ? [`${ctx.guestName} is waiting to hear about ${ctx.title}.`, ctx.dates, `${left} left to respond.`] : undefined,
+        cta: { label: "Review request", path: "/notifications" },
+        extraMetadata: { kind: "booking_request_reminder", reminder_mark: dueIndex },
+      });
       result.reminded++;
     } catch (err) {
       result.errors++;
@@ -1332,13 +1295,13 @@ export async function sweepBookingRequests() {
 }
 
 // Reminder state lives in the reminder notification itself (there is no column
-// to hold it): its metadata carries the phase and mark it was sent for.
-async function reminderAlreadySent(row: BookingRow, phase: string, mark: number) {
+// to hold it): its metadata carries the mark it was sent for.
+async function reminderAlreadySent(row: BookingRow, mark: number) {
   const { count } = await supabaseAdmin
     .from("notifications")
     .select("id", { count: "exact", head: true })
     .eq("metadata->>booking_id", String(row.booking_id))
-    .eq("metadata->>reminder_phase", phase)
+    .eq("metadata->>kind", "booking_request_reminder")
     .eq("metadata->>reminder_mark", String(mark));
   return (count ?? 0) > 0;
 }

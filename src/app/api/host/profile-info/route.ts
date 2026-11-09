@@ -82,9 +82,8 @@ export async function GET(req: NextRequest) {
       avatar: user.profile_pic_url || host.photo || null,
       about: host.about || "",  // From host table
       isVerified: host.is_verified || false,
-      // On only when every listing is Instant Book; off (request to book) otherwise.
-      instantBooking:
-        (hostListings ?? []).length > 0 && (hostListings ?? []).every((l: any) => l.booking_mode === "auto"),
+      // Instant Book is the default: off only when a listing requires host approval.
+      instantBooking: !(hostListings ?? []).some((l: any) => l.booking_mode === "manual"),
       stats: {
         rating: avgRating,
         reviews: reviewCount,

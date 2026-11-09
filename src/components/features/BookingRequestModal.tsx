@@ -24,9 +24,10 @@ export type BookingRequestSummary = {
 };
 
 /**
- * Host's accept / decline prompt for a booking request. Airbnb-style: the host
- * has 24 hours; if they do nothing the request is declined automatically and
- * the guest is never charged. Closing without choosing leaves it pending.
+ * Host's accept / decline prompt for a booking request. The guest has already
+ * paid; the host has 2 hours, and if they decline or do nothing the request is
+ * cancelled and the guest is refunded in full. Closing without choosing leaves
+ * it pending.
  */
 export default function BookingRequestModal({
   request,
@@ -69,8 +70,8 @@ export default function BookingRequestModal({
           <DialogTitle className="text-xl font-bold text-gray-900">Reservation request</DialogTitle>
           <DialogDescription className="text-sm text-gray-500 leading-relaxed">
             {expired
-              ? 'The 24 hours to respond have passed, so this request is being declined.'
-              : `You have 24 hours to accept or decline${left != null ? ` — ${formatTimeLeft(left)} left` : ''}. If you don't respond, the request is declined automatically and the guest isn't charged.`}
+              ? 'The 2 hours to respond have passed, so this request is being declined and the guest refunded.'
+              : `You have 2 hours to accept or decline${left != null ? ` — ${formatTimeLeft(left)} left` : ''}. If you don't respond, the request is declined automatically and the guest is refunded in full.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -100,8 +101,8 @@ export default function BookingRequestModal({
         )}
 
         <p className="text-xs text-gray-500">
-          If you accept, the guest has 2 hours to pay and the dates are held for them. You&apos;re paid after
-          the stay, as usual.
+          The guest has already paid. If you accept, the booking is confirmed straight away and you&apos;re paid
+          after the stay, as usual.
         </p>
 
         <div className="flex flex-col gap-2 pt-1">

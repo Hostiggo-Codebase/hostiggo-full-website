@@ -161,11 +161,7 @@ function DetailsInner() {
       beds: prop.num_beds,
       cover,
       statusLabel:
-        phase === 'awaiting_host'
-          ? 'Awaiting your response'
-          : phase === 'awaiting_payment'
-            ? 'Awaiting guest payment'
-            : STATUS_LABEL[statusId] || 'Booked',
+        phase === 'awaiting_host' ? 'Awaiting your response' : STATUS_LABEL[statusId] || 'Booked',
       phase,
       deadline,
       cancelled,
@@ -181,8 +177,8 @@ function DetailsInner() {
       await api.respondToBookingRequest(view.id, decision);
       toast.success(
         decision === 'accept'
-          ? 'Request accepted. The guest has 2 hours to pay and confirm.'
-          : 'Request declined. The guest was not charged.',
+          ? 'Request accepted. The booking is confirmed and the guest has been notified.'
+          : 'Request declined. The guest has been refunded in full.',
       );
       setReviewing(false);
       await load();
@@ -279,33 +275,21 @@ function DetailsInner() {
       {view.phase && (
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-200">
           <p className="text-sm text-amber-900">
-            {view.phase === 'awaiting_host' ? (
-              <>
-                <span className="font-bold">
-                  {view.deadline != null && view.deadline > now
-                    ? `${formatTimeLeft(view.deadline - now)} left to respond.`
-                    : 'This request is about to expire.'}
-                </span>{' '}
-                Accept or decline this request. If you don&apos;t respond within 24 hours it is declined
-                automatically and the guest isn&apos;t charged.
-              </>
-            ) : (
-              <>
-                <span className="font-bold">You accepted this request.</span> The guest has{' '}
-                {view.deadline != null && view.deadline > now ? formatTimeLeft(view.deadline - now) : 'a few minutes'}{' '}
-                left to pay; the dates are held for them until then.
-              </>
-            )}
+            <span className="font-bold">
+              {view.deadline != null && view.deadline > now
+                ? `${formatTimeLeft(view.deadline - now)} left to respond.`
+                : 'This request is about to expire.'}
+            </span>{' '}
+            The guest has already paid. Accept or decline this request; if you decline or don&apos;t respond
+            within 2 hours the guest is refunded in full automatically.
           </p>
-          {view.phase === 'awaiting_host' && (
-            <button
-              type="button"
-              onClick={() => setReviewing(true)}
-              className="shrink-0 px-5 py-2.5 bg-figma-navy text-white rounded-xl text-sm font-bold hover:bg-figma-navy/90"
-            >
-              Accept or decline
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setReviewing(true)}
+            className="shrink-0 px-5 py-2.5 bg-figma-navy text-white rounded-xl text-sm font-bold hover:bg-figma-navy/90"
+          >
+            Accept or decline
+          </button>
         </div>
       )}
 

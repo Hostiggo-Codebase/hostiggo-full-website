@@ -62,7 +62,7 @@ async function status(listingId: number) {
       .from("bookings")
       .select("booking_id", { count: "exact", head: true })
       .eq("listing_id", listingId)
-      // Confirmed only: unpaid requests expire on their own within 24h.
+      // Confirmed only: pending requests are declined and refunded on their own within 2h.
       .eq("status_id", 2)
       .gte("end_date", today),
   ]);

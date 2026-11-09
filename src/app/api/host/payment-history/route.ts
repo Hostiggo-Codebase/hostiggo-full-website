@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { findHostUuid } from "@/lib/services/admin-writes";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { expectedSettlementDate } from "@/lib/billing/settlement";
-import { isUnpaidRequest } from "@/lib/billing/bookingRequest";
+import { isUnconfirmedRequest } from "@/lib/billing/bookingRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -52,8 +52,8 @@ export async function GET(req: NextRequest) {
       .order("booked_at", { ascending: false });
     if (error) throw error;
 
-    // Unpaid booking requests have no payment to show.
-    const paidBookings = (bookings ?? []).filter((b: any) => !isUnpaidRequest(b));
+    // Requests that were never confirmed (pending, or declined and refunded) have no payout to show.
+    const paidBookings = (bookings ?? []).filter((b: any) => !isUnconfirmedRequest(b));
     const ids = paidBookings.map((b: any) => b.booking_id);
     if (ids.length === 0) return NextResponse.json({ data: [] });
 

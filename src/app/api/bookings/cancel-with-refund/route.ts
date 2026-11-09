@@ -27,9 +27,9 @@ export async function POST(req: NextRequest) {
       const retried = await retryFailedRefund({ bookingId: Number(bookingId), requestingUserId });
       return NextResponse.json({ data: retried });
     }
-    // An unpaid request has nothing to refund, so it never reaches the refund engine.
+    // A request still waiting on the host is refunded in full (no cancellation policy), not via the policy engine.
     const cancelledRequest = await cancelPendingRequestIfAny(Number(bookingId), requestingUserId);
-    if (cancelledRequest) return NextResponse.json({ data: { cancelled: true, refunded: false } });
+    if (cancelledRequest) return NextResponse.json({ data: { cancelled: true, refunded: true } });
 
     const result = await cancelBookingWithRefund({
       bookingId: Number(bookingId),
