@@ -10,6 +10,7 @@ import SupportButton from '@/components/layout/SupportButton';
 import JsonLd from '@/components/JsonLd';
 import {
   COMPANY_LEGAL_NAME,
+  REGISTERED_ADDRESS,
   SITE_DESCRIPTION,
   SITE_NAME,
   SITE_TAGLINE,
@@ -139,6 +140,7 @@ const ORGANIZATION_JSON_LD = {
       logo: `${SITE_URL}/logo.png`,
       description: SITE_DESCRIPTION,
       areaServed: { '@type': 'Country', name: 'India' },
+      address: { '@type': 'PostalAddress', ...REGISTERED_ADDRESS },
       email: SUPPORT_EMAIL,
       contactPoint: [
         {

@@ -30,7 +30,7 @@ const pillars = [
 export const metadata = {
   title: "Safety Information",
   description:
-    "How Hostiggo keeps guests and hosts safe — identity verification, secure payments, and how to report a concern.",
+    "How Hostiggo helps keep guests and hosts safe: optional identity verification, secure Razorpay payments, in-app chat, and how to report a concern about a stay.",
 };
 
 export default function SafetyPage() {

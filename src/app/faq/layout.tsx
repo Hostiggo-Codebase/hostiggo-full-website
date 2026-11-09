@@ -4,7 +4,8 @@ import { CATEGORIES } from "./faqData";
 
 export const metadata: Metadata = {
   title: "Frequently asked questions",
-  description: "Answers about booking, payments, refunds, cancellations, verification and hosting on Hostiggo.",
+  description:
+    "Answers to common questions about booking a homestay on Hostiggo: payments, refunds and cancellation dates, ID verification, check-in, and how to become a host.",
 };
 
 const FAQ_JSON_LD = {

@@ -29,6 +29,13 @@ ${SITE_NAME} is an online marketplace for homestays in India, operated by ${COMP
 - [Homestays by destination](${SITE_URL}/stays): browse by city
 ${destinations}
 
+## Key facts
+- Cancellation policies: Flexible (full refund up to 24 hours before check-in), Moderate (full refund up to 5 days before check-in) and Strict (partial refund up to 7 days before check-in). The policy and the refund on each date are shown before payment.
+- Prices shown are all-in nightly prices, taxes and fees included.
+- Payment: made on Hostiggo at booking through Razorpay; guests never pay the host directly.
+- Registered office: C-72, Plot H-584, Shivaji Park, Punjabi Bagh, West Delhi, New Delhi, Delhi 110026, India.
+- Last updated: ${new Date().toISOString().slice(0, 10)}
+
 ## Booking, payments and refunds
 - [Cancellation and refund policy](${SITE_URL}/cancellation): how Flexible, Moderate and Strict policies calculate refunds
 - [FAQs](${SITE_URL}/faq): booking, payments, refunds, verification and hosting

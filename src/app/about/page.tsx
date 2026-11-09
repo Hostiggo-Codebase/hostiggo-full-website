@@ -24,7 +24,7 @@ const values = [
 export const metadata = {
   title: "About Us",
   description:
-    "Hostiggo is a technology-enabled marketplace connecting hosts and travelers across India.",
+    "Hostiggo is an Indian homestay marketplace connecting travellers with local hosts for villas and holiday homes, with clear pricing and secure payments.",
 };
 
 export default function AboutPage() {
