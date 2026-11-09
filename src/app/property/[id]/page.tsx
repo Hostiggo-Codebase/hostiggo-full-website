@@ -5,7 +5,6 @@ import { HotelServiceApi } from "@/lib/services/hotel";
 import PropertyDetailsClient from "./PropertyDetailsClient";
 import JsonLd from "@/components/JsonLd";
 import { SITE_URL } from "@/lib/site";
-import { hostBookingsOpen } from "@/lib/services/hostPayoutReadiness";
 
 export const dynamic = "force-dynamic";
 
@@ -89,9 +88,7 @@ export default async function PropertyPage({ params }: Props) {
   return (
     <>
       {row ? <JsonLd data={lodgingJsonLd(id, row)} /> : null}
-      <PropertyDetailsClient
-        initialRow={row ? { ...row, host_payouts_ready: await hostBookingsOpen((row as any).host_uuid) } : null}
-      />
+      <PropertyDetailsClient initialRow={row ?? null} />
     </>
   );
 }

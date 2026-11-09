@@ -6,7 +6,6 @@ import Footer from '@/components/layout/Footer';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { formatINR } from '@/lib/format';
-import { hostBookingsOpen } from '@/lib/services/hostPayoutReadiness';
 
 type HostListing = {
   listing_id: number;
@@ -40,8 +39,6 @@ export default async function PublicHostProfilePage({
   if (!host) notFound();
 
   const today = new Date().toISOString().slice(0, 10);
-  // Payouts still being set up: their stays are visible but can't be booked yet.
-  const bookingsOpen = await hostBookingsOpen(hostId);
   const [userResult, listingsResult, tripsResult] = await Promise.all([
     supabaseAdmin
       .from('users')
@@ -151,17 +148,13 @@ export default async function PublicHostProfilePage({
                 </div>
               </div>
 
-              {!bookingsOpen && (
-                <div className="mb-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="mb-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                   <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                   <div>
                     <p className="text-sm font-bold text-amber-800">Coming soon</p>
-                    <p className="text-sm text-amber-700">
-                      {hostName}&apos;s payouts are on the way. Bookings for these stays open shortly, so check back soon.
-                    </p>
+                    <p className="text-sm text-amber-700">Host profiles are on the way. Check back soon.</p>
                   </div>
                 </div>
-              )}
 
               {listings.length === 0 ? (
                 <div className="rounded-3xl border border-gray-200 bg-white p-10 text-center shadow-card">
@@ -189,11 +182,6 @@ export default async function PublicHostProfilePage({
                         <div className="p-4">
                           <p className="truncate text-sm font-bold text-gray-900">{listing.title ?? 'Untitled stay'}</p>
                           {location && <p className="mt-1 truncate text-xs text-gray-500">{location}</p>}
-                          {!bookingsOpen && (
-                            <span className="mt-2 inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
-                              Coming soon
-                            </span>
-                          )}
                           <p className="mt-3 text-sm font-bold text-gray-900">
                             {formatINR(Number(listing.price_weekday ?? listing.price_weekend ?? 0))}
                             <span className="font-medium text-gray-500"> / night</span>

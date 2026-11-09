@@ -52,7 +52,6 @@ interface ProfileData {
   avatar: string;
   about: string;
   isVerified: boolean;
-  instantBooking?: boolean;
   stats: {
     rating: number | string;
     reviews: number;
@@ -118,7 +117,7 @@ export default function HostSettingsPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [phoneBusy, setPhoneBusy] = useState(false);
-  const [bookingMode, setBookingMode] = useState<'auto' | 'manual' | 'mixed'>('manual');
+  const [bookingMode, setBookingMode] = useState<'auto' | 'manual' | 'mixed'>('auto');
   const [bookingListingCount, setBookingListingCount] = useState(0);
   const [loadingBookingMode, setLoadingBookingMode] = useState(true);
   const [savingBookingMode, setSavingBookingMode] = useState(false);
@@ -165,7 +164,7 @@ export default function HostSettingsPage() {
       if (!response.ok) throw new Error(result.error || 'Could not save booking preferences.');
       setBookingMode(result.bookingMode);
       setBookingListingCount(result.listingCount);
-      toast.success(nextMode === 'manual' ? 'Booking requests will need your approval.' : 'Bookings will be confirmed automatically.');
+      toast.success(nextMode === 'manual' ? "Guests will pay upfront and you'll have 2 hours to accept each booking, otherwise they're refunded in full." : 'Bookings will be confirmed automatically.');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save booking preferences.');
     } finally {
@@ -329,33 +328,6 @@ export default function HostSettingsPage() {
     loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
-
-  const [savingInstant, setSavingInstant] = useState(false);
-  // Instant Book is on unless the host has turned it off.
-  const instantOn = profile?.instantBooking !== false;
-  const handleInstantBookingToggle = async () => {
-    if (!profile || savingInstant) return;
-    const next = profile.instantBooking === false;
-    setSavingInstant(true);
-    try {
-      const res = await fetch('/api/host/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, instantBooking: next }),
-      });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'Could not update the setting.');
-      setProfile({ ...profile, instantBooking: next });
-      if (next) {
-        toast.success('Instant Book is on. Guests can now book your stays without waiting for approval.');
-      } else {
-        toast.success("Instant Book is off. Guests pay upfront and you'll need to accept each booking within 2 hours, otherwise they're refunded.");
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not update the setting.');
-    } finally {
-      setSavingInstant(false);
-    }
-  };
 
   const toAuthPhone = () => `+91${phone.replace(/\D/g, '').slice(-10)}`;
   const phoneValid = phone.replace(/\D/g, '').slice(-10).length === 10;
@@ -677,7 +649,7 @@ export default function HostSettingsPage() {
                       <div className="max-w-xl">
                         <h3 className="text-sm font-bold text-gray-800">Review each booking request</h3>
                         <p className="mt-1 text-sm leading-6 text-gray-500">
-                          Turn this on to review every request and accept or reject it yourself. Turn it off to confirm bookings automatically.
+                          Off by default, so bookings are confirmed automatically. Turn this on to review every booking yourself: guests pay upfront and you have 2 hours to accept or decline. If you decline or don&apos;t answer, the guest is refunded in full.
                         </p>
                       </div>
                       <button
@@ -711,7 +683,7 @@ export default function HostSettingsPage() {
                           {bookingMode === 'mixed'
                             ? 'Use the switch to apply one booking preference to all your listings.'
                             : bookingMode === 'manual'
-                              ? 'Guests will wait for your response before a booking is confirmed.'
+                              ? 'Guests have paid and are waiting for you. Accept within 2 hours or they are refunded in full.'
                               : 'New bookings for your listings will be confirmed automatically.'}
                         </p>
                       </div>

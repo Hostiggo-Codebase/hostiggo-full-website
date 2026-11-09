@@ -118,21 +118,6 @@ export async function hostHasPayoutAccount(hostUuid: string): Promise<boolean> {
   );
 }
 
-/**
- * For display only ("Coming soon" on profiles and property pages): never hides a
- * stay because of a lookup failure. The booking itself is still gated by
- * hostHasPayoutAccount in validateAndPriceBooking.
- */
-export async function hostBookingsOpen(hostUuid: string | null | undefined): Promise<boolean> {
-  if (!hostUuid) return true;
-  try {
-    return await hostHasPayoutAccount(hostUuid);
-  } catch (err) {
-    console.error("[hostBookingsOpen] lookup failed:", err);
-    return true;
-  }
-}
-
 /** Shown to a guest who tries to book a listing whose host can't be paid yet. */
 export const HOST_PAYOUT_MISSING_MESSAGE =
   "Sorry for the inconvenience! This host hasn't set up payouts yet, so this property can't be booked right now. Please look at other properties, or check back soon.";
