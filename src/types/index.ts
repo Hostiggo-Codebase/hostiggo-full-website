@@ -65,6 +65,8 @@ export interface Property {
   isNew?: boolean;
   distanceFromCenter?: string;
   isInstantBook?: boolean;
+  /** Host payouts are on the way: show "Coming soon" instead of the booking button. */
+  bookingsComingSoon?: boolean;
   freeCancellation?: boolean;
   cancellationPolicy?: "flexible" | "moderate" | "strict";
   // Only meaningful when cancellationPolicy === "strict" -- per-listing

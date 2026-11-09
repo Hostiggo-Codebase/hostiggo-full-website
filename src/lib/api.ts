@@ -231,6 +231,8 @@ export function mapListingToProperty(input: any): Property {
     distanceFromCenter:
       typeof input?.distance === "number" ? `${(input.distance / 1000).toFixed(1)} km` : row.distance,
     isInstantBook: row.booking_mode === "auto" || Boolean(row.isInstantBook),
+    // The host's payouts are still being set up, so the stay can't be booked yet.
+    bookingsComingSoon: row.host_payouts_ready === false,
     freeCancellation: Boolean(row.freeCancellation),
     cancellationPolicy: (row.cancellation_policy ?? "moderate") as Property["cancellationPolicy"],
     strictPartialRefundPercent:
