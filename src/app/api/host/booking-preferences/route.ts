@@ -26,8 +26,9 @@ async function getHostListings(userId: string) {
 }
 
 function summarizeMode(listings: { booking_mode: string | null }[]): BookingMode | 'mixed' {
-  if (listings.length === 0) return 'manual';
-  const modes = new Set(listings.map((listing) => listing.booking_mode === 'auto' ? 'auto' : 'manual'));
+  // Manual approval is off by default: only an explicit 'manual' turns it on.
+  if (listings.length === 0) return 'auto';
+  const modes = new Set(listings.map((listing) => listing.booking_mode === 'manual' ? 'manual' : 'auto'));
   return modes.size > 1 ? 'mixed' : [...modes][0] as BookingMode;
 }
 
