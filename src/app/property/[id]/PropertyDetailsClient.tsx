@@ -1481,7 +1481,14 @@ function BookingWidget({
         )}
 
       {/* CTA button */}
-      {status === "confirmed" ? (
+      {property.bookingsComingSoon ? (
+        <div className="w-full rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-center">
+          <p className="text-[14px] font-bold text-amber-800">Coming soon</p>
+          <p className="mt-0.5 text-[12px] text-amber-700">
+            This host&apos;s payouts are on the way. Bookings open shortly, so check back soon.
+          </p>
+        </div>
+      ) : status === "confirmed" ? (
         <div className="w-full bg-emerald-500 text-white py-3 rounded-xl font-bold text-[14px] flex items-center justify-center gap-2">
           <CheckCircle className="w-5 h-5" /> Booking confirmed!
         </div>
