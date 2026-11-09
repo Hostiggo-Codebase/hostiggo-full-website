@@ -8,9 +8,13 @@ export const PAYOUT_RATES = {
 } as const;
 
 /**
- * Host payout is calculated ONLY on Property + Breakfast + Other Services
- * -- excluding the Hostiggo Service Fee and all GST (GST is never host
- * revenue). Pure function -- no I/O.
+ * Host payout base is Property + Breakfast + Other Services -- excluding the
+ * Hostiggo Service Fee and all GST (GST is never host revenue). Pure
+ * function -- no I/O.
+ *
+ * Commission, TCS and TDS apply to the stay (property) amount ONLY. Add-ons
+ * (breakfast / other services) are passed through to the host in full with
+ * no deductions (owner's rule).
  *
  * NOTE: implemented exactly as specified (payoutBase - 5% commission - 1%
  * TCS - 1% TDS). The source doc's worked example states ₹10,788 for a
@@ -27,9 +31,10 @@ export function calculateHostPayout(input: HostPayoutInput): HostPayoutResult {
   const payoutBasePaise = propertyPricePaise + breakfastPricePaise + otherServicesPricePaise;
 
   const commissionRate = input.commissionRate ?? PAYOUT_RATES.hostiggoCommission;
-  const commissionPaise = percentOf(payoutBasePaise, commissionRate);
-  const tcsPaise = percentOf(payoutBasePaise, PAYOUT_RATES.tcs);
-  const tdsPaise = percentOf(payoutBasePaise, PAYOUT_RATES.tds);
+  // Deductions are on the stay amount only -- add-ons carry no commission/TCS/TDS.
+  const commissionPaise = percentOf(propertyPricePaise, commissionRate);
+  const tcsPaise = percentOf(propertyPricePaise, PAYOUT_RATES.tcs);
+  const tdsPaise = percentOf(propertyPricePaise, PAYOUT_RATES.tds);
 
   const netHostPayoutPaise = roundPaise(payoutBasePaise - commissionPaise - tcsPaise - tdsPaise);
 

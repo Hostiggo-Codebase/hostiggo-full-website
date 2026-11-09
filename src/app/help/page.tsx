@@ -6,7 +6,7 @@ import Footer from "@/components/layout/Footer";
 export const metadata = {
   title: "Help Centre",
   description:
-    "Guides for hosts and guests: payouts, identity verification, removing a listing, chat guidelines, add-ons and refunds.",
+    "Hostiggo Help Centre: step-by-step guides for guests and hosts on refunds, payouts, identity verification, add-ons, chat guidelines and removing a listing.",
 };
 
 const guides = [

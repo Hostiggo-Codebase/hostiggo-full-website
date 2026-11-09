@@ -56,7 +56,7 @@ const STATUS_META: Record<DayStatus, { label: string; dot: string; cell: string;
   none: { label: 'No rate set', dot: 'bg-gray-200', cell: 'hover:bg-gray-50', text: 'text-gray-300' },
 };
 
-type ListingOption = { id: string; title: string; location: string; image: string | null };
+type ListingOption = { id: string; title: string; location: string; image: string | null; basePrice: number; weekendPrice: number };
 
 // Replaces a plain native <select> that listed every one of a host's
 // properties as flat text -- fine for a couple of listings, but hosts with
@@ -106,12 +106,12 @@ function ListingPicker({
   }, [listings, query]);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative w-full sm:w-auto">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={loading || !listings.length}
-        className="flex items-center gap-2 max-w-[240px] w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-300 transition-all disabled:opacity-60"
+        className="flex items-center gap-2 max-w-full sm:max-w-[240px] w-full sm:w-auto px-3 py-2.5 sm:py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-300 transition-all disabled:opacity-60"
       >
         <span className="truncate">
           {loading ? 'Loading…' : selected ? selected.title : 'No listings'}
@@ -122,7 +122,7 @@ function ListingPicker({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] w-[300px] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-fade-in-down">
+        <div className="absolute left-0 top-[calc(100%+6px)] w-[min(300px,calc(100vw-2rem))] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-fade-in-down">
           <div className="p-2 border-b border-gray-100">
             <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg">
               <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
@@ -182,7 +182,7 @@ function ListingPicker({
 export default function CalendarPage() {
   const { userId } = useAuth();
   const [listings, setListings] = useState<
-    { id: string; title: string; location: string; image: string | null }[]
+    ListingOption[]
   >([]);
   const [listingId, setListingId] = useState<string>('');
   const [monthDate, setMonthDate] = useState(() => {
@@ -227,6 +227,8 @@ export default function CalendarPage() {
             title: r.title?.trim() || `Listing ${r.listing_id}`,
             location: [loc?.district, loc?.state].filter(Boolean).join(', '),
             image: cover?.media_url ?? null,
+            basePrice: Number(r.price_weekday ?? 0),
+            weekendPrice: Number(r.price_weekend ?? r.price_weekday ?? 0),
           };
         });
         setListings(mapped);
@@ -357,6 +359,8 @@ export default function CalendarPage() {
     loadICalStatus();
   }, [loadICalStatus]);
 
+  const currentListing = listings.find((l) => l.id === listingId) ?? null;
+
   // Build a date -> DayInfo map for the visible month.
   const days = useMemo<DayInfo[]>(() => {
     const entryMap = new Map<string, any>();
@@ -378,23 +382,36 @@ export default function CalendarPage() {
       const dateStr = toDateStr(year, month, d);
       const entry = entryMap.get(dateStr);
       const booking = isBooked(dateStr);
-      let status: DayStatus = 'none';
+      // Every date is available by default; only an explicit block or a booking changes that.
+      let status: DayStatus = 'available';
       if (booking.booked) status = 'booked';
-      else if (entry) status = entry.is_available ? 'available' : 'blocked';
+      else if (entry && !entry.is_available) status = 'blocked';
+      // A row without a real override price (0 / missing) falls back to the listing's base rate.
+      const dow = new Date(year, month, d).getDay();
+      const baseRate = dow === 5 || dow === 6 ? currentListing?.weekendPrice : currentListing?.basePrice;
+      const overridePrice = entry ? Number(entry.price) : 0;
+      const price = overridePrice > 0 ? overridePrice : baseRate && baseRate > 0 ? baseRate : null;
       out.push({
         day: d,
         dateStr,
-        price: entry ? Number(entry.price) : null,
+        price,
         currency: entry?.currency ?? 'INR',
         status,
         guest: booking.guest,
       });
     }
     return out;
-  }, [entries, bookings, year, month]);
+  }, [entries, bookings, year, month, currentListing]);
 
   const leading = new Date(year, month, 1).getDay();
   const selected = selectedDay ? days.find((d) => d.dateStr === selectedDay) : null;
+  const detailsRef = useRef<HTMLElement>(null);
+  // Below xl the details panel sits under the grid, off-screen on a phone.
+  useEffect(() => {
+    if (selectedDay && window.innerWidth < 1280) {
+      detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedDay]);
 
   // Seed the edit form whenever a different day is selected.
   useEffect(() => {
@@ -443,15 +460,15 @@ export default function CalendarPage() {
     <HostDashboardShell active="calendar">
       <div className="flex flex-col xl:flex-row gap-6">
         {/* Calendar */}
-        <div className="flex-1 space-y-6">
+        <div className="flex-1 min-w-0 space-y-4 sm:space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
                 {MONTHS[month]} {year}
               </h2>
               <p className="text-sm text-gray-500">Availability and nightly rates.</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {/* Listing picker */}
               <ListingPicker
                 listings={listings}
@@ -464,7 +481,7 @@ export default function CalendarPage() {
                 disabled={icalLoading}
                 title={icalStatus?.isActive ? 'Manage iCal feed' : 'Import iCal feed'}
                 className={cn(
-                  'flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all',
+                  'flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all',
                   icalLoading && 'opacity-50 cursor-not-allowed',
                 )}
               >
@@ -475,17 +492,17 @@ export default function CalendarPage() {
                 )}
                 {icalLoading ? 'Loading...' : icalStatus?.isActive ? 'Manage iCal' : 'Import iCal'}
               </button>
-              <div className="flex bg-gray-100 rounded-lg p-1">
+              <div className="hidden sm:flex bg-gray-100 rounded-lg p-1">
                 <button className="p-2 bg-white shadow-sm rounded-md text-figma-navy" aria-label="Grid view">
                   <LayoutGrid className="w-5 h-5" />
                 </button>
               </div>
-              <div className="flex items-center border border-gray-200 rounded-lg">
-                <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-gray-50 transition-all" aria-label="Previous month">
+              <div className="flex items-center border border-gray-200 rounded-lg ml-auto sm:ml-0">
+                <button onClick={() => changeMonth(-1)} className="p-2.5 sm:p-2 hover:bg-gray-50 transition-all" aria-label="Previous month">
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <div className="w-px h-8 bg-gray-200" />
-                <button onClick={() => changeMonth(1)} className="p-2 hover:bg-gray-50 transition-all" aria-label="Next month">
+                <button onClick={() => changeMonth(1)} className="p-2.5 sm:p-2 hover:bg-gray-50 transition-all" aria-label="Next month">
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
@@ -493,8 +510,8 @@ export default function CalendarPage() {
           </div>
 
           {/* Legend */}
-          <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
-            {(['available', 'blocked', 'booked', 'none'] as DayStatus[]).map((s) => (
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-gray-500">
+            {(['available', 'blocked', 'booked'] as DayStatus[]).map((s) => (
               <span key={s} className="flex items-center gap-1.5">
                 <span className={cn('w-2.5 h-2.5 rounded-full', STATUS_META[s].dot)} />
                 {STATUS_META[s].label}
@@ -505,8 +522,8 @@ export default function CalendarPage() {
           <div className="bg-white rounded-2xl shadow-card border border-gray-200 overflow-hidden">
             <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
               {DOW.map((d) => (
-                <div key={d} className="py-3 text-center text-sm font-medium text-gray-500">
-                  {d}
+                <div key={d} className="py-2 sm:py-3 text-center text-[11px] sm:text-sm font-medium text-gray-500">
+                  <span className="sm:hidden">{d.slice(0, 1)}</span><span className="hidden sm:inline">{d}</span>
                 </div>
               ))}
             </div>
@@ -525,7 +542,7 @@ export default function CalendarPage() {
             ) : loading ? (
               <div className="grid grid-cols-7">
                 {Array.from({ length: 35 }).map((_, i) => (
-                  <div key={i} className="aspect-square border-r border-b border-gray-100 p-3">
+                  <div key={i} className="aspect-square border-r border-b border-gray-100 p-1.5 sm:p-3">
                     <div className="h-3 w-4 bg-gray-100 rounded animate-pulse" />
                     <div className="h-3 w-8 bg-gray-100 rounded animate-pulse mt-auto" />
                   </div>
@@ -544,16 +561,16 @@ export default function CalendarPage() {
                       key={d.dateStr}
                       onClick={() => setSelectedDay(d.dateStr)}
                       className={cn(
-                        'aspect-square p-3 border-r border-b border-gray-100 flex flex-col text-left transition-colors relative',
+                        'aspect-square p-1 sm:p-3 min-w-0 overflow-hidden border-r border-b border-gray-100 flex flex-col text-left transition-colors relative',
                         meta.cell,
                         isSel && 'ring-2 ring-figma-navy ring-inset z-10',
                       )}
                     >
                       <span className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">{d.day}</span>
-                        <span className={cn('w-2 h-2 rounded-full', meta.dot)} />
+                        <span className="text-xs sm:text-sm text-gray-600">{d.day}</span>
+                        <span className={cn('w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full', meta.dot)} />
                       </span>
-                      <span className={cn('mt-auto font-bold text-xs', meta.text)}>
+                      <span className={cn('mt-auto font-bold text-[9px] leading-tight sm:text-xs truncate', meta.text)}>
                         {d.status === 'booked'
                           ? 'Booked'
                           : d.price != null && d.status !== 'blocked'
@@ -571,10 +588,10 @@ export default function CalendarPage() {
         </div>
 
         {/* Details panel */}
-        <aside className="w-full xl:w-96 shrink-0">
-          <div className="sticky top-24 space-y-6">
-            <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
-              <h3 className="text-lg font-bold text-gray-800 mb-6">Day Details</h3>
+        <aside ref={detailsRef} className="w-full xl:w-96 shrink-0 scroll-mt-20">
+          <div className="xl:sticky xl:top-24 space-y-4 sm:space-y-6">
+            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-800 mb-4 sm:mb-6">Day Details</h3>
 
               {selected ? (
                 <>
@@ -678,7 +695,7 @@ export default function CalendarPage() {
               )}
             </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-card">
+            <div className="bg-white p-4 sm:p-6 rounded-2xl border border-gray-200 shadow-card">
               <div className="flex items-center gap-3 mb-4">
                 <Info className="w-5 h-5 text-figma-navy" />
                 <h4 className="font-bold text-gray-800">Tips for Hosts</h4>
@@ -695,8 +712,8 @@ export default function CalendarPage() {
 
       {/* iCal Sync Modal */}
       {showICalModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:p-4">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white p-5 sm:p-6 shadow-lg">
             <h3 className="text-xl font-bold text-gray-900 mb-4">
               {icalStatus?.isActive ? 'Update iCal Feed' : 'Import iCal Feed'}
             </h3>
@@ -707,7 +724,7 @@ export default function CalendarPage() {
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-semibold text-green-900">iCal Feed Active</p>
-                    <p className="text-xs text-green-700 mt-1">Feed URL: {icalStatus.icalUrl}</p>
+                    <p className="text-xs text-green-700 mt-1 break-all">Feed URL: {icalStatus.icalUrl}</p>
                     {icalStatus.lastUpdated && (
                       <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                         <Clock className="w-3 h-3" />

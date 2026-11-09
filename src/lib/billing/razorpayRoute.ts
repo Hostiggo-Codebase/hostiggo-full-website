@@ -246,6 +246,13 @@ export async function fetchRouteProduct(
   return routeRequest<RouteProductStatus>(`/v2/accounts/${accountId}/products/${productId}`, "GET");
 }
 
+// Account-level status ('created' | 'needs_clarification' | 'under_review' |
+// 'activated' | 'suspended' | 'rejected'). An account activated in the
+// Razorpay dashboard counts even if the product poll hasn't caught up.
+export async function fetchLinkedAccount(accountId: string): Promise<{ id: string; status: string }> {
+  return routeRequest<{ id: string; status: string }>(`/v2/accounts/${accountId}`, "GET");
+}
+
 export type CreateTransferParams = {
   linkedAccountId: string;
   amountPaise: number;

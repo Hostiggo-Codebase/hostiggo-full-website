@@ -1,7 +1,7 @@
 'use client';
 
 import { formatINR } from '@/lib/format';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import {
   Download,
@@ -10,14 +10,16 @@ import {
   ReceiptText,
   TrendingUp,
   Landmark,
-  RotateCcw,
   CalendarClock,
 } from 'lucide-react';
 import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboardShell';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useAutoRetry } from '@/hooks/useAutoRetry';
+import BankProcessingNotice from '@/components/features/BankProcessingNotice';
 import { calculateHostPayout } from '@/lib/billing/payout';
+import { isUnconfirmedRequest } from '@/lib/billing/bookingRequest';
 import { expectedSettlementDate, formatSettlementDate } from '@/lib/billing/settlement';
 
 // Bookings are instant-confirmed on creation, status_id is only ever
@@ -89,8 +91,13 @@ const mapEarn = (row: any): Earn => {
 
 const inr = (n: number) => formatINR(n);
 
+// A missing or unparseable date means the bank / payment partner has not reported it yet -- say so instead of
+// printing "N/A" or the browser's "Invalid Date".
+const AWAITING_BANK = 'Awaiting bank';
 const fmtDate = (d: Date | null) =>
-  d ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
+  d && !Number.isNaN(d.getTime())
+    ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : AWAITING_BANK;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -106,7 +113,7 @@ function AreaChart({ series }: { series: number[] }) {
   const line = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x},${y}`).join(' ');
   const area = `${line} L${w},${h} L0,${h} Z`;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[220px]" preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[160px] sm:h-[220px]" preserveAspectRatio="none">
       <defs>
         <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="rgba(37,99,235,0.18)" />
@@ -135,30 +142,49 @@ export default function EarningsPage() {
   > | null>(null);
   const [history, setHistory] = useState<Awaited<ReturnType<typeof api.hostPaymentHistory>>>([]);
 
-  const load = useCallback(async () => {
+  // Failed fetches are retried automatically and explained ("the bank is still processing"); a payout / payment
+  // history failure is never shown as "nothing here yet".
+  const retryRef = useRef<() => void>(() => undefined);
+  const autoRetry = useAutoRetry(() => retryRef.current());
+  const [partialFailure, setPartialFailure] = useState(false);
+
+  const load = useCallback(async (silent = false) => {
     if (!userId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(false);
     try {
-      const [bookings, payout, paymentHistory] = await Promise.all([
+      const [bookingsRes, payoutRes, historyRes] = await Promise.allSettled([
         api.hostBookings(userId),
-        // Payouts need a bank account on file at all -- purely informational
-        // here (drives the empty-state copy below), so a failure to load it
-        // must never block earnings from rendering.
-        api.getPayoutMethod().catch(() => null),
-        // Full payment/payout ledger; a failure here only hides that table.
-        api.hostPaymentHistory().catch(() => []),
+        // Payouts need a bank account on file at all -- purely informational here (drives the empty-state copy
+        // below), so a failure to load it must never block earnings from rendering.
+        api.getPayoutMethod(),
+        // Full payment/payout ledger; a failure here only affects that table.
+        api.hostPaymentHistory(),
       ]);
-      setHistory(paymentHistory);
-      setRows(bookings.map(mapEarn));
-      setPayoutMethod(payout);
+      if (bookingsRes.status === 'rejected') throw bookingsRes.reason;
+      setRows(bookingsRes.value.filter((r: any) => !isUnconfirmedRequest(r)).map(mapEarn));
+      if (payoutRes.status === 'fulfilled') setPayoutMethod(payoutRes.value);
+      if (historyRes.status === 'fulfilled') setHistory(historyRes.value);
+      const partial = payoutRes.status === 'rejected' || historyRes.status === 'rejected';
+      setPartialFailure(partial);
+      if (partial) {
+        console.warn('[host/earnings] some payment details are not available yet');
+        autoRetry.failed();
+      } else {
+        autoRetry.succeeded();
+      }
     } catch (err) {
       console.error('[host/earnings] load failed:', err);
       setError(true);
+      autoRetry.failed();
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoRetry callbacks are stable
   }, [userId]);
+  useEffect(() => {
+    retryRef.current = () => { void load(true); };
+  }, [load]);
 
   useEffect(() => {
     load();
@@ -347,7 +373,7 @@ export default function EarningsPage() {
       />
 
       {loading ? (
-        <div className="grid grid-cols-12 gap-6">
+        <div className="grid grid-cols-12 gap-4 sm:gap-6">
           {['lg:col-span-4', 'lg:col-span-8', 'lg:col-span-4', 'lg:col-span-8', 'lg:col-span-12'].map(
             (span, i) => (
               <div
@@ -361,17 +387,7 @@ export default function EarningsPage() {
           )}
         </div>
       ) : error ? (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-card py-16 text-center">
-          <p className="text-4xl mb-3">😕</p>
-          <h3 className="text-lg font-bold text-gray-800 mb-1">Couldn&apos;t load earnings</h3>
-          <p className="text-sm text-gray-500 mb-6">Please try again.</p>
-          <button
-            onClick={load}
-            className="inline-flex items-center gap-2 bg-figma-navy text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-figma-navy/90"
-          >
-            <RotateCcw className="w-4 h-4" /> Try again
-          </button>
-        </div>
+        <BankProcessingNotice retrying={autoRetry.retrying} onRetry={autoRetry.manualRetry} />
       ) : rows.length === 0 ? (
         // Nothing to compute a chart/history/upcoming-payouts grid from yet
         // -- showing five separate empty widgets at once used to read as
@@ -401,10 +417,10 @@ export default function EarningsPage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-12 gap-6">
+        <div className="grid grid-cols-12 gap-4 sm:gap-6">
           {/* Total earnings */}
-          <div className="col-span-12 lg:col-span-4 bg-white rounded-2xl p-6 border border-gray-200 shadow-card relative overflow-hidden">
-            <div className="flex justify-between items-start mb-6">
+          <div className="col-span-12 lg:col-span-4 bg-white rounded-2xl p-4 sm:p-6 border border-gray-200 shadow-card relative overflow-hidden">
+            <div className="flex justify-between items-start gap-2 mb-4 sm:mb-6">
               <span className="p-3 bg-figma-navy/5 text-figma-navy rounded-xl inline-flex">
                 <Wallet className="w-6 h-6" />
               </span>
@@ -419,7 +435,7 @@ export default function EarningsPage() {
               )}
             </div>
             <p className="text-xs text-gray-500 uppercase tracking-wider">Total Earnings</p>
-            <h2 className="text-4xl font-bold text-gray-900 mb-8 tracking-tight">{inr(stats.total)}</h2>
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-8 tracking-tight">{inr(stats.total)}</h2>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
@@ -439,8 +455,8 @@ export default function EarningsPage() {
           </div>
 
           {/* Chart */}
-          <div className="col-span-12 lg:col-span-8 bg-white rounded-2xl p-6 border border-gray-200 shadow-card">
-            <div className="flex flex-col md:flex-row justify-between md:items-center mb-8 gap-4">
+          <div className="col-span-12 lg:col-span-8 bg-white rounded-2xl p-4 sm:p-6 border border-gray-200 shadow-card">
+            <div className="flex flex-col md:flex-row justify-between md:items-center mb-4 sm:mb-8 gap-4">
               <div>
                 <h3 className="text-lg font-bold text-gray-800">Revenue Growth</h3>
                 <p className="text-xs text-gray-500">Revenue by month over the last year</p>
@@ -455,7 +471,7 @@ export default function EarningsPage() {
           </div>
 
           {/* Upcoming */}
-          <div className="col-span-12 md:col-span-5 lg:col-span-4 bg-white rounded-2xl p-6 border border-gray-200 shadow-card flex flex-col">
+          <div className="col-span-12 md:col-span-5 lg:col-span-4 bg-white rounded-2xl p-4 sm:p-6 border border-gray-200 shadow-card flex flex-col">
             <h3 className="text-lg font-bold text-gray-800 mb-6">Upcoming Payouts</h3>
             <div className="space-y-4 flex-1">
               {stats.upcoming.length === 0 ? (
@@ -464,9 +480,9 @@ export default function EarningsPage() {
                 stats.upcoming.map((u) => (
                   <div
                     key={u.id}
-                    className="p-4 rounded-2xl bg-gray-50 border border-gray-100 flex items-center gap-4 hover:border-figma-navy/30 transition-colors"
+                    className="p-3 sm:p-4 rounded-2xl bg-gray-50 border border-gray-100 flex items-center gap-3 sm:gap-4 hover:border-figma-navy/30 transition-colors"
                   >
-                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-figma-navy shadow-sm">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 bg-white rounded-xl flex items-center justify-center text-figma-navy shadow-sm">
                       {u.confirmed ? <Clock className="w-5 h-5" /> : <ReceiptText className="w-5 h-5" />}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -478,7 +494,7 @@ export default function EarningsPage() {
                         </p>
                       )}
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="text-sm font-bold text-figma-navy">{inr(u.amount)}</p>
                       <span
                         className={cn(
@@ -496,7 +512,7 @@ export default function EarningsPage() {
           </div>
 
           {/* Performance */}
-          <div className="col-span-12 md:col-span-7 lg:col-span-8 bg-white rounded-2xl p-6 border border-gray-200 shadow-card flex items-center">
+          <div className="col-span-12 md:col-span-7 lg:col-span-8 bg-white rounded-2xl p-4 sm:p-6 border border-gray-200 shadow-card flex items-center">
             <div className="max-w-md">
               <h3 className="text-lg font-bold text-gray-800 mb-2">Performance by Unit</h3>
               <p className="text-sm text-gray-500 mb-6">
@@ -522,21 +538,21 @@ export default function EarningsPage() {
           </div>
 
           {/* History */}
-          <div className="col-span-12 bg-white rounded-2xl p-6 border border-gray-200 shadow-card overflow-x-auto">
-            <div className="flex justify-between items-center mb-6 px-1">
+          <div className="col-span-12 bg-white rounded-2xl p-4 sm:p-6 border border-gray-200 shadow-card overflow-x-auto">
+            <div className="flex justify-between items-center mb-4 sm:mb-6 px-1 sticky left-0">
               <h3 className="text-lg font-bold text-gray-800">Recent Completed Stays</h3>
             </div>
             {stats.history.length === 0 ? (
               <div className="text-sm text-gray-400 py-10 text-center">No completed stays yet.</div>
             ) : (
-              <table className="w-full border-collapse">
+              <table className="w-full border-collapse min-w-[560px]">
                 <thead>
                   <tr className="text-left text-gray-400 border-b border-gray-200">
                     {['Booking', 'Checkout Date', 'Property', 'Amount', 'Payout'].map((th, i) => (
                       <th
                         key={th}
                         className={cn(
-                          'pb-4 text-xs uppercase tracking-widest px-4 font-semibold',
+                          'pb-4 text-xs uppercase tracking-widest px-3 sm:px-4 font-semibold whitespace-nowrap',
                           i === 3 && 'text-right',
                           i === 4 && 'text-center',
                         )}
@@ -586,14 +602,18 @@ export default function EarningsPage() {
           </div>
 
           {/* Full payment & payout history -- every booking, nothing sliced */}
-          <div className="col-span-12 bg-white rounded-2xl p-6 border border-gray-200 shadow-card overflow-x-auto">
-            <div className="flex justify-between items-center mb-6 px-1">
+          <div className="col-span-12 bg-white rounded-2xl p-4 sm:p-6 border border-gray-200 shadow-card overflow-x-auto">
+            <div className="flex justify-between items-center mb-4 sm:mb-6 px-1 sticky left-0">
               <div>
                 <h3 className="text-lg font-bold text-gray-800">Payments &amp; Payout History</h3>
                 <p className="text-xs text-gray-500">Every booking, what the guest paid and what reached you.</p>
               </div>
             </div>
-            {history.length === 0 ? (
+            {history.length === 0 && partialFailure ? (
+              <div className="py-4">
+                <BankProcessingNotice retrying={autoRetry.retrying} onRetry={autoRetry.manualRetry} />
+              </div>
+            ) : history.length === 0 ? (
               <div className="text-sm text-gray-400 py-10 text-center">No payments yet.</div>
             ) : (
               <table className="w-full border-collapse min-w-[900px]">
@@ -603,7 +623,7 @@ export default function EarningsPage() {
                       <th
                         key={th}
                         className={cn(
-                          'pb-4 text-xs uppercase tracking-widest px-4 font-semibold',
+                          'pb-4 text-xs uppercase tracking-widest px-3 sm:px-4 font-semibold whitespace-nowrap',
                           (i === 3 || i === 4 || i === 5) && 'text-right',
                         )}
                       >

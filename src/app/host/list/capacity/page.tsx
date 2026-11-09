@@ -1,111 +1,113 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Minus, Plus, Sparkles } from 'lucide-react';
+import { Minus, Plus, X } from 'lucide-react';
 import WizardShell from '../_components/WizardShell';
 import { useListingDraft } from '@/context/ListingDraftContext';
+import {
+  addRoom,
+  canAddRoom,
+  canDecrement,
+  canIncrement,
+  capacityTotals,
+  changeRoom,
+  removeRoom,
+  roomsFromDraft,
+  type RoomCapacity,
+  type RoomField,
+} from '@/lib/listingCapacity';
 
-const ROWS = [
-  { key: 'guests', label: 'Guests', desc: 'Max number of people', initial: 4, min: 1, max: 50 },
-  { key: 'bedrooms', label: 'Bedrooms', desc: 'Private spaces for guests', initial: 2, min: 0, max: 50 },
-  { key: 'beds', label: 'Beds', desc: 'Total sleeping spots', initial: 3, min: 1, max: 50 },
-  { key: 'bathrooms', label: 'Bathrooms', desc: 'Full or half bathrooms', initial: 1, min: 0, max: 50 },
-] as const;
+const FIELDS: { key: RoomField; label: string }[] = [
+  { key: 'guests', label: 'Max guests' },
+  { key: 'beds', label: 'Beds' },
+  { key: 'bathrooms', label: 'Bathrooms' },
+];
 
 export default function CapacityPage() {
   const { draft, update } = useListingDraft();
-  const [counts, setCounts] = useState<Record<string, number>>(() => ({
-    guests: draft.numGuests ?? 4,
-    bedrooms: draft.numBedrooms ?? 2,
-    beds: draft.numBeds ?? 3,
-    bathrooms: draft.numBathrooms ?? 1,
-  }));
+  const [rooms, setRooms] = useState<RoomCapacity[]>(() => roomsFromDraft(draft));
 
+  // The draft (and the create-listing API) still stores totals only.
   useEffect(() => {
-    update({
-      numGuests: counts.guests,
-      numBedrooms: counts.bedrooms,
-      numBeds: counts.beds,
-      numBathrooms: counts.bathrooms,
-    });
+    update(capacityTotals(rooms));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [counts]);
+  }, [rooms]);
 
-  const set = (key: string, delta: number, min: number, max: number) =>
-    setCounts((c) => ({ ...c, [key]: Math.min(max, Math.max(min, c[key] + delta)) }));
+  const totals = capacityTotals(rooms);
 
   return (
     <WizardShell
       step={5}
-      title="Share some basics about your place"
-      subtitle="You'll add more details later, like amenities and photos. For now, let's start with the essentials."
+      title="Property capacity"
+      subtitle="Tell us how many bedrooms you have and the maximum guests, beds and bathrooms in each."
     >
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-        {/* Left: context + inspiration */}
-        <div className="md:col-span-5 space-y-6">
-          <div className="relative w-full aspect-video rounded-3xl overflow-hidden shadow-card">
-            <div
-              className="absolute inset-0 bg-cover bg-center"
-              style={{
-                backgroundImage:
-                  "url('/images/empty-states/sample-bedroom.jpg')",
-              }}
-            />
-            <div className="absolute bottom-4 left-4 px-4 py-2 rounded-full flex items-center gap-2 bg-white/80 backdrop-blur-md">
-              <Sparkles className="w-4 h-4 text-figma-navy" />
-              <span className="text-xs font-semibold text-figma-navy">
-                High-visibility listing tips
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: counters */}
-        <div className="md:col-span-7 flex md:justify-end">
-          <div className="w-full max-w-lg bg-white p-8 md:p-10 rounded-3xl shadow-card border border-gray-200">
-            <div className="space-y-6">
-              {ROWS.map((row, i) => (
-                <div
-                  key={row.key}
-                  className={
-                    i < ROWS.length - 1
-                      ? 'flex items-center justify-between pb-6 border-b border-gray-100'
-                      : 'flex items-center justify-between'
-                  }
+      <div className="space-y-6 w-full max-w-md">
+        {rooms.map((room, index) => (
+          <section key={index} aria-labelledby={`bedroom-${index}`} className="w-full">
+            <h2 id={`bedroom-${index}`} className="text-lg font-bold text-gray-800 mb-3">
+              Bedroom {index + 1}
+            </h2>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 relative shadow-sm">
+              {index > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setRooms((prev) => removeRoom(prev, index))}
+                  className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full p-1.5 shadow-md cursor-pointer hover:bg-red-600 transition-colors"
+                  aria-label={`Remove bedroom ${index + 1}`}
                 >
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800">
-                      {row.label}
-                    </h3>
-                    <p className="text-sm text-gray-500">{row.desc}</p>
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              <div className="space-y-6">
+                {FIELDS.map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-gray-800 font-medium">{label}</span>
+                    <div className="flex items-center gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setRooms((prev) => changeRoom(prev, index, key, -1))}
+                        disabled={!canDecrement(rooms, index, key)}
+                        aria-label={`Decrease ${label.toLowerCase()} in bedroom ${index + 1}`}
+                        className="bg-figma-navy text-white rounded-full w-9 h-9 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:bg-figma-navy/90 transition-colors"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="w-6 text-center font-semibold text-gray-800" aria-live="polite">
+                        {room[key]}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setRooms((prev) => changeRoom(prev, index, key, 1))}
+                        disabled={!canIncrement(rooms, key)}
+                        aria-label={`Increase ${label.toLowerCase()} in bedroom ${index + 1}`}
+                        className="bg-figma-navy text-white rounded-full w-9 h-9 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:bg-figma-navy/90 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => set(row.key, -1, row.min, row.max)}
-                      className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all text-figma-navy disabled:opacity-40"
-                      disabled={counts[row.key] <= row.min}
-                      aria-label={`Decrease ${row.label}`}
-                    >
-                      <Minus className="w-5 h-5" />
-                    </button>
-                    <span className="text-lg font-bold w-6 text-center text-gray-800">
-                      {counts[row.key]}
-                    </span>
-                    <button
-                      onClick={() => set(row.key, 1, row.min, row.max)}
-                      disabled={counts[row.key] >= row.max}
-                      className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all text-figma-navy disabled:opacity-40"
-                      aria-label={`Increase ${row.label}`}
-                    >
-                      <Plus className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
+          </section>
+        ))}
       </div>
+
+      <button
+        type="button"
+        onClick={() => setRooms((prev) => addRoom(prev))}
+        disabled={!canAddRoom(rooms)}
+        className="border border-figma-navy text-figma-navy rounded-full px-5 py-2 text-sm font-medium mt-6 hover:bg-figma-navy/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        Add bedroom +
+      </button>
+
+      <p className="mt-6 text-sm text-gray-600">
+        Total: {totals.numGuests} guests · {totals.numBedrooms} bedroom{totals.numBedrooms === 1 ? '' : 's'} ·{' '}
+        {totals.numBeds} bed{totals.numBeds === 1 ? '' : 's'} · {totals.numBathrooms} bathroom
+        {totals.numBathrooms === 1 ? '' : 's'}
+      </p>
     </WizardShell>
   );
 }

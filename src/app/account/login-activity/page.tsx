@@ -92,7 +92,7 @@ export default function LoginActivityPage() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 mb-12">
           <Link
             href="/account/settings"
-            className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors shadow-sm shrink-0"
+            className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 bg-[#FFFFFF] text-gray-600 hover:bg-[#F9F9F9] transition-colors shadow-sm shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>

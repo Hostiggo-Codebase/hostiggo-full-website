@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
+import { useListingState } from '@/context/ListingFilterContext';
 import { loadGoogleMaps, onGoogleMapsAuthFailure } from '@/lib/services/googleMaps';
 
 const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
@@ -17,6 +18,18 @@ const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
   Kolkata: { lat: 22.5726, lng: 88.3639 },
 };
 
+// Whole-state destinations (shown at a wider zoom than cities). Matched
+// before listing coordinates, which can be wrong or far apart.
+const REGION_COORDINATES: Record<string, { lat: number; lng: number }> = {
+  Uttarakhand: { lat: 30.0668, lng: 79.0193 },
+  'Himachal Pradesh': { lat: 31.9, lng: 77.2 },
+  Rajasthan: { lat: 26.9, lng: 73.8 },
+  Karnataka: { lat: 14.8, lng: 75.7 },
+  'West Bengal': { lat: 23.4, lng: 87.9 },
+  Sikkim: { lat: 27.53, lng: 88.51 },
+  Kerala: { lat: 10.4, lng: 76.4 },
+};
+
 const INDIA_CENTER = { lat: 22.5937, lng: 78.9629 };
 
 const PIN_PATH =
@@ -26,13 +39,24 @@ interface MapPreviewProps {
   city?: string;
   count?: number;
   coordinates?: { lat: number; lng: number };
+  // Opens the full interactive map (the results page's map view). The
+  // preview itself is a static thumbnail, so without this a click on it
+  // did nothing.
+  onOpen?: () => void;
 }
 
 export default function MapPreview({
   city = 'New Delhi',
   count = 0,
   coordinates,
+  onOpen,
 }: MapPreviewProps) {
+  // The search response carries the searched region's bounds (e.g. a whole
+  // state like "Uttarakhand") and the listings' own coordinates. The preview
+  // used to look the destination up only in the small CITY_COORDINATES table;
+  // anything not in it fell back to the centre of India at street zoom, so
+  // the thumbnail showed unrelated villages instead of the searched place.
+  const { stateBounds, allProperties } = useListingState();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
@@ -108,16 +132,48 @@ export default function MapPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update map center when city or coordinates change
+  // Frame the searched place: explicit coordinates, then the known city /
+  // state tables, then the region bounds from the search response, then the
+  // listings' coordinates, then all of India.
   useEffect(() => {
-    if (!mapInstanceRef.current || !mapLoaded) return;
-    const center = getCenter();
-    mapInstanceRef.current.setCenter(center);
-    if (markerRef.current) {
-      markerRef.current.setPosition(center);
+    const map = mapInstanceRef.current;
+    if (!map || !mapLoaded) return;
+    const pts = allProperties
+      .map((p) => p.coordinates)
+      .filter((c): c is { lat: number; lng: number } => !!c && Number.isFinite(c.lat) && Number.isFinite(c.lng));
+    const name = city.toLowerCase();
+    const knownCity = Object.entries(CITY_COORDINATES).find(([n]) => name.includes(n.toLowerCase()))?.[1];
+    const knownRegion = Object.entries(REGION_COORDINATES).find(([n]) => name.includes(n.toLowerCase()))?.[1];
+    let center: google.maps.LatLngLiteral;
+    if (coordinates || knownCity) {
+      center = (coordinates ?? knownCity)!;
+      map.setCenter(center);
+      map.setZoom(11);
+    } else if (knownRegion) {
+      center = knownRegion;
+      map.setCenter(center);
+      map.setZoom(6);
+    } else if (stateBounds) {
+      const b = new google.maps.LatLngBounds(
+        { lat: stateBounds.south, lng: stateBounds.west },
+        { lat: stateBounds.north, lng: stateBounds.east },
+      );
+      map.fitBounds(b, 8);
+      center = b.getCenter().toJSON();
+    } else if (pts.length > 0) {
+      const b = new google.maps.LatLngBounds();
+      pts.forEach((c) => b.extend(c));
+      if (pts.length > 1) map.fitBounds(b, 16);
+      else map.setZoom(11);
+      center = b.getCenter().toJSON();
+      map.setCenter(center);
+    } else {
+      center = INDIA_CENTER;
+      map.setCenter(center);
+      map.setZoom(4);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, coordinates, mapLoaded]);
+    markerRef.current?.setPosition(center);
+  }, [city, coordinates, stateBounds, allProperties, mapLoaded]);
 
   return (
     <div
@@ -125,6 +181,15 @@ export default function MapPreview({
       style={{ height: 160 }}
     >
       <div ref={mapRef} className="w-full h-full" />
+
+      {onOpen && mapLoaded && (
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={`Open map of ${city}`}
+          className="absolute inset-0 z-[1] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-figma-navy"
+        />
+      )}
 
       {!mapLoaded && !mapUnavailable && (
         <div className="absolute inset-0 bg-figma-navy/5 flex items-center justify-center">
@@ -145,7 +210,7 @@ export default function MapPreview({
       )}
 
       {/* Overlay label */}
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-white/90 to-transparent py-2 px-3 pointer-events-none">
+      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-white/90 to-transparent py-2 px-3 pointer-events-none z-[2]">
         <p className="text-[11px] font-semibold text-gray-600 flex items-center gap-1">
           <MapPin className="w-3 h-3 text-figma-navy" />
           {city} · {count} properties

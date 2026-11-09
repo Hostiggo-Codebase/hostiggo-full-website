@@ -2,33 +2,9 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { HOST_FAQS as faqs } from './faqData';
 
-const faqs = [
-  {
-    question: "Who can become a host on Hostiggo?",
-    answer: "Content coming soon..."
-  },
-  {
-    question: "Do I need to register a company to host on Hostiggo?",
-    answer: "Content coming soon..."
-  },
-  {
-    question: "When and how do I receive my payments?",
-    answer: "Content coming soon..."
-  },
-  {
-    question: "Is my bank account information secure?",
-    answer: "Yes. Hostiggo uses secure and encrypted payment systems, and bank details are never shared with guests."
-  },
-  {
-    question: "How does Hostiggo prevent fake bookings and fraud?",
-    answer: "Content coming soon..."
-  },
-  {
-    question: "What if a guest damages my property?",
-    answer: "Content coming soon..."
-  }
-];
+
 
 export default function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(3);

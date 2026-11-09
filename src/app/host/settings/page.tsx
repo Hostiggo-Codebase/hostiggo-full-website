@@ -16,23 +16,28 @@ import {
   CheckCircle2,
   Loader2,
   Activity,
+  CalendarDays,
   ChevronRight,
   Mail,
   ShieldAlert,
   HelpCircle,
+  CalendarCheck,
   type LucideIcon,
 } from 'lucide-react';
 import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboardShell';
 import { useAuth } from '@/context/AuthContext';
 import { useKycStatus } from '@/hooks/useKycStatus';
 import BankDetailsNotice from '@/components/features/BankDetailsNotice';
+import { STATES_AND_UTS } from '@/lib/indianStates';
 import KycModal from '@/components/features/KycModal';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { formatPanInput } from '@/lib/pan';
+import { supabase } from '@/lib/supabase';
 
 const NAV: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'personal', label: 'Personal Info', icon: User },
+  { id: 'booking', label: 'Booking Preferences', icon: CalendarDays },
   { id: 'payouts', label: 'Payouts & Taxes', icon: Landmark },
   { id: 'security', label: 'Login & Security', icon: Shield },
   { id: 'feedback', label: 'Feedback', icon: MessageSquareText },
@@ -42,7 +47,8 @@ const NAV: { id: string; label: string; icon: LucideIcon }[] = [
 interface ProfileData {
   name: string;
   email: string;
-  phone: string;
+  phone: string | null;
+  phoneVerified?: boolean;
   avatar: string;
   about: string;
   isVerified: boolean;
@@ -65,7 +71,7 @@ function SettingsLinkRow({
   desc: string;
 }) {
   return (
-    <Link href={href} className="flex items-center gap-4 p-6 hover:bg-gray-50 transition-colors">
+    <Link href={href} className="flex items-center gap-3 sm:gap-4 p-4 sm:p-6 hover:bg-gray-50 transition-colors">
       <div className="w-11 h-11 rounded-xl bg-figma-navy/5 flex items-center justify-center text-figma-navy shrink-0">
         <Icon className="w-5 h-5" />
       </div>
@@ -107,6 +113,64 @@ export default function HostSettingsPage() {
   const [phone, setPhone] = useState('');
   const [about, setAbout] = useState('');
   const [saving, setSaving] = useState(false);
+  // Phone is saved only on the Supabase Auth account, via an SMS code.
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [bookingMode, setBookingMode] = useState<'auto' | 'manual' | 'mixed'>('auto');
+  const [bookingListingCount, setBookingListingCount] = useState(0);
+  const [loadingBookingMode, setLoadingBookingMode] = useState(true);
+  const [savingBookingMode, setSavingBookingMode] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    fetch('/api/host/booking-preferences')
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not load booking preferences.');
+        return result;
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setBookingMode(result.bookingMode);
+        setBookingListingCount(result.listingCount);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[host/settings] booking preferences load failed:', err);
+          toast.error(err instanceof Error ? err.message : 'Could not load booking preferences.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBookingMode(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const handleBookingModeChange = async () => {
+    if (savingBookingMode || bookingListingCount === 0) return;
+    const nextMode = bookingMode === 'auto' ? 'manual' : 'auto';
+    setSavingBookingMode(true);
+    try {
+      const response = await fetch('/api/host/booking-preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingMode: nextMode }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save booking preferences.');
+      setBookingMode(result.bookingMode);
+      setBookingListingCount(result.listingCount);
+      toast.success(nextMode === 'manual' ? "Guests will pay upfront and you'll have 2 hours to accept each booking, otherwise they're refunded in full." : 'Bookings will be confirmed automatically.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save booking preferences.');
+    } finally {
+      setSavingBookingMode(false);
+    }
+  };
 
   // Payouts & Taxes tab.
   const [payoutMethod, setPayoutMethod] = useState<Awaited<
@@ -250,6 +314,7 @@ export default function HostSettingsPage() {
       setName(json.data.name ?? '');
       setEmail(json.data.email ?? '');
       setPhone(json.data.phone ?? '');
+      setOtpSent(false);
       setAbout(json.data.about ?? '');
     } catch (err) {
       console.error('[host/settings] load failed:', err);
@@ -264,6 +329,60 @@ export default function HostSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  const toAuthPhone = () => `+91${phone.replace(/\D/g, '').slice(-10)}`;
+  const phoneValid = phone.replace(/\D/g, '').slice(-10).length === 10;
+  const phoneVerified = Boolean(
+    profile?.phoneVerified && profile.phone && profile.phone.replace(/\D/g, '').slice(-10) === phone.replace(/\D/g, '').slice(-10),
+  );
+
+  const sendPhoneOtp = async () => {
+    if (!phoneValid) {
+      toast.error('Enter a valid 10-digit phone number.');
+      return;
+    }
+    setPhoneBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ phone: toAuthPhone() });
+      if (error) throw error;
+      setOtpSent(true);
+      toast.success('We sent a 6-digit code to your phone.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      toast.error(
+        /already|registered|exists/i.test(msg)
+          ? 'This number is already linked to another Hostiggo account. Each person can have only one account.'
+          : msg || 'Could not send the code.',
+      );
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
+  const confirmPhoneOtp = async () => {
+    setPhoneBusy(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        phone: toAuthPhone(),
+        token: otpCode.trim(),
+        type: 'phone_change',
+      });
+      if (error) throw error;
+      setOtpSent(false);
+      setOtpCode('');
+      toast.success('Phone number verified.');
+      await loadProfile();
+      if (payoutMethod && payoutMethod.status !== 'active') {
+        const result = await api.updatePayoutMethod({});
+        setPayoutSetupError(result.onboardingError ?? null);
+        await loadPayoutMethod();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'That code did not work.');
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!userId) return;
     const missing = [
@@ -277,14 +396,14 @@ export default function HostSettingsPage() {
       toast.error(`Please fill in: ${missing.join(', ')}.`);
       return;
     }
-    if (phone.replace(/\D/g, '').slice(-10).length !== 10) {
-      toast.error('Enter a valid 10-digit phone number.');
+    if (!phoneVerified) {
+      toast.error('Verify your phone number with the SMS code first.');
       return;
     }
     setSaving(true);
     try {
       await Promise.all([
-        api.updateProfile(userId, { name, email, phone }),
+        api.updateProfile(userId, { name, email }),
         fetch('/api/host/profile', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -331,9 +450,9 @@ export default function HostSettingsPage() {
 
       <div className="flex flex-col md:flex-row gap-6">
         {/* Settings nav */}
-        <div className="w-full md:w-64 shrink-0">
+        <div className="w-full md:w-64 shrink-0 min-w-0">
           <div className="bg-white rounded-2xl p-2 shadow-card border border-gray-200">
-            <nav className="flex flex-col space-y-1">
+            <nav className="flex md:flex-col gap-1 overflow-x-auto scrollbar-hide">
               {NAV.map((n) => {
                 const Icon = n.icon;
                 const on = tab === n.id;
@@ -342,7 +461,7 @@ export default function HostSettingsPage() {
                     key={n.id}
                     onClick={() => setTab(n.id)}
                     className={cn(
-                      'flex items-center justify-between px-4 py-3 rounded-xl transition-all text-sm',
+                      'flex items-center justify-between gap-2 shrink-0 md:shrink md:w-full whitespace-nowrap px-4 py-3 rounded-xl transition-all text-sm',
                       on
                         ? 'bg-figma-navy text-white font-semibold'
                         : 'text-gray-500 hover:bg-gray-100',
@@ -358,16 +477,16 @@ export default function HostSettingsPage() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 space-y-6">
+        <div className="flex-1 min-w-0 space-y-4 sm:space-y-6">
           {tab === 'personal' && (loadingProfile ? (
-            <div className="bg-white rounded-2xl p-16 shadow-card border border-gray-200 flex justify-center">
+            <div className="bg-white rounded-2xl p-10 sm:p-16 shadow-card border border-gray-200 flex justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
             </div>
           ) : (
             <>
               {/* Profile header */}
-              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
-                <div className="flex flex-col sm:flex-row items-center gap-6">
+              <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
+                <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
                   <div className="relative">
                     <UserAvatar
                       src={profile?.avatar}
@@ -387,7 +506,7 @@ export default function HostSettingsPage() {
                   </div>
                   <div className="text-center sm:text-left">
                     <h2 className="text-xl font-bold text-gray-800">{profile?.name}</h2>
-                    <p className="text-sm text-gray-500 mb-4">{profile?.isVerified ? 'Verified host' : 'Host on Hostiggo'}</p>
+                    <p className="text-sm text-gray-500 mb-4">{(profile?.isVerified || kycStatus === 'verified') ? 'Verified host' : 'Host on Hostiggo'}</p>
                     <div className="flex items-center gap-6 justify-center sm:justify-start">
                       <div className="text-center">
                         <p className="text-lg font-bold text-gray-800">
@@ -408,7 +527,7 @@ export default function HostSettingsPage() {
               </div>
 
               {/* Fields */}
-              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
+              <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Personal Details</h3>
                 {(!name.trim() || !email.trim() || !phone.trim()) && (
                   <div className="mb-6 flex items-start gap-2 p-4 rounded-xl bg-amber-50 border border-amber-200">
@@ -459,13 +578,53 @@ export default function HostSettingsPage() {
                       onChange={(e) => setPhone(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-figma-navy focus:border-transparent outline-none text-sm"
                     />
+                    {phoneVerified ? (
+                      <VerifiedBadge ok />
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {otpSent && (
+                          <input
+                            inputMode="numeric"
+                            maxLength={6}
+                            placeholder="6-digit code"
+                            value={otpCode}
+                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                            className="w-32 sm:w-36 px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          disabled={phoneBusy || (otpSent && otpCode.length < 6)}
+                          onClick={otpSent ? confirmPhoneOtp : sendPhoneOtp}
+                          className="px-4 py-2.5 rounded-xl bg-figma-navy text-white text-sm font-bold disabled:opacity-60"
+                        >
+                          {phoneBusy ? 'Please wait…' : otpSent ? 'Verify code' : 'Send code'}
+                        </button>
+                        {otpSent && (
+                          <button type="button" disabled={phoneBusy} onClick={sendPhoneOtp} className="text-xs underline text-gray-500">
+                            Resend
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <p
+                      className={`ml-1 text-xs ${
+                        phone.trim() && phone.replace(/\D/g, '').slice(-10).length !== 10
+                          ? 'text-red-600'
+                          : 'text-gray-500'
+                      }`}
+                    >
+                      {phone.trim() && phone.replace(/\D/g, '').slice(-10).length !== 10
+                        ? 'Enter a valid 10-digit mobile number.'
+                        : 'Required to create your payout account. Without a valid 10-digit mobile number, payouts cannot be set up.'}
+                    </p>
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end">
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-8 py-3 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="w-full sm:w-auto justify-center px-8 py-3 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                     {saving ? 'Saving…' : 'Save Changes'}
@@ -475,11 +634,75 @@ export default function HostSettingsPage() {
             </>
           ))}
 
+          {tab === 'booking' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
+                <div className="mb-5">
+                  <h2 className="text-lg font-bold text-gray-800">Booking approval</h2>
+                  <p className="mt-1 text-sm text-gray-500">Choose how guests can book your listings. This preference applies to all your listings.</p>
+                </div>
+                {loadingBookingMode ? (
+                  <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between gap-6">
+                      <div className="max-w-xl">
+                        <h3 className="text-sm font-bold text-gray-800">Review each booking request</h3>
+                        <p className="mt-1 text-sm leading-6 text-gray-500">
+                          Off by default, so bookings are confirmed automatically. Turn this on to review every booking yourself: guests pay upfront and you have 2 hours to accept or decline. If you decline or don&apos;t answer, the guest is refunded in full.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={bookingMode === 'manual'}
+                        aria-label="Require approval for booking requests"
+                        onClick={handleBookingModeChange}
+                        disabled={savingBookingMode || bookingListingCount === 0}
+                        className={cn(
+                          'relative mt-1 h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-figma-navy focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+                          bookingMode === 'manual' ? 'bg-figma-navy' : 'bg-gray-300',
+                        )}
+                      >
+                        <span className={cn(
+                          'absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform',
+                          bookingMode === 'manual' ? 'translate-x-5' : 'translate-x-0',
+                        )} />
+                      </button>
+                    </div>
+                    <div className={cn(
+                      'mt-5 flex items-start gap-3 rounded-xl p-4',
+                      bookingMode === 'manual' ? 'bg-emerald-50 text-emerald-900' : 'bg-gray-50 text-gray-700',
+                    )} aria-live="polite">
+                      <CheckCircle2 className={cn('mt-0.5 h-4 w-4 shrink-0', bookingMode === 'manual' ? 'text-emerald-700' : 'text-gray-500')} />
+                      <div>
+                        <p className="text-sm font-bold">
+                          {bookingMode === 'mixed' ? 'Booking preferences vary by listing' : bookingMode === 'manual' ? 'Manual approval is on' : 'Automatic confirmation is on'}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 opacity-80">
+                          {bookingMode === 'mixed'
+                            ? 'Use the switch to apply one booking preference to all your listings.'
+                            : bookingMode === 'manual'
+                              ? 'Guests have paid and are waiting for you. Accept within 2 hours or they are refunded in full.'
+                              : 'New bookings for your listings will be confirmed automatically.'}
+                        </p>
+                      </div>
+                    </div>
+                    {bookingListingCount === 0 && (
+                      <p className="mt-4 text-sm text-amber-700">Create a listing before choosing its booking approval setting.</p>
+                    )}
+                    {savingBookingMode && <p className="mt-3 text-xs text-gray-500" role="status">Saving your preference…</p>}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {tab === 'payouts' && (
             <>
-              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
+              <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
+                <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+                  <div className="min-w-0">
                     <h3 className="text-lg font-bold text-gray-800">Payout Methods</h3>
                     <p className="text-sm text-gray-500">
                       Manage how you receive your hosting earnings.{' '}
@@ -501,13 +724,44 @@ export default function HostSettingsPage() {
                   )}
                 </div>
 
+                {(() => {
+                  const savedPhoneOk = Boolean(profile?.phoneVerified);
+                  return savedPhoneOk ? (
+                    <div className="mb-6 flex items-start gap-2 p-4 rounded-xl bg-figma-navy/5 border border-figma-navy/15">
+                      <Landmark className="w-4 h-4 text-figma-navy shrink-0 mt-0.5" />
+                      <p className="text-xs text-gray-700">
+                        <span className="font-bold">Your mobile number is used to create your payout account.</span>{' '}
+                        If you change it in Personal Info, your payout account is updated to match.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mb-6 flex items-start gap-2 p-4 rounded-xl bg-amber-50 border border-amber-200">
+                      <Landmark className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-800">
+                        <p>
+                          <span className="font-bold">Add your phone number to set up payouts.</span>{' '}
+                          A valid 10-digit mobile number is mandatory to create your payout account. Your
+                          bank details can be saved, but payouts stay inactive until it is added.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setTab('personal')}
+                          className="mt-2 font-bold underline hover:text-amber-900"
+                        >
+                          Add phone number in Personal Info
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {loadingPayoutMethod ? (
                   <div className="p-8 flex justify-center">
                     <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                   </div>
                 ) : !editingPayoutMethod && payoutMethod ? (
                   <div className="space-y-4">
-                    <div className="p-5 rounded-xl border border-gray-200 grid grid-cols-2 gap-4">
+                    <div className="p-4 sm:p-5 rounded-xl border border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-4 [&_p]:break-words">
                       <div>
                         <p className="text-xs font-semibold text-gray-500 mb-0.5">Account holder</p>
                         <p className="text-sm font-medium text-gray-900">{payoutMethod.account_holder_name}</p>
@@ -546,7 +800,7 @@ export default function HostSettingsPage() {
                           <p className="text-sm font-medium text-gray-900">{payoutMethod.upi_id}</p>
                         </div>
                       )}
-                      <div className="col-span-2">
+                      <div className="sm:col-span-2">
                         <p className="text-xs font-semibold text-gray-500 mb-0.5">Address</p>
                         <p className="text-sm font-medium text-gray-900">
                           {[payoutMethod.address_line1, payoutMethod.city, payoutMethod.state, payoutMethod.postal_code]
@@ -555,12 +809,18 @@ export default function HostSettingsPage() {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setKycModalOpen(true)}
-                      className="text-xs font-bold text-figma-navy hover:underline"
-                    >
-                      Update bank verification
-                    </button>
+                    {payoutMethod.verification.bank.verified && payoutMethod.verification.pan.verified ? (
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-green-700">
+                        <CheckCircle2 className="w-4 h-4" /> Bank account and PAN verification complete
+                      </p>
+                    ) : (
+                      <button
+                        onClick={() => setKycModalOpen(true)}
+                        className="text-xs font-bold text-figma-navy hover:underline"
+                      >
+                        Update bank verification
+                      </button>
+                    )}
                     <div className="flex items-center gap-2 p-4 rounded-xl bg-amber-50 border border-amber-200">
                       <Landmark className="w-4 h-4 text-amber-600 shrink-0" />
                       <p className="text-xs text-amber-800">
@@ -579,8 +839,8 @@ export default function HostSettingsPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="col-span-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
                         <label className="block text-xs font-bold text-gray-500 mb-1">
                           Account holder name (exactly as on your bank account and PAN) <span className="text-red-500">*</span>
                         </label>
@@ -675,7 +935,7 @@ export default function HostSettingsPage() {
                           className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
                         />
                       </div>
-                      <div className="col-span-2">
+                      <div className="sm:col-span-2">
                         <label className="block text-xs font-bold text-gray-500 mb-1">Address <span className="text-red-500">*</span></label>
                         <input
                           type="text"
@@ -697,12 +957,20 @@ export default function HostSettingsPage() {
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-500 mb-1">State <span className="text-red-500">*</span></label>
-                        <input
-                          type="text"
+                        <select
                           value={payoutForm.state}
                           onChange={(e) => setPayoutForm((f) => ({ ...f, state: e.target.value }))}
-                          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
-                        />
+                          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
+                        >
+                          <option value="">Select state</option>
+                          {/* Keep a previously saved value that isn't on the list selectable. */}
+                          {payoutForm.state && !(STATES_AND_UTS as readonly string[]).includes(payoutForm.state) && (
+                            <option value={payoutForm.state}>{payoutForm.state}</option>
+                          )}
+                          {STATES_AND_UTS.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 
@@ -717,7 +985,7 @@ export default function HostSettingsPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3 [&>button]:justify-center">
                       <button
                         onClick={handleSavePayoutMethod}
                         disabled={savingPayoutMethod}
@@ -738,9 +1006,9 @@ export default function HostSettingsPage() {
                   </div>
                 )}
               </div>
-              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200 flex items-center justify-between">
-                <div className="flex items-center gap-6">
-                  <div className="w-14 h-14 rounded-full bg-figma-navy/5 flex items-center justify-center text-figma-navy">
+              <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4 sm:gap-6">
+                  <div className="w-14 h-14 shrink-0 rounded-full bg-figma-navy/5 flex items-center justify-center text-figma-navy">
                     <ShieldCheck className="w-8 h-8" />
                   </div>
                   <div>
@@ -766,7 +1034,7 @@ export default function HostSettingsPage() {
                 ) : (
                   <Link
                     href="/kyc?redirect=/host/settings"
-                    className="px-5 py-2.5 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90 active:scale-95 transition-all whitespace-nowrap"
+                    className="px-5 py-2.5 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90 active:scale-95 transition-all whitespace-nowrap text-center"
                   >
                     {kycStatus === 'rejected' ? 'Re-verify' : 'Verify now'}
                   </Link>

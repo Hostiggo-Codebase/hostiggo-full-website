@@ -6,15 +6,18 @@ import { ListingFilterProvider } from '@/context/ListingFilterContext';
 import { Toaster } from 'sonner';
 import { NotificationProvider } from '@/context/NotificationContext';
 import ConsentAnalytics from '@/components/ConsentAnalytics';
+import SupportButton from '@/components/layout/SupportButton';
 import JsonLd from '@/components/JsonLd';
 import {
   COMPANY_LEGAL_NAME,
+  REGISTERED_ADDRESS,
   SITE_DESCRIPTION,
   SITE_NAME,
   SITE_TAGLINE,
   SITE_URL,
   SOCIAL_LINKS,
   SUPPORT_EMAIL,
+  SUPPORT_PHONE_DISPLAY,
 } from '@/lib/site';
 
 // Figma "Website Guest UI/UX" uses Poppins (Regular/Medium/SemiBold/Bold)
@@ -39,9 +42,39 @@ export const metadata: Metadata = {
     'holiday homes',
     'vacation rentals India',
     'hostiggo',
+    'hostiggo.com',
+    'hostigo',
+    'hostigo.com',
+    'hostig',
+    'hostig go',
+    'host i go',
+    'host and go',
+    'hostiggo homestays',
     'book stay India',
     'verified homestays',
     'rental properties India',
+    'bookings',
+    'online booking India',
+    'hotel booking',
+    'book hotels online',
+    'cheap hotels India',
+    'budget stays India',
+    'villa booking',
+    'villas for rent',
+    'resorts in India',
+    'weekend getaways',
+    'family trip stays',
+    'couple friendly stays',
+    'pet friendly stays',
+    'staycation India',
+    'travel booking',
+    'trip planning',
+    'holiday packages India',
+    'vacation homes',
+    'farmstays',
+    'cottages',
+    'hill station stays',
+    'beach stays India',
   ],
   alternates: {
     canonical: './',
@@ -84,6 +117,9 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
+  verification: {
+    google: '6qp93YtWHfB1Hhh61ct8DSuK7a2gKQJECYycFlOB9jg',
+  },
   icons: {
     icon: '/favicon.ico',
     shortcut: '/favicon.ico',
@@ -102,7 +138,19 @@ const ORGANIZATION_JSON_LD = {
       legalName: COMPANY_LEGAL_NAME,
       url: SITE_URL,
       logo: `${SITE_URL}/logo.png`,
+      description: SITE_DESCRIPTION,
+      areaServed: { '@type': 'Country', name: 'India' },
+      address: { '@type': 'PostalAddress', ...REGISTERED_ADDRESS },
       email: SUPPORT_EMAIL,
+      contactPoint: [
+        {
+          '@type': 'ContactPoint',
+          contactType: 'customer support',
+          email: SUPPORT_EMAIL,
+          telephone: SUPPORT_PHONE_DISPLAY,
+          areaServed: 'IN',
+        },
+      ],
       ...(SOCIAL_LINKS.length ? { sameAs: SOCIAL_LINKS.map((s) => s.url) } : {}),
     },
     {
@@ -131,6 +179,7 @@ export default function RootLayout({
             <Toaster position="top-center" richColors closeButton />
             <NotificationProvider>{children}</NotificationProvider>
           </ListingFilterProvider>
+          <SupportButton />
         </AuthProvider>
         <JsonLd data={ORGANIZATION_JSON_LD} />
         <ConsentAnalytics />

@@ -22,6 +22,7 @@ interface FiltersSidebarProps {
   city?: string;
   count?: number;
   filters?: SearchFilters;
+  onOpenMap?: () => void;
 }
 
 function Section({
@@ -290,6 +291,7 @@ export default function FiltersSidebar({
   onReset,
   city = 'New Delhi',
   count = 0,
+  onOpenMap,
 }: FiltersSidebarProps) {
   const { filters } = useListingState();
   const {
@@ -325,7 +327,7 @@ export default function FiltersSidebar({
     <aside className="w-[280px] lg:w-[320px] xl:w-[360px] flex-shrink-0 max-w-full">
       {/* Map Preview */}
       <div className="mb-5">
-        <MapPreview city={city} count={count} />
+        <MapPreview city={city} count={count} onOpen={onOpenMap} />
       </div>
 
       {/* Filters Main Header */}

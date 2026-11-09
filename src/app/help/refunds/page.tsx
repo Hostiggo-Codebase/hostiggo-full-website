@@ -106,7 +106,7 @@ export default function RefundsHelpPage() {
                 items={[
                   <>Only confirmed bookings can be cancelled, and a refund can only be started once per booking.</>,
                   <>If the host has already been paid for the booking when you cancel, the refund isn&apos;t sent automatically. It&apos;s flagged for our team to settle manually.</>,
-                  <>If the refund fails at the payment provider, the booking is still cancelled and the refund is marked as failed for our team to follow up. Email support@hostiggo.com if you haven&apos;t received it.</>,
+                  <>If the refund fails at the payment provider, the booking is still cancelled and the refund is marked as failed for our team to follow up. Email <a href="mailto:support@hostiggo.com" className="text-figma-navy underline">support@hostiggo.com</a> if you haven&apos;t received it.</>,
                 ]}
               />
               <Note>

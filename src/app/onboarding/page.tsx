@@ -128,9 +128,7 @@ function OnboardingContent() {
 
       <div className="relative z-10 w-full max-w-[360px] mx-4 bg-white rounded-3xl shadow-2xl p-8">
         <div className="flex items-center gap-2 mb-6 justify-center">
-          <div className="w-8 h-8 bg-[#004772] rounded-full flex items-center justify-center">
-            <span className="text-white font-bold text-[16px]">H</span>
-          </div>
+          <Image src="/logo-circle.png" alt="" width={32} height={32} className="w-8 h-8 rounded-full" />
           <span className="font-black text-gray-800 text-[16px] tracking-wider uppercase">
             HOSTI<span className="text-figma-accent">GGO</span>
           </span>

@@ -17,8 +17,9 @@ boundaries.
   guest checkout breakup (property + GST, Hostiggo service fee + GST,
   breakfast + GST, other services + GST, grand total).
 - `payout.ts` -- `calculateHostPayout()`, Section 3: host payout net of
-  5% commission + 1% TCS + 1% TDS, computed only on property + add-ons
-  (never on the service fee or any GST).
+  5% commission + 1% TCS + 1% TDS, computed on the property (stay) price
+  only -- add-ons are paid to the host in full, and nothing is ever
+  computed on the service fee or any GST.
 - `refund.ts` -- `calculateRefund()`, Section 4.3: single final refund
   amount for a cancelled booking under the Flexible/Moderate/Strict
   policies.

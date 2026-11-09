@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { ACCOUNT_RE, IFSC_RE, verifyBankAccount } from "@/lib/services/kycVerify";
+import { findHostUuid } from "@/lib/services/admin-writes";
+import { findPayoutConflict } from "@/lib/services/payoutIdentity";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,12 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // One person, one account: refuse a bank account another host already
+    // uses, before spending a SurePass lookup on it. Returned as a normal
+    // `verified: false` so the form shows it like any other bank error.
+    const conflict = await findPayoutConflict(await findHostUuid(userId), { accountNumber });
+    if (conflict) return NextResponse.json({ data: { verified: false, reason: conflict } });
 
     const result = await verifyBankAccount(userId, accountNumber, ifsc, fullName);
     if (!result.verified) {

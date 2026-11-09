@@ -124,7 +124,7 @@ export default function HeroSection() {
                     letterSpacing: "0.003em",
                   }}
                 >
-                  Perfect stay
+                  Perfect homestay
                 </h1>
               </div>
 

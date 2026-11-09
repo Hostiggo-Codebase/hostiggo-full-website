@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "./ReloadingLink";
 import CopyrightBar from "./CopyrightBar";
 import CookieSettingsButton from "./CookieSettingsButton";
 import { SOCIAL_LINKS, SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, WHATSAPP_URL } from "@/lib/site";
@@ -6,6 +6,17 @@ import { SOCIAL_LINKS, SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, WHATSAPP_URL } from
 type FooterLink = { label: string; href: string; soon?: boolean };
 
 const footerSections: { title: string; links: FooterLink[] }[] = [
+  {
+    title: "Destinations",
+    links: [
+      { label: "Homestays in Bhopal", href: "/stays/bhopal" },
+      { label: "Homestays in Gurugram", href: "/stays/gurugram" },
+      { label: "Homestays in Shimla", href: "/stays/shimla" },
+      { label: "Homestays in Jaipur", href: "/stays/jaipur" },
+      { label: "Homestays in Varanasi", href: "/stays/varanasi" },
+      { label: "All destinations", href: "/stays" },
+    ],
+  },
   {
     title: "Company",
     links: [
@@ -27,6 +38,7 @@ const footerSections: { title: string; links: FooterLink[] }[] = [
   {
     title: "Support",
     links: [
+      { label: "Customer support", href: "/support" },
       { label: "Help centre", href: "/help" },
       { label: "Chat guidelines", href: "/help/chat-guidelines" },
       { label: "Refunds explained", href: "/help/refunds" },
@@ -58,8 +70,8 @@ export default function Footer() {
       {/* Main footer, figma-cream background, content in a centered 1100px container */}
       <div className="bg-figma-cream">
         <div className="mx-auto max-w-[1100px] px-6 pt-10 pb-10">
-          {/* 5 columns (Company, Hosting, Support, Legal, Talk to us) → wraps down on smaller screens */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-8 text-left">
+          {/* 6 columns (Destinations, Company, Hosting, Support, Legal, Talk to us) → wraps down on smaller screens */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-8 text-left">
             {footerSections.map((section) => (
               <div key={section.title}>
                 <h3 className="text-[18px] font-bold text-[#111827] mb-4">

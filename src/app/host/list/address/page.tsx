@@ -4,49 +4,7 @@ import { useEffect } from 'react';
 import { AlertCircle, ShieldCheck } from 'lucide-react';
 import WizardShell from '../_components/WizardShell';
 import { useListingDraft } from '@/context/ListingDraftContext';
-
-// All 28 states + 8 union territories -- the previous list only had 5
-// states, which meant a host anywhere else literally couldn't select their
-// real state (and if it happened to get auto-filled from the map pin with a
-// value not on the list, the dropdown just looked blank).
-const STATES_AND_UTS = [
-  'Andhra Pradesh',
-  'Arunachal Pradesh',
-  'Assam',
-  'Bihar',
-  'Chhattisgarh',
-  'Goa',
-  'Gujarat',
-  'Haryana',
-  'Himachal Pradesh',
-  'Jharkhand',
-  'Karnataka',
-  'Kerala',
-  'Madhya Pradesh',
-  'Maharashtra',
-  'Manipur',
-  'Meghalaya',
-  'Mizoram',
-  'Nagaland',
-  'Odisha',
-  'Punjab',
-  'Rajasthan',
-  'Sikkim',
-  'Tamil Nadu',
-  'Telangana',
-  'Tripura',
-  'Uttar Pradesh',
-  'Uttarakhand',
-  'West Bengal',
-  'Andaman and Nicobar Islands',
-  'Chandigarh',
-  'Dadra and Nagar Haveli and Daman and Diu',
-  'Delhi',
-  'Jammu and Kashmir',
-  'Ladakh',
-  'Lakshadweep',
-  'Puducherry',
-] as const;
+import { STATES_AND_UTS } from '@/lib/indianStates';
 
 export default function AddressPage() {
   const { draft, update } = useListingDraft();
@@ -133,7 +91,7 @@ export default function AddressPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">
                 State / UT

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Award, Home, MessageSquare, ShieldCheck, Star, Users } from 'lucide-react';
+import { Award, Clock, Home, MessageSquare, ShieldCheck, Star, Users } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -147,6 +147,14 @@ export default async function PublicHostProfilePage({
                   <p className="mt-1 text-sm text-gray-500">{plural(listings.length, 'active stay')}</p>
                 </div>
               </div>
+
+              <div className="mb-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">Coming soon</p>
+                    <p className="text-sm text-amber-700">Host profiles are on the way. Check back soon.</p>
+                  </div>
+                </div>
 
               {listings.length === 0 ? (
                 <div className="rounded-3xl border border-gray-200 bg-white p-10 text-center shadow-card">

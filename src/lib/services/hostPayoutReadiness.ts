@@ -1,7 +1,7 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-export type PayoutBlocker = "kyc" | "bank" | "payout";
+export type PayoutBlocker = "kyc" | "bank" | "payout" | "phone";
 
 export type HostPayoutReadiness = {
   /** A listing may be live only when this is true. */
@@ -11,12 +11,14 @@ export type HostPayoutReadiness = {
   kycVerified: boolean;
   bankVerified: boolean;
   payoutCreated: boolean;
+  phoneAdded: boolean;
 };
 
 export const PAYOUT_BLOCKER_MESSAGES: Record<PayoutBlocker, string> = {
-  kyc: "Verify your identity with PAN",
+  phone: "Add your phone number",
+  kyc: "Verify your identity (PAN)",
   bank: "Verify your bank account",
-  payout: "Finish payout setup",
+  payout: "Complete payout setup",
 };
 
 /**
@@ -35,7 +37,7 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
     .maybeSingle();
   if (hostErr) throw hostErr;
 
-  const [pan, bank, payout] = await Promise.all([
+  const [pan, bank, payout, authUser] = await Promise.all([
     supabaseAdmin
       .from("kyc_requests")
       .select("id")
@@ -61,11 +63,15 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
           .eq("host_uuid", hostRow.host_uuid)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    supabaseAdmin.auth.admin.getUserById(userId),
   ]);
   if (pan.error) throw pan.error;
   if (bank.error) throw bank.error;
   if (payout.error) throw payout.error;
 
+  // Only the phone on the Supabase Auth user counts: it is OTP-verified and
+  // unique across accounts. The profile copy (users.phone) is unverified.
+  const phoneAdded = !!authUser.data?.user?.phone;
   const kycVerified = !!pan.data;
   const bankVerified = bank.data?.status === "success";
   const p = payout.data;
@@ -75,12 +81,57 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
     !!p?.razorpay_product_id &&
     p.status !== "rejected";
 
+  // A payout account that already exists on Razorpay was created from a
+  // verified PAN, bank account and phone, so it is never asked for again: a
+  // later throttled/failed re-check or a profile change must not send the host
+  // back through setup. Only a rejected or half-created account does.
+  // Otherwise: phone first, then KYC, bank, and payout.
   const blockers: PayoutBlocker[] = [];
-  if (!kycVerified) blockers.push("kyc");
-  if (!bankVerified) blockers.push("bank");
-  if (!payoutCreated) blockers.push("payout");
+  if (!payoutCreated) {
+    if (!phoneAdded) blockers.push("phone");
+    if (!kycVerified) blockers.push("kyc");
+    if (!bankVerified) blockers.push("bank");
+    blockers.push("payout");
+  }
 
-  return { ready: blockers.length === 0, blockers, kycVerified, bankVerified, payoutCreated };
+  return { ready: blockers.length === 0, blockers, kycVerified, bankVerified, payoutCreated, phoneAdded };
+}
+
+/**
+ * Whether money for a booking can actually be routed to this host: a complete,
+ * non-rejected Razorpay Route account. This is the check a booking must pass;
+ * it is narrower than getHostPayoutReadiness (which also gates going live), so
+ * an established host isn't blocked by e.g. a later phone/KYC change.
+ */
+export async function hostHasPayoutAccount(hostUuid: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("host_payout_methods")
+    .select("razorpay_account_id, razorpay_stakeholder_id, razorpay_product_id, status")
+    .eq("host_uuid", hostUuid)
+    .maybeSingle();
+  if (error) throw error;
+  return (
+    !!data?.razorpay_account_id &&
+    !!data?.razorpay_stakeholder_id &&
+    !!data?.razorpay_product_id &&
+    data.status !== "rejected"
+  );
+}
+
+/** Shown to a guest who tries to book a listing whose host can't be paid yet. */
+export const HOST_PAYOUT_MISSING_MESSAGE =
+  "Sorry for the inconvenience! This host hasn't set up payouts yet, so this property can't be booked right now. Please look at other properties, or check back soon.";
+
+/**
+ * Deliberately has no `.code`: finalizeBookingFromRazorpayOrder treats a coded
+ * error as a transient database failure and retries, whereas this is a business
+ * rejection that must refund the guest.
+ */
+export class HostPayoutMissingError extends Error {
+  constructor() {
+    super(HOST_PAYOUT_MISSING_MESSAGE);
+    this.name = "HostPayoutMissingError";
+  }
 }
 
 export class PayoutNotReadyError extends Error {

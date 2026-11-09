@@ -2,11 +2,23 @@
 // data, the footer and the share image so they can never disagree.
 
 export const SITE_NAME = "Hostiggo";
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.hostiggo.com").replace(/\/+$/, "");
+// The apex (hostiggo.com) 308-redirects to www, so canonical tags, the sitemap
+// and structured data must name the www host. Search engines treat a canonical
+// that points at a redirecting URL as a weak, often ignored, signal.
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.hostiggo.com")
+  .replace(/\/+$/, "")
+  .replace(/^(https?:\/\/)hostiggo\.com$/i, "$1www.hostiggo.com");
 export const SITE_TAGLINE = "Book homestays across India";
 export const SITE_DESCRIPTION =
   "Book verified homestays across India with all-in nightly prices, exact refund dates, secure Razorpay payments and WhatsApp booking updates.";
 export const COMPANY_LEGAL_NAME = "Hostiggo Trips Private Limited";
+export const REGISTERED_ADDRESS = {
+  streetAddress: "C-72, Plot H-584, Shivaji Park, Punjabi Bagh, West Delhi",
+  addressLocality: "New Delhi",
+  addressRegion: "Delhi",
+  postalCode: "110026",
+  addressCountry: "IN",
+};
 export const SUPPORT_EMAIL = "support@hostiggo.com";
 export const SUPPORT_PHONE_DISPLAY = "+91 84483 37674";
 

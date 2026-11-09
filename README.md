@@ -1,6 +1,6 @@
 # Hostiggo - Hotel Booking Platform
 
-A modern hotel booking platform with a **Next.js 14 frontend**, **TypeScript backend**, and **Google Maps integration**.
+A modern hotel booking platform with a **Next.js 16 App Router frontend**, **TypeScript backend**, and **Google Maps integration**.
 
 > **Status**: Full production-ready application with search optimization, lazy loading, and native map integration.
 
@@ -63,13 +63,13 @@ npm start
 
 ### Frontend
 
-- **Framework**: Next.js 14 with App Router
+- **Framework**: Next.js 16 with App Router
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
 - **UI Components**: shadcn/ui (Radix UI primitives)
 - **State Management**: React Context API
 - **Maps**: Google Maps JavaScript API with SVG custom markers
-- **Data Fetching**: Fetch API with React Query patterns
+- **Data Fetching**: Fetch API with typed service helpers
 - **Forms**: React Hook Form
 - **Infinite Scrolling**: Custom Intersection Observer hook
 - **Icons**: Lucide React
@@ -110,7 +110,7 @@ npm start
 - **Smooth animations**: Tailwind CSS animations with shimmer effects
 - **Error handling**: Graceful fallbacks and loading states
 - **Accessible UI**: ARIA labels and semantic HTML
-- **Suspense & Streaming**: Next.js 14 Suspense boundaries with skeleton screens
+- **Suspense & Streaming**: Next.js App Router Suspense boundaries with skeleton screens
 - **Loading states**: Beautiful skeleton loaders during Supabase data fetches
 - **Shimmer animations**: Premium loading indicators for property cards
 
@@ -143,7 +143,7 @@ npm start
 - ✅ Supabase fetch loading indicators with responsive UI
 - ✅ Two skeleton variants: modern (with shimmer) and classic
 - ✅ Smooth transitions between loading, success, and error states
-- ✅ Next.js 14 Suspense boundaries for streaming data
+- ✅ Next.js App Router Suspense boundaries for streaming data
 - ✅ Reusable `LoadingState`, `PropertyCardSkeleton`, and `SearchPageSkeleton` components
 
 ## Development
@@ -157,7 +157,7 @@ Key files for development:
 - `src/components/features/SearchPageSkeleton.tsx` - Search page loading fallback
 - `src/hooks/useInfiniteScroll.ts` - Lazy loading logic
 - `src/app/search/page.tsx` - Search results page with Suspense
-- `src/lib/googleMapsUtils.ts` - Google Maps utilities
+- `src/lib/services/googleMaps.ts` - Google Maps service helpers
 
 ### Loading States
 

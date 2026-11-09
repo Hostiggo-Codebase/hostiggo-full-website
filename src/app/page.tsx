@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Script from 'next/script';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import HeroSection from '@/components/features/HeroSection';
@@ -11,9 +10,9 @@ import {
 } from '@/lib/services/cached-reference-data';
 
 export const metadata: Metadata = {
-  title: 'Hostiggo | Homestays & Unique Stays in India',
+  title: 'Hostiggo | Book Homestays, Villas & Holiday Homes in India',
   description:
-    'Explore verified homes, villas, and budget-friendly stays across India with secure booking, flexible cancellations, and transparent pricing.',
+    'Book homestays, villas and holiday homes across India. Compare all-in nightly prices, see exact refund dates, pay securely and get booking updates on WhatsApp.',
   alternates: {
     canonical: '/',
   },
@@ -71,28 +70,8 @@ async function loadHomeSections(): Promise<{ sections: HomeSection[]; error: boo
 export default async function HomePage() {
   const { sections, error } = await loadHomeSections();
 
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.hostiggo.com').replace(/\/$/, '');
-  const schema = {
-    '@context': 'https://schema.org',
-    '@type': 'WebSite',
-    name: 'Hostiggo',
-    url: siteUrl,
-    description:
-      'Hostiggo helps guests discover verified homestays and unique stays across India with secure booking and transparent policies.',
-    publisher: {
-      '@type': 'Organization',
-      name: 'Hostiggo',
-      url: siteUrl,
-    },
-  };
-
   return (
     <>
-      <Script
-        id="home-json-ld"
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-      />
       <div className="min-h-screen bg-figma-cream">
         <Navbar />
         <HeroSection />

@@ -185,6 +185,7 @@ export default function SearchPageContent() {
                   filters={filters}
                   city={displayDest}
                   count={counts.total}
+                  onOpenMap={() => setViewMode('map')}
                 />
               </div>
 
@@ -214,6 +215,10 @@ export default function SearchPageContent() {
                       }}
                       city={displayDest}
                       count={counts.total}
+                      onOpenMap={() => {
+                        setMobileSidebar(false);
+                        setViewMode('map');
+                      }}
                     />
                   </div>
                 </div>

@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { assertListingOwnedBy } from "@/lib/services/admin-writes";
-import { getHostPayoutReadiness, PayoutNotReadyError } from "@/lib/services/hostPayoutReadiness";
+import {
+  getHostPayoutReadiness,
+  PAYOUT_BLOCKER_MESSAGES,
+  type PayoutBlocker,
+} from "@/lib/services/hostPayoutReadiness";
 
 export const dynamic = "force-dynamic";
 
@@ -27,18 +31,12 @@ export async function PATCH(req: NextRequest) {
 
     // A listing that has been delisted (see ../[listingId]/delist) must not
     // be switched back on from the pause toggle.
+    let payoutBlockers: PayoutBlocker[] = [];
     if (isActive) {
-      // Going live needs a verified PAN, verified bank account and a created
-      // payout account -- otherwise bookings could be paid for with no way to
-      // pay the host.
-      const readiness = await getHostPayoutReadiness(authedUserId);
-      if (!readiness.ready) {
-        const err = new PayoutNotReadyError(readiness.blockers);
-        return NextResponse.json(
-          { error: err.message, code: "PAYOUT_NOT_READY", blockers: readiness.blockers },
-          { status: 403 },
-        );
-      }
+      // A host may resume a listing before payouts are set up. It is shown to
+      // guests, but bookings are refused until the host can be paid (see
+      // validateAndPriceBooking), so we nudge the host to finish setup below.
+      payoutBlockers = (await getHostPayoutReadiness(authedUserId)).blockers;
       const { data: row, error: rowErr } = await supabaseAdmin
         .from("listings")
         .select("delisted_at")
@@ -69,11 +67,26 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Listing not found" }, { status: 404 });
     }
 
+    const payoutPending = isActive && payoutBlockers.length > 0;
+    if (payoutPending) {
+      const { notify } = await import("@/lib/services/notifications");
+      await notify({
+        userId: authedUserId,
+        type: "host_onboarding",
+        category: "account",
+        title: "Set up payouts to receive bookings",
+        message: `${data[0].title} is live, but guests can't book it until you set up payouts. ${PAYOUT_BLOCKER_MESSAGES[payoutBlockers[0]]} to get started.`,
+        metadata: { listing_id: data[0].listing_id, property_id: data[0].listing_id, payout_blockers: payoutBlockers },
+      });
+    }
+
     return NextResponse.json({
       data: {
         listingId: data[0].listing_id,
         isActive: data[0].is_active,
         title: data[0].title,
+        payoutPending,
+        payoutBlockers,
       },
     });
   } catch (err: any) {

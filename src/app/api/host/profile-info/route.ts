@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { forbiddenResponse, requireUserId } from "@/lib/auth-server";
+import { toE164Phone } from "@/lib/phoneFormat";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,11 @@ export async function GET(req: NextRequest) {
     if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+
+    // The phone lives only on the Supabase Auth user: OTP-verified and unique
+    // across accounts. It is never copied into the users table.
+    const { data: authData } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const authPhone = toE164Phone(authData?.user?.phone);
 
     // Fetch host profile
     const { data: hostData, error: hostError } = await supabaseAdmin
@@ -71,7 +77,8 @@ export async function GET(req: NextRequest) {
     const responseData = {
       name: user.name || "Host",
       email: user.email,
-      phone: user.phone,
+      phone: authPhone,
+      phoneVerified: Boolean(authPhone),
       avatar: user.profile_pic_url || host.photo || null,
       about: host.about || "",  // From host table
       isVerified: host.is_verified || false,

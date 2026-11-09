@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createBookingWithoutPayment, validateAndPriceBooking } from "@/lib/services/admin-writes";
+import { assertNoOpenRequest, BookingRequestError, validateAndPriceBooking } from "@/lib/services/admin-writes";
 import { createRazorpayOrder } from "@/lib/billing/razorpay";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { GUEST_ID_REQUIRED, guestHasVerifiedId } from "@/lib/services/guestVerification";
+import { HostPayoutMissingError } from "@/lib/services/hostPayoutReadiness";
 import { rateLimit } from "@/lib/rateLimit";
 import { DatesUnavailableError, isDatabaseAvailabilityError } from "@/lib/stayDates";
 import {
   BOOKINGS_DISABLED,
   PAYMENTS_ENABLED,
-  UNPAID_BOOKINGS_ALLOWED,
   razorpayKeysConfigured,
   todayInIndia,
 } from "@/lib/booking-config";
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     if (
       BOOKINGS_DISABLED ||
-      (!PAYMENTS_ENABLED && !UNPAID_BOOKINGS_ALLOWED) ||
+      !PAYMENTS_ENABLED ||
       (PAYMENTS_ENABLED && !razorpayKeysConfigured())
     ) {
       return NextResponse.json(
@@ -116,11 +116,13 @@ export async function POST(req: NextRequest) {
       addonIds: normalizedAddonIds,
     };
 
-    if (UNPAID_BOOKINGS_ALLOWED) {
-      const booking = await createBookingWithoutPayment(bookingInput);
-      return NextResponse.json({ data: { paymentRequired: false, booking } });
-    }
+    // A guest who already paid for these dates and is waiting on the host can't
+    // pay again (host-approval listings hold the dates for them).
+    await assertNoOpenRequest(bookingInput);
 
+    // ALWAYS require payment up front - no unpaid bookings in dev or production.
+    // Listings with host approval take the same payment; the booking is then
+    // held as a pending request (see finalizeBookingFromRazorpayOrder).
     const priced = await validateAndPriceBooking(bookingInput);
 
     // Everything finalizeBookingFromRazorpayOrder() will need to actually
@@ -143,6 +145,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       data: {
+        paymentRequired: true,
         razorpayOrderId: order.id,
         razorpayKeyId: process.env.RAZORPAY_KEY_ID,
         amountPaise: priced.amountPaise,
@@ -153,6 +156,12 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     if (err instanceof DatesUnavailableError || isDatabaseAvailabilityError(err)) {
       return NextResponse.json({ error: "These dates are blocked or already booked. Please choose different dates.", code: "DATES_UNAVAILABLE", blockedDates: err.blockedDates ?? [] }, { status: 409 });
+    }
+    if (err instanceof BookingRequestError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
+    if (err instanceof HostPayoutMissingError) {
+      return NextResponse.json({ error: err.message, code: "HOST_PAYOUT_MISSING" }, { status: 409 });
     }
     if (err instanceof UnauthorizedError) {
       return NextResponse.json({ error: "Please sign in again." }, { status: 401 });

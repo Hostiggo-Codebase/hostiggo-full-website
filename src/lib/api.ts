@@ -2,6 +2,7 @@ import type { AmenityItem, Host, Property, Review, SearchFilters } from "@/types
 import { supabase } from "@/lib/supabase";
 import { toISODate } from "@/lib/utils";
 import type { NotificationRow } from "@/lib/notificationRules";
+import { requestDeadline, requestPhase } from "@/lib/billing/bookingRequest";
 
 /** notification_preferences row -- shared with the mobile app. */
 export type NotificationPreferences = {
@@ -230,7 +231,7 @@ export function mapListingToProperty(input: any): Property {
     isNew: Boolean(row.is_new),
     distanceFromCenter:
       typeof input?.distance === "number" ? `${(input.distance / 1000).toFixed(1)} km` : row.distance,
-    isInstantBook: row.booking_mode === "auto" || Boolean(row.isInstantBook),
+    isInstantBook: row.booking_mode !== "manual",
     freeCancellation: Boolean(row.freeCancellation),
     cancellationPolicy: (row.cancellation_policy ?? "moderate") as Property["cancellationPolicy"],
     strictPartialRefundPercent:
@@ -354,6 +355,9 @@ export function mapBooking(item: any) {
       rooms: 1,
       pets: false,
     },
+    // Set while this is a paid booking request waiting for the host to accept.
+    requestPhase: requestPhase(item),
+    requestDeadline: requestDeadline(item),
     amount: item.amount != null ? Number(item.amount) : null,
     refundAmount: item.refundAmount != null ? Number(item.refundAmount) : null,
     refundStatus: (item.refundStatus ?? null) as string | null,
@@ -483,19 +487,28 @@ export const api = {
     // real charge from the listing's own prices, see
     // validateAndPriceBooking() in src/lib/services/admin-writes.ts
   }) =>
-    request<
-      | {
-          paymentRequired: true;
-          razorpayOrderId: string;
-          razorpayKeyId: string;
-          amountPaise: number;
-          amountRupees: number;
-          currency: string;
-        }
-      | { paymentRequired: false; booking: any }
-    >(`/api/bookings/reserve`, {
+    request<{
+      paymentRequired: true;
+      razorpayOrderId: string;
+      razorpayKeyId: string;
+      amountPaise: number;
+      amountRupees: number;
+      currency: string;
+    }>(`/api/bookings/reserve`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  // Host accepts or declines a paid booking request (2h window; declining refunds the guest).
+  respondToBookingRequest: (bookingId: string | number, decision: "accept" | "reject") =>
+    request<any>("/api/bookings", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "respond", bookingId, decision }),
+    }),
+  // Guest withdraws their own pending request (refunded in full).
+  withdrawBookingRequest: (bookingId: string | number) =>
+    request<any>("/api/bookings", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "withdraw", bookingId }),
     }),
   // The booking is only actually created here, after the payment signature
   // Razorpay Checkout returns has been verified server-side.
@@ -613,31 +626,9 @@ export const api = {
     }),
   // Alternatives to PAN for identity (KYC) only -- payouts still need a
   // verified PAN. See src/app/api/verify/aadhaar and /passport.
-  verifyAadhaar: (payload: { file: File; yob: string; fullName: string; password: string }) => {
-    const form = new FormData();
-    form.append("file", payload.file);
-    form.append("yob", payload.yob);
-    form.append("fullName", payload.fullName);
-    form.append("password", payload.password);
-    return request<{ status: "verified" | "rejected" | "pending"; reason: string | null }>(
+  verifyAadhaar: (payload: { idNumber: string; fullName: string }) =>
+    request<{ status: "verified" | "rejected" | "pending"; reason: string | null }>(
       `/api/verify/aadhaar`,
-      { method: "POST", body: form },
-    );
-  },
-  // DigiLocker verification for Aadhaar (no PDF upload needed)
-  initializeDigilocker: (fullName: string) =>
-    request<{
-      clientId: string;
-      token: string;
-      expirySeconds: number;
-      ticket: string;
-    }>(`/api/verify/digilocker/initialize`, {
-      method: "POST",
-      body: JSON.stringify({ fullName }),
-    }),
-  completeDigilocker: (payload: { clientId: string; ticket: string; fullName: string }) =>
-    request<{ status: "verified" | "rejected"; reason: string | null }>(
-      `/api/verify/digilocker/complete`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
   verifyPassport: (payload: { fileNumber: string; dob: string; fullName: string }) =>
@@ -667,6 +658,10 @@ export const api = {
     comment?: string;
   }) =>
     request<any>(`/api/reviews`, { method: "POST", body: JSON.stringify(payload) }),
+  getReviewEligibility: (listingId: string | number) =>
+    request<{ canReview: boolean; reason: string | null }>(
+      `/api/reviews?listingId=${encodeURIComponent(String(listingId))}`,
+    ),
   uploadPhoto: async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append("file", file);
@@ -814,11 +809,10 @@ export const api = {
   sendEmailOtp: async (email: string) => {
     const { data, error } = await supabase.auth.signInWithOtp({
       email: normalizeEmail(email),
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo:
-          typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined,
-      },
+      // Code-only login: the 6-digit code comes from {{ .Token }} in the Supabase
+      // email templates (see supabase/templates/README.md). No emailRedirectTo --
+      // that is only for link emails, and passing one invites the link flow.
+      options: { shouldCreateUser: true },
     });
     if (error) throw error;
     return data;

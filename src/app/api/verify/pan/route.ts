@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { PAN_RE, verifyPanNumber } from "@/lib/services/kycVerify";
+import { findHostUuid } from "@/lib/services/admin-writes";
+import { findPayoutConflict } from "@/lib/services/payoutIdentity";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,11 @@ export async function POST(req: NextRequest) {
     if (fullName.length < 2) {
       return NextResponse.json({ error: "Enter your full name as it appears on your PAN." }, { status: 400 });
     }
+
+    // One person, one account: refuse a PAN another host already uses, before
+    // spending a SurePass lookup on it.
+    const conflict = await findPayoutConflict(await findHostUuid(userId), { pan: idNumber });
+    if (conflict) return NextResponse.json({ error: conflict }, { status: 409 });
 
     const { status, reason, providerReference } = await verifyPanNumber(userId, idNumber, fullName);
 

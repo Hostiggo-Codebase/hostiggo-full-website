@@ -34,9 +34,7 @@ function KycContent() {
       <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]" />
 
       <div className="absolute top-6 left-8 z-10 flex items-center gap-2">
-        <div className="w-8 h-8 bg-[#004772] rounded-full flex items-center justify-center">
-          <span className="text-white font-bold text-[16px]">H</span>
-        </div>
+        <Image src="/logo-circle.png" alt="" width={32} height={32} className="w-8 h-8 rounded-full" />
         <span className="font-black text-white text-[16px] tracking-wider uppercase drop-shadow">
           HOSTI<span className="text-figma-accent">GGO</span>
         </span>

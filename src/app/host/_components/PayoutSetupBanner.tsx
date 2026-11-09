@@ -3,12 +3,13 @@
 import Link from 'next/link';
 import { CheckCircle2, Circle } from 'lucide-react';
 
-export type PayoutBlocker = 'kyc' | 'bank' | 'payout';
+export type PayoutBlocker = 'kyc' | 'bank' | 'payout' | 'phone';
 
 const STEPS: Array<{ key: PayoutBlocker; label: string }> = [
+  { key: 'phone', label: 'Add your phone number' },
   { key: 'kyc', label: 'Verify your identity (PAN)' },
   { key: 'bank', label: 'Verify your bank account' },
-  { key: 'payout', label: 'Payout account created' },
+  { key: 'payout', label: 'Complete payout setup' },
 ];
 
 /** Shown while a host's listings can't go live because payouts aren't set up. */
@@ -16,9 +17,9 @@ export default function PayoutSetupBanner({ blockers }: { blockers: PayoutBlocke
   if (blockers.length === 0) return null;
   return (
     <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
-      <h2 className="text-base font-bold text-amber-900">Finish payout setup to go live</h2>
+      <h2 className="text-base font-bold text-amber-900">Finish payout setup to receive bookings</h2>
       <p className="mt-1 text-sm text-amber-800">
-        Your listings stay hidden from guests until we can pay you. This takes a few minutes.
+        Guests can&apos;t book your listings until we can pay you, and new listings stay paused. This takes a few minutes.
       </p>
       <ol className="mt-4 space-y-2">
         {STEPS.map((s) => {
@@ -36,7 +37,7 @@ export default function PayoutSetupBanner({ blockers }: { blockers: PayoutBlocke
         })}
       </ol>
       <Link
-        href="/host/settings?tab=payouts"
+        href={`/host/settings?tab=${blockers.includes('phone') ? 'personal' : 'payouts'}`}
         className="mt-4 inline-flex rounded-xl bg-figma-navy px-4 py-2 text-sm font-semibold text-white hover:bg-figma-navy/90"
       >
         Set up payouts
