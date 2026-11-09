@@ -2,6 +2,7 @@ import type { AmenityItem, Host, Property, Review, SearchFilters } from "@/types
 import { supabase } from "@/lib/supabase";
 import { toISODate } from "@/lib/utils";
 import type { NotificationRow } from "@/lib/notificationRules";
+import { requestDeadline, requestPhase } from "@/lib/billing/bookingRequest";
 
 /** notification_preferences row -- shared with the mobile app. */
 export type NotificationPreferences = {
@@ -230,7 +231,7 @@ export function mapListingToProperty(input: any): Property {
     isNew: Boolean(row.is_new),
     distanceFromCenter:
       typeof input?.distance === "number" ? `${(input.distance / 1000).toFixed(1)} km` : row.distance,
-    isInstantBook: row.booking_mode === "auto" || Boolean(row.isInstantBook),
+    isInstantBook: row.booking_mode !== "manual",
     // The host's payouts are still being set up, so the stay can't be booked yet.
     bookingsComingSoon: row.host_payouts_ready === false,
     freeCancellation: Boolean(row.freeCancellation),
@@ -356,6 +357,9 @@ export function mapBooking(item: any) {
       rooms: 1,
       pets: false,
     },
+    // Set while this is a paid booking request waiting for the host to accept.
+    requestPhase: requestPhase(item),
+    requestDeadline: requestDeadline(item),
     amount: item.amount != null ? Number(item.amount) : null,
     refundAmount: item.refundAmount != null ? Number(item.refundAmount) : null,
     refundStatus: (item.refundStatus ?? null) as string | null,
@@ -495,6 +499,18 @@ export const api = {
     }>(`/api/bookings/reserve`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  // Host accepts or declines a paid booking request (2h window; declining refunds the guest).
+  respondToBookingRequest: (bookingId: string | number, decision: "accept" | "reject") =>
+    request<any>("/api/bookings", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "respond", bookingId, decision }),
+    }),
+  // Guest withdraws their own pending request (refunded in full).
+  withdrawBookingRequest: (bookingId: string | number) =>
+    request<any>("/api/bookings", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "withdraw", bookingId }),
     }),
   // The booking is only actually created here, after the payment signature
   // Razorpay Checkout returns has been verified server-side.

@@ -253,3 +253,13 @@ input:checked + .toggle-slider::before {
 .anchor-below-header {
   scroll-margin-top: calc(var(--site-header-h) + 1rem);
 }
+
+/* Host dashboard on phones: iOS Safari zooms into any focused field under
+   16px and never zooms back out, which breaks the layout for hosts. */
+@media (max-width: 1023px) {
+  .host-dashboard input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .host-dashboard select,
+  .host-dashboard textarea {
+    font-size: 16px;
+  }
+}

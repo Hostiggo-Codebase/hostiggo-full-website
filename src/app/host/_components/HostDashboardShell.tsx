@@ -58,7 +58,7 @@ function SidebarContent({
 }) {
   return (
     <>
-      <div className="mb-10 px-2">
+      <div className="mb-6 lg:mb-10 px-2 pr-12 lg:pr-2">
         <Link href="/" onClick={onNavigate} className="flex items-center gap-2.5">
           <Image
             src="/logo.png"
@@ -74,7 +74,7 @@ function SidebarContent({
           <p className="text-sm text-gray-500 mt-1">Host Dashboard</p>
         </div>
       </div>
-      <div className="flex-1 space-y-1">
+      <div className="flex-1 space-y-1 overflow-y-auto">
         {NAV.map((item) => {
           const Icon = item.icon;
           const on = item.key === active;
@@ -139,7 +139,7 @@ export default function HostDashboardShell({
   // host profile API so an unset photo looks the same everywhere.
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5] text-gray-800 lg:pl-64">
+    <div className="host-dashboard min-h-screen overflow-x-clip bg-[#f0f2f5] text-gray-800 lg:pl-64">
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col h-screen fixed left-0 top-0 py-8 px-4 border-r border-gray-200 bg-white w-64 z-40">
         <SidebarContent active={active} onLogout={handleLogout} />
@@ -147,16 +147,16 @@ export default function HostDashboardShell({
 
       {/* Mobile drawer */}
       {drawerOpen && (
-        <div className="lg:hidden fixed inset-0 z-50">
+        <div className="lg:hidden fixed inset-0 z-50" role="dialog" aria-modal="true">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setDrawerOpen(false)}
           />
-          <aside className="absolute left-0 top-0 h-full w-72 max-w-[85%] bg-white flex flex-col py-8 px-4 shadow-2xl animate-slide-up">
+          <aside className="absolute left-0 top-0 h-full w-72 max-w-[85%] bg-white flex flex-col py-6 px-4 shadow-2xl overflow-y-auto overscroll-contain">
             <button
               onClick={() => setDrawerOpen(false)}
               aria-label="Close menu"
-              className="absolute top-4 right-4 p-2 text-gray-500 hover:bg-gray-100 rounded-full"
+              className="absolute top-3 right-3 p-2.5 text-gray-500 hover:bg-gray-100 rounded-full"
             >
               <X className="w-5 h-5" />
             </button>
@@ -170,12 +170,12 @@ export default function HostDashboardShell({
       )}
 
       {/* Top bar */}
-      <header className="sticky top-0 z-30 flex justify-between items-center px-4 md:px-10 h-16 bg-white/80 backdrop-blur-md border-b border-gray-200">
+      <header className="sticky top-0 z-30 flex justify-between items-center px-3 sm:px-4 md:px-10 h-16 bg-white/80 backdrop-blur-md border-b border-gray-200">
         <div className="flex items-center gap-2 lg:hidden">
           <button
             onClick={() => setDrawerOpen(true)}
             aria-label="Open menu"
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="p-2.5 -ml-1 text-gray-600 hover:bg-gray-100 rounded-lg"
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -186,16 +186,16 @@ export default function HostDashboardShell({
               width={24}
               height={24}
             />
-            <span className="text-lg font-extrabold text-gray-900">
+            <span className="text-base sm:text-lg font-extrabold text-gray-900">
               HOSTI<span className="text-figma-navy">GGO</span>
             </span>
           </Link>
         </div>
         <div className="hidden lg:block" />
-        <div className="flex items-center gap-2 md:gap-3">
+        <div className="flex items-center gap-1 sm:gap-2 md:gap-3 shrink-0">
           <Link
             href="/host/list/method"
-            className="flex items-center gap-2 bg-figma-navy text-white px-4 sm:px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-figma-navy/90 transition-all active:scale-[0.99]"
+            className="flex items-center gap-2 bg-figma-navy text-white px-3 sm:px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-figma-navy/90 transition-all active:scale-[0.99]" aria-label="Create listing"
           >
             <Plus className="w-5 h-5" />
             <span className="hidden sm:inline">Create Listing</span>
@@ -203,7 +203,7 @@ export default function HostDashboardShell({
           <Link
             href="/notifications"
             aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"}
-            className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-all"
+            className="relative p-2.5 text-gray-500 hover:bg-gray-100 rounded-full transition-all"
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -228,7 +228,7 @@ export default function HostDashboardShell({
         </div>
       </header>
 
-      <main className="px-4 sm:px-6 md:px-10 py-8 max-w-7xl mx-auto">
+      <main className="px-4 sm:px-6 md:px-10 py-5 sm:py-8 max-w-7xl mx-auto min-w-0">
         <KycStatusBanner />
         {children}
       </main>
@@ -247,16 +247,16 @@ export function DashboardHeading({
   actions?: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
+    <section className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 mb-6 md:mb-8">
+      <div className="min-w-0">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
           {title}
         </h1>
         {subtitle && (
-          <p className="text-base text-gray-500 mt-2 max-w-2xl">{subtitle}</p>
+          <p className="text-sm sm:text-base text-gray-500 mt-1.5 sm:mt-2 max-w-2xl">{subtitle}</p>
         )}
       </div>
-      {actions && <div className="flex flex-wrap gap-3">{actions}</div>}
+      {actions && <div className="flex flex-wrap gap-3 [&>*]:max-sm:flex-1 [&>*]:max-sm:justify-center">{actions}</div>}
     </section>
   );
 }

@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { bookingsAPI } from "@/lib/services/bookings";
-import { createReview, ReviewNotAllowedError } from "@/lib/services/admin-writes";
+import {
+  BookingRequestError,
+  createReview,
+  respondToBookingRequest,
+  ReviewNotAllowedError,
+  withdrawBookingRequest,
+} from "@/lib/services/admin-writes";
+import { HostPayoutMissingError } from "@/lib/services/hostPayoutReadiness";
+import { DatesUnavailableError } from "@/lib/stayDates";
 import { errorMessage } from "@/lib/api-error";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 
@@ -54,6 +62,25 @@ export async function PATCH(req: NextRequest) {
     // assertOwnsBooking for the confirmed incident this line prevents.
     const userId = await getAuthenticatedUserId(req);
 
+    // Host accepts/declines a booking request (see respondToBookingRequest).
+    if (action === "respond") {
+      if (body.decision !== "accept" && body.decision !== "reject") {
+        return NextResponse.json({ error: "decision must be accept or reject" }, { status: 400 });
+      }
+      const data = await respondToBookingRequest({
+        bookingId: Number(bookingId),
+        hostUserId: userId,
+        decision: body.decision,
+      });
+      return NextResponse.json({ data });
+    }
+
+    // Guest withdraws their own unpaid request.
+    if (action === "withdraw") {
+      const data = await withdrawBookingRequest(Number(bookingId), userId);
+      return NextResponse.json({ data });
+    }
+
     if (action === "dates") {
       const data = await bookingsAPI.updateBookingDates(bookingId, body.checkIn, body.checkOut, userId);
       return NextResponse.json({ data });
@@ -91,6 +118,15 @@ export async function PATCH(req: NextRequest) {
   } catch (err) {
     if (err instanceof UnauthorizedError) {
       return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    if (err instanceof BookingRequestError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
+    if (err instanceof DatesUnavailableError) {
+      return NextResponse.json({ error: err.message, code: "DATES_UNAVAILABLE" }, { status: 409 });
+    }
+    if (err instanceof HostPayoutMissingError) {
+      return NextResponse.json({ error: err.message, code: "HOST_PAYOUT_MISSING" }, { status: 409 });
     }
     return jsonError(err);
   }

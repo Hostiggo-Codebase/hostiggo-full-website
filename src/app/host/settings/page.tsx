@@ -21,6 +21,7 @@ import {
   Mail,
   ShieldAlert,
   HelpCircle,
+  CalendarCheck,
   type LucideIcon,
 } from 'lucide-react';
 import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboardShell';
@@ -51,6 +52,7 @@ interface ProfileData {
   avatar: string;
   about: string;
   isVerified: boolean;
+  instantBooking?: boolean;
   stats: {
     rating: number | string;
     reviews: number;
@@ -70,7 +72,7 @@ function SettingsLinkRow({
   desc: string;
 }) {
   return (
-    <Link href={href} className="flex items-center gap-4 p-6 hover:bg-gray-50 transition-colors">
+    <Link href={href} className="flex items-center gap-3 sm:gap-4 p-4 sm:p-6 hover:bg-gray-50 transition-colors">
       <div className="w-11 h-11 rounded-xl bg-figma-navy/5 flex items-center justify-center text-figma-navy shrink-0">
         <Icon className="w-5 h-5" />
       </div>
@@ -328,6 +330,33 @@ export default function HostSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  const [savingInstant, setSavingInstant] = useState(false);
+  // Instant Book is on unless the host has turned it off.
+  const instantOn = profile?.instantBooking !== false;
+  const handleInstantBookingToggle = async () => {
+    if (!profile || savingInstant) return;
+    const next = profile.instantBooking === false;
+    setSavingInstant(true);
+    try {
+      const res = await fetch('/api/host/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, instantBooking: next }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'Could not update the setting.');
+      setProfile({ ...profile, instantBooking: next });
+      if (next) {
+        toast.success('Instant Book is on. Guests can now book your stays without waiting for approval.');
+      } else {
+        toast.success("Instant Book is off. Guests pay upfront and you'll need to accept each booking within 2 hours, otherwise they're refunded.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the setting.');
+    } finally {
+      setSavingInstant(false);
+    }
+  };
+
   const toAuthPhone = () => `+91${phone.replace(/\D/g, '').slice(-10)}`;
   const phoneValid = phone.replace(/\D/g, '').slice(-10).length === 10;
   const phoneVerified = Boolean(
@@ -449,9 +478,9 @@ export default function HostSettingsPage() {
 
       <div className="flex flex-col md:flex-row gap-6">
         {/* Settings nav */}
-        <div className="w-full md:w-64 shrink-0">
+        <div className="w-full md:w-64 shrink-0 min-w-0">
           <div className="bg-white rounded-2xl p-2 shadow-card border border-gray-200">
-            <nav className="flex flex-col space-y-1">
+            <nav className="flex md:flex-col gap-1 overflow-x-auto scrollbar-hide">
               {NAV.map((n) => {
                 const Icon = n.icon;
                 const on = tab === n.id;
@@ -460,7 +489,7 @@ export default function HostSettingsPage() {
                     key={n.id}
                     onClick={() => setTab(n.id)}
                     className={cn(
-                      'flex items-center justify-between px-4 py-3 rounded-xl transition-all text-sm',
+                      'flex items-center justify-between gap-2 shrink-0 md:shrink md:w-full whitespace-nowrap px-4 py-3 rounded-xl transition-all text-sm',
                       on
                         ? 'bg-figma-navy text-white font-semibold'
                         : 'text-gray-500 hover:bg-gray-100',
@@ -476,16 +505,16 @@ export default function HostSettingsPage() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 space-y-6">
+        <div className="flex-1 min-w-0 space-y-4 sm:space-y-6">
           {tab === 'personal' && (loadingProfile ? (
-            <div className="bg-white rounded-2xl p-16 shadow-card border border-gray-200 flex justify-center">
+            <div className="bg-white rounded-2xl p-10 sm:p-16 shadow-card border border-gray-200 flex justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
             </div>
           ) : (
             <>
               {/* Profile header */}
-              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
-                <div className="flex flex-col sm:flex-row items-center gap-6">
+              <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
+                <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
                   <div className="relative">
                     <UserAvatar
                       src={profile?.avatar}
@@ -526,7 +555,7 @@ export default function HostSettingsPage() {
               </div>
 
               {/* Fields */}
-              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
+              <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Personal Details</h3>
                 {(!name.trim() || !email.trim() || !phone.trim()) && (
                   <div className="mb-6 flex items-start gap-2 p-4 rounded-xl bg-amber-50 border border-amber-200">
@@ -580,7 +609,7 @@ export default function HostSettingsPage() {
                     {phoneVerified ? (
                       <VerifiedBadge ok />
                     ) : (
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {otpSent && (
                           <input
                             inputMode="numeric"
@@ -588,14 +617,14 @@ export default function HostSettingsPage() {
                             placeholder="6-digit code"
                             value={otpCode}
                             onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                            className="w-36 px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
+                            className="w-32 sm:w-36 px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none"
                           />
                         )}
                         <button
                           type="button"
                           disabled={phoneBusy || (otpSent && otpCode.length < 6)}
                           onClick={otpSent ? confirmPhoneOtp : sendPhoneOtp}
-                          className="px-4 py-2 rounded-xl bg-figma-navy text-white text-sm font-bold disabled:opacity-60"
+                          className="px-4 py-2.5 rounded-xl bg-figma-navy text-white text-sm font-bold disabled:opacity-60"
                         >
                           {phoneBusy ? 'Please wait…' : otpSent ? 'Verify code' : 'Send code'}
                         </button>
@@ -623,7 +652,7 @@ export default function HostSettingsPage() {
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-8 py-3 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="w-full sm:w-auto justify-center px-8 py-3 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                     {saving ? 'Saving…' : 'Save Changes'}
@@ -699,9 +728,9 @@ export default function HostSettingsPage() {
 
           {tab === 'payouts' && (
             <>
-              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
+              <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200">
+                <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+                  <div className="min-w-0">
                     <h3 className="text-lg font-bold text-gray-800">Payout Methods</h3>
                     <p className="text-sm text-gray-500">
                       Manage how you receive your hosting earnings.{' '}
@@ -760,7 +789,7 @@ export default function HostSettingsPage() {
                   </div>
                 ) : !editingPayoutMethod && payoutMethod ? (
                   <div className="space-y-4">
-                    <div className="p-5 rounded-xl border border-gray-200 grid grid-cols-2 gap-4">
+                    <div className="p-4 sm:p-5 rounded-xl border border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-4 [&_p]:break-words">
                       <div>
                         <p className="text-xs font-semibold text-gray-500 mb-0.5">Account holder</p>
                         <p className="text-sm font-medium text-gray-900">{payoutMethod.account_holder_name}</p>
@@ -799,7 +828,7 @@ export default function HostSettingsPage() {
                           <p className="text-sm font-medium text-gray-900">{payoutMethod.upi_id}</p>
                         </div>
                       )}
-                      <div className="col-span-2">
+                      <div className="sm:col-span-2">
                         <p className="text-xs font-semibold text-gray-500 mb-0.5">Address</p>
                         <p className="text-sm font-medium text-gray-900">
                           {[payoutMethod.address_line1, payoutMethod.city, payoutMethod.state, payoutMethod.postal_code]
@@ -838,8 +867,8 @@ export default function HostSettingsPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="col-span-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
                         <label className="block text-xs font-bold text-gray-500 mb-1">
                           Account holder name (exactly as on your bank account and PAN) <span className="text-red-500">*</span>
                         </label>
@@ -934,7 +963,7 @@ export default function HostSettingsPage() {
                           className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
                         />
                       </div>
-                      <div className="col-span-2">
+                      <div className="sm:col-span-2">
                         <label className="block text-xs font-bold text-gray-500 mb-1">Address <span className="text-red-500">*</span></label>
                         <input
                           type="text"
@@ -984,7 +1013,7 @@ export default function HostSettingsPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3 [&>button]:justify-center">
                       <button
                         onClick={handleSavePayoutMethod}
                         disabled={savingPayoutMethod}
@@ -1005,9 +1034,9 @@ export default function HostSettingsPage() {
                   </div>
                 )}
               </div>
-              <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-200 flex items-center justify-between">
-                <div className="flex items-center gap-6">
-                  <div className="w-14 h-14 rounded-full bg-figma-navy/5 flex items-center justify-center text-figma-navy">
+              <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-card border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4 sm:gap-6">
+                  <div className="w-14 h-14 shrink-0 rounded-full bg-figma-navy/5 flex items-center justify-center text-figma-navy">
                     <ShieldCheck className="w-8 h-8" />
                   </div>
                   <div>
@@ -1033,7 +1062,7 @@ export default function HostSettingsPage() {
                 ) : (
                   <Link
                     href="/kyc?redirect=/host/settings"
-                    className="px-5 py-2.5 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90 active:scale-95 transition-all whitespace-nowrap"
+                    className="px-5 py-2.5 bg-figma-navy text-white rounded-xl font-bold hover:bg-figma-navy/90 active:scale-95 transition-all whitespace-nowrap text-center"
                   >
                     {kycStatus === 'rejected' ? 'Re-verify' : 'Verify now'}
                   </Link>

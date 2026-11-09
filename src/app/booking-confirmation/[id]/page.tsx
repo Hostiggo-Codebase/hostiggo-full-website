@@ -41,6 +41,7 @@ import {
 import { downloadBookingReceipt, type ReceiptLine } from '@/lib/bookingReceipt';
 import { formatINR, formatStayDate, formatTime12h, plural, REFUND_ARRIVAL_NOTE } from '@/lib/format';
 import { todayInIndia } from '@/lib/booking-config';
+import { formatTimeLeft, requestDeadline, requestPhase } from '@/lib/billing/bookingRequest';
 
 const STATUS_PENDING = 1;
 const STATUS_CONFIRMED = 2;
@@ -61,6 +62,8 @@ type BookingDetail = {
   invoice: { lineItems?: InvoiceLineItem[]; grandTotalPaise?: number } | null;
   invoice_number: string | null;
   razorpay_payment_id: string | null;
+  razorpay_order_id?: string | null;
+  cancellation_reason?: string | null;
   paid_at: string | null;
   booked_at: string | null;
   host_uuid: string | null;
@@ -235,6 +238,30 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
   const isUpcoming = booking.start_date >= todayInIndia();
   const reference = booking.invoice_number || `HG-${booking.booking_id}`;
 
+  // Paid booking request: waiting for the host to accept (2h), else refunded in full.
+  const phase = requestPhase(booking);
+  const deadline = requestDeadline(booking);
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!phase) return;
+    const t = setInterval(() => setTick(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [phase]);
+  const [requestBusy, setRequestBusy] = useState(false);
+
+  const withdrawRequest = async () => {
+    setRequestBusy(true);
+    try {
+      await api.withdrawBookingRequest(booking.booking_id);
+      toast.success('Request cancelled. Your payment is being refunded in full.');
+      window.location.reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't cancel the request.");
+    } finally {
+      setRequestBusy(false);
+    }
+  };
+
   const photos = useMemo(() => {
     const media = property?.listing_media ?? [];
     const cover = media.find((m) => m.is_cover)?.media_url;
@@ -331,7 +358,7 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
       await downloadBookingReceipt({
         reference,
         bookingId: booking.booking_id,
-        status: status === STATUS_CONFIRMED ? 'Confirmed' : status === STATUS_CANCELLED ? 'Cancelled' : 'Pending payment',
+        status: status === STATUS_CONFIRMED ? 'Confirmed' : status === STATUS_CANCELLED ? 'Cancelled' : phase === 'awaiting_host' ? 'Awaiting host' : 'Pending',
         paidAt: booking.paid_at,
         paymentId: booking.razorpay_payment_id,
         guestName: booking.guest?.name,
@@ -423,6 +450,31 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
             </button>
           )}
         </div>
+      </div>
+    ) : phase && isGuest ? (
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-400/50 bg-amber-50 px-4 py-3.5">
+        <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+        <div className="min-w-0">
+          <p className="text-[15px] font-semibold text-amber-800">Waiting for the host to accept</p>
+          <p className="text-[13px] text-[#1A1A1A]/65">
+            {`You've paid ${formatINR(total)}. The host has ${deadline != null && deadline > tick ? formatTimeLeft(deadline - tick) : 'a few minutes'} left to accept. If they decline or don't respond, your booking is cancelled and you're refunded in full automatically.`}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={requestBusy}
+              onClick={withdrawRequest}
+              className="inline-flex h-10 items-center rounded-full border border-black/15 bg-white px-5 text-[13px] font-semibold text-[#1A1A1A]/70 hover:bg-gray-50 disabled:opacity-60"
+            >
+              {requestBusy ? 'Cancelling…' : 'Cancel request'}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : phase ? (
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-400/50 bg-amber-50 px-4 py-3.5">
+        <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+        <p className="text-[15px] font-semibold text-amber-800">Waiting for the host to respond</p>
       </div>
     ) : (
       <div className="flex items-start gap-3 rounded-2xl border border-amber-400/50 bg-amber-50 px-4 py-3.5">

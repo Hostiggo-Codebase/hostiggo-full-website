@@ -1144,8 +1144,8 @@ function BookingWidget({
         numChildren: 0,
         addonIds: selectedAddonIds,
       });
-      
-      // Payment is ALWAYS required
+
+      // Payment is ALWAYS required up front, for Instant Book and host-approval stays alike.
       if (!order?.razorpayOrderId || !order?.razorpayKeyId) {
         toast.error('Payment is required to complete bookings. Please contact support.');
         setStatus('available');
@@ -1226,13 +1226,22 @@ function BookingWidget({
         return;
       }
       setStatus('confirmed');
-      track("purchase", {
-        transaction_id: created.booking_id,
-        item_id: property.id,
-        value: order.amountRupees,
-        currency: "INR",
-      });
-      toast.success('Booking confirmed!');
+      // A host-approval stay comes back pending (status 1): paid, waiting for the
+      // host to accept within 2h, refunded in full otherwise.
+      if (created.status_id === 1) {
+        track("booking_request", { item_id: property.id, currency: "INR" });
+        toast.success("Payment received and request sent! The host has 2 hours to accept; if they don't, you'll be refunded in full.", {
+          duration: 8000,
+        });
+      } else {
+        track("purchase", {
+          transaction_id: created.booking_id,
+          item_id: property.id,
+          value: order.amountRupees,
+          currency: "INR",
+        });
+        toast.success('Booking confirmed!');
+      }
       router.push(`/booking-confirmation/${created.booking_id}`);
     } catch (err) {
       console.error("[property] booking failed:", err);
@@ -1508,7 +1517,9 @@ function BookingWidget({
             <CalendarDays className="w-4 h-4" />
             {status === "booking"
               ? "Booking…"
-              : `Book for ${nights} Night${nights > 1 ? "s" : ""}`}
+              : property.isInstantBook
+                ? `Book for ${nights} Night${nights > 1 ? "s" : ""}`
+                : `Pay & request · ${nights} Night${nights > 1 ? "s" : ""}`}
           </button>
         )
       ) : (
@@ -1532,6 +1543,11 @@ function BookingWidget({
         {property.freeCancellation && (
           <p className="text-center text-[11px] text-emerald-600 font-semibold flex items-center justify-center gap-1">
             <CheckCircle className="w-3 h-3" /> Free cancellation available
+          </p>
+        )}
+        {!property.isInstantBook && (
+          <p className="text-center text-[11px] text-gray-500 leading-snug">
+            You pay now and the host has 2 hours to accept. If they decline or don&apos;t respond, you&apos;re refunded in full.
           </p>
         )}
         {property.isInstantBook && (

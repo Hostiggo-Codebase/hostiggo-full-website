@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     // Real listing count for this host.
     const { data: hostListings, error: listingsError } = await supabaseAdmin
       .from("listings")
-      .select("listing_id")
+      .select("listing_id, booking_mode")
       .eq("host_uuid", host.host_uuid);
     if (listingsError) throw listingsError;
 
@@ -82,6 +82,8 @@ export async function GET(req: NextRequest) {
       avatar: user.profile_pic_url || host.photo || null,
       about: host.about || "",  // From host table
       isVerified: host.is_verified || false,
+      // Instant Book is the default: off only when a listing requires host approval.
+      instantBooking: !(hostListings ?? []).some((l: any) => l.booking_mode === "manual"),
       stats: {
         rating: avgRating,
         reviews: reviewCount,

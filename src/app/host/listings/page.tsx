@@ -48,7 +48,7 @@ function ListingSkeleton() {
   return (
     <div className="bg-white rounded-2xl shadow-card overflow-hidden border border-gray-100">
       <div className="aspect-[4/3] bg-gray-100 animate-pulse" />
-      <div className="p-6 space-y-3">
+      <div className="p-4 sm:p-6 space-y-3">
         <div className="h-4 bg-gray-100 rounded animate-pulse w-2/3" />
         <div className="h-3 bg-gray-100 rounded animate-pulse w-1/2" />
         <div className="h-3 bg-gray-100 rounded animate-pulse w-1/3" />
@@ -182,7 +182,7 @@ export default function MyListingsPage() {
         actions={
           <Link
             href="/host/list/method"
-            className="flex items-center gap-2 bg-figma-navy text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-figma-navy/90 transition-all"
+            className="flex items-center gap-2 bg-figma-navy text-white px-4 py-3 sm:py-2.5 rounded-xl text-sm font-semibold hover:bg-figma-navy/90 transition-all"
           >
             <Plus className="w-5 h-5" />
             New listing
@@ -193,7 +193,7 @@ export default function MyListingsPage() {
       {!loading && !error && <PayoutSetupBanner blockers={blockers} />}
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <ListingSkeleton key={i} />
           ))}
@@ -229,7 +229,7 @@ export default function MyListingsPage() {
           <p className="text-sm text-gray-400 mb-4">
             Showing {listings.length} of {total} listings
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
             {listings.map((l) => (
               <article
                 key={l.id}
@@ -261,7 +261,7 @@ export default function MyListingsPage() {
                       {l.active ? 'Live' : blockers.length > 0 ? 'Not live yet' : 'Paused'}
                     </span>
                   </div>
-                  <div className="absolute inset-0 bg-figma-navy/20 flex flex-col items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div className="absolute inset-0 bg-figma-navy/20 flex flex-col items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 [@media(hover:none)]:hidden">
                     <Link
                       href={`/host/listings/manage?id=${l.id}`}
                       className="bg-white text-figma-navy px-6 py-3 rounded-xl font-bold shadow-lg translate-y-4 group-hover:translate-y-0 transition-transform duration-300 flex items-center gap-2"
@@ -291,7 +291,7 @@ export default function MyListingsPage() {
                     </button>
                   </div>
                 </div>
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   <div className="flex justify-between items-start mb-2 gap-3">
                     <h3 className="text-lg font-bold text-gray-800 truncate">{l.name}</h3>
                     <span className="text-lg font-bold text-figma-navy whitespace-nowrap">
@@ -303,6 +303,28 @@ export default function MyListingsPage() {
                     <MapPin className="w-4 h-4 shrink-0" />
                     <span className="truncate">{l.location}</span>
                   </p>
+                  {/* Touch screens have no hover, so the actions live on the card. */}
+                  <div className="hidden [@media(hover:none)]:flex gap-2 mt-4">
+                    <Link
+                      href={`/host/listings/manage?id=${l.id}`}
+                      className="flex-1 inline-flex items-center justify-center gap-2 bg-figma-navy text-white py-2.5 rounded-xl text-sm font-bold"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      Edit
+                    </Link>
+                    <button
+                      onClick={() => handleToggleListing(l.id, l.active)}
+                      disabled={togglingId === l.id}
+                      className={cn(
+                        'flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white',
+                        l.active ? 'bg-yellow-500' : 'bg-green-500',
+                        togglingId === l.id && 'opacity-60',
+                      )}
+                    >
+                      {l.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                      {l.active ? 'Pause' : blockers.length > 0 ? 'Go live' : 'Reactivate'}
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
