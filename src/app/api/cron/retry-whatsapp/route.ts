@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { retryFailedWhatsAppMessages } from "@/lib/services/whatsappRetry";
+import { sweepBookingRequests } from "@/lib/services/admin-writes";
 
 // Vercel Cron calls GET (with `Authorization: Bearer $CRON_SECRET`); POST is
 // kept for manual triggers.
@@ -23,7 +24,17 @@ export async function POST(request: NextRequest) {
       limit: 100,
     });
 
-    return NextResponse.json({ success: true, results });
+    // Same 5-minute tick also expires unanswered/unpaid booking requests and
+    // sends their reminders. Isolated so neither job can fail the other.
+    let requests: Awaited<ReturnType<typeof sweepBookingRequests>> | { error: string };
+    try {
+      requests = await sweepBookingRequests();
+    } catch (err: any) {
+      console.error("[retry-whatsapp] booking request sweep failed:", err);
+      requests = { error: err?.message ?? "sweep failed" };
+    }
+
+    return NextResponse.json({ success: true, results, requests });
   } catch (err: any) {
     console.error("[retry-whatsapp] Error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

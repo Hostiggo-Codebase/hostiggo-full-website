@@ -14,6 +14,9 @@ import HostDashboardShell, { DashboardHeading } from '../_components/HostDashboa
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import BookingRequestModal from '@/components/features/BookingRequestModal';
+import { formatTimeLeft, isUnconfirmedRequest, requestDeadline, requestPhase, type RequestPhase } from '@/lib/billing/bookingRequest';
 
 type Booking = {
   id: string;
@@ -23,6 +26,9 @@ type Booking = {
   guests: number;
   amount: number;
   bucket: 'today' | 'upcoming' | 'past';
+  // Set while this is an unpaid booking request rather than a booking.
+  phase: RequestPhase | null;
+  deadline: number | null;
 };
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -47,6 +53,8 @@ const mapBooking = (row: any): Booking => {
     guests: Number(row.nom_guests ?? (row.num_adults ?? 0) + (row.num_children ?? 0)) || 1,
     amount: Number(row.amount ?? 0),
     bucket,
+    phase: requestPhase(row),
+    deadline: requestDeadline(row),
   };
 };
 
@@ -70,6 +78,13 @@ export default function BookingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [tab, setTab] = useState<Booking['bucket']>('upcoming');
+  const [reviewing, setReviewing] = useState<Booking | null>(null);
+  const [responding, setResponding] = useState<'accept' | 'reject' | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -77,7 +92,7 @@ export default function BookingsPage() {
     setError(false);
     try {
       const rows = await api.hostBookings(userId);
-      setBookings(rows.map(mapBooking));
+      setBookings(rows.filter((r: any) => !isUnconfirmedRequest(r) || requestPhase(r)).map(mapBooking));
     } catch (err) {
       console.error('[host/bookings] load failed:', err);
       setError(true);
@@ -90,16 +105,47 @@ export default function BookingsPage() {
     load();
   }, [load]);
 
-  const counts = useMemo(
-    () => ({
-      today: bookings.filter((b) => b.bucket === 'today').length,
-      upcoming: bookings.filter((b) => b.bucket === 'upcoming').length,
-      past: bookings.filter((b) => b.bucket === 'past').length,
-    }),
+  // Requests live in their own section until paid; they aren't bookings yet.
+  const requests = useMemo(
+    () =>
+      bookings
+        .filter((b) => b.phase !== null)
+        .sort((a, b) => (a.deadline ?? 0) - (b.deadline ?? 0)),
     [bookings],
   );
+  const confirmed = useMemo(() => bookings.filter((b) => b.phase === null), [bookings]);
 
-  const visible = bookings
+  const counts = useMemo(
+    () => ({
+      today: confirmed.filter((b) => b.bucket === 'today').length,
+      upcoming: confirmed.filter((b) => b.bucket === 'upcoming').length,
+      past: confirmed.filter((b) => b.bucket === 'past').length,
+    }),
+    [confirmed],
+  );
+
+  const respond = async (decision: 'accept' | 'reject') => {
+    if (!reviewing) return;
+    setResponding(decision);
+    try {
+      await api.respondToBookingRequest(reviewing.id, decision);
+      toast.success(
+        decision === 'accept'
+          ? 'Request accepted. The booking is confirmed and the guest has been notified.'
+          : 'Request declined. The guest has been refunded in full.',
+      );
+      setReviewing(null);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the request.');
+      await load();
+      setReviewing(null);
+    } finally {
+      setResponding(null);
+    }
+  };
+
+  const visible = confirmed
     .filter((b) => b.bucket === tab)
     .sort((a, b) => (a.start?.getTime() ?? 0) - (b.start?.getTime() ?? 0));
 
@@ -110,14 +156,68 @@ export default function BookingsPage() {
         subtitle="Manage your property reservations and guest communication."
       />
 
+      {requests.length > 0 && (
+        <section className="mb-8">
+          <h3 className="text-base font-bold text-gray-800 mb-1">Reservation requests</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            These guests have already paid. Accept or decline each request within 2 hours; if you decline or
+            don&apos;t respond, the guest is refunded in full automatically.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+            {requests.map((r) => {
+              const left = r.deadline != null ? r.deadline - now : null;
+              return (
+                <div
+                  key={r.id}
+                  className="bg-white rounded-2xl p-5 border border-amber-200 shadow-card flex flex-col h-full"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-gray-800 truncate">{r.title}</h4>
+                      <p className="text-xs text-gray-400">Request #{r.id}</p>
+                    </div>
+                    <span className="shrink-0 text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                      {left != null && left > 0 ? `${formatTimeLeft(left)} left` : 'Expiring'}
+                    </span>
+                  </div>
+                  <div className="space-y-2 mb-5 flex-grow text-sm text-gray-500">
+                    <div className="flex items-center gap-3">
+                      <CalendarDays className="w-4 h-4 shrink-0" />
+                      <span className="min-w-0">{fmtRange(r.start, r.end)}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Users className="w-4 h-4 shrink-0" />
+                      <span>
+                        {r.guests} {r.guests === 1 ? 'guest' : 'guests'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-gray-700 font-semibold">
+                      <IndianRupee className="w-4 h-4 shrink-0 text-gray-500" />
+                      <span>{formatINR(r.amount)}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReviewing(r)}
+                    className="w-full py-3 bg-figma-navy text-white font-bold rounded-xl text-sm transition-all hover:bg-figma-navy/90 active:scale-[0.98]"
+                  >
+                    Review request
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-8 overflow-x-auto scrollbar-hide">
+      <div className="flex border-b border-gray-200 mb-6 sm:mb-8 overflow-x-auto scrollbar-hide">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={cn(
-              'flex-shrink-0 px-6 py-4 text-sm border-b-2 -mb-px transition-all',
+              'flex-shrink-0 flex-1 sm:flex-none px-4 sm:px-6 py-3.5 sm:py-4 text-sm whitespace-nowrap border-b-2 -mb-px transition-all',
               tab === t.key
                 ? 'font-bold text-figma-navy border-figma-navy'
                 : 'font-medium text-gray-500 border-transparent hover:text-figma-navy',
@@ -132,7 +232,7 @@ export default function BookingsPage() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-card">
               <div className="h-4 bg-gray-100 rounded animate-pulse w-1/2 mb-4" />
@@ -157,7 +257,7 @@ export default function BookingsPage() {
           </button>
         </div>
       ) : visible.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-dashed border-gray-200">
+        <div className="flex flex-col items-center justify-center py-16 sm:py-24 px-4 text-center bg-white rounded-3xl border border-dashed border-gray-200">
           <div className="h-20 w-20 bg-gray-100 flex items-center justify-center rounded-full mb-4 text-gray-300">
             <CalendarDays className="w-10 h-10" />
           </div>
@@ -171,7 +271,7 @@ export default function BookingsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {visible.map((b) => (
             <div
               key={b.id}
@@ -189,7 +289,7 @@ export default function BookingsPage() {
               <div className="space-y-3 mb-6 flex-grow">
                 <div className="flex items-center gap-3 text-gray-500">
                   <CalendarDays className="w-5 h-5 shrink-0" />
-                  <span className="text-sm">{fmtRange(b.start, b.end)}</span>
+                  <span className="text-sm min-w-0">{fmtRange(b.start, b.end)}</span>
                 </div>
                 <div className="flex items-center gap-3 text-gray-500">
                   <Users className="w-5 h-5 shrink-0" />
@@ -204,7 +304,7 @@ export default function BookingsPage() {
               </div>
               <Link
                 href={`/host/bookings/details?id=${b.id}`}
-                className="w-full py-2.5 bg-figma-navy text-white font-bold rounded-xl text-sm text-center transition-all hover:bg-figma-navy/90 active:scale-[0.98]"
+                className="w-full py-3 bg-figma-navy text-white font-bold rounded-xl text-sm text-center transition-all hover:bg-figma-navy/90 active:scale-[0.98]"
               >
                 View Details
               </Link>
@@ -212,6 +312,24 @@ export default function BookingsPage() {
           ))}
         </div>
       )}
+      <BookingRequestModal
+        request={
+          reviewing
+            ? {
+                id: reviewing.id,
+                title: reviewing.title,
+                dates: fmtRange(reviewing.start, reviewing.end),
+                guests: reviewing.guests,
+                amount: reviewing.amount,
+                deadline: reviewing.deadline,
+              }
+            : null
+        }
+        busy={responding}
+        onAccept={() => respond('accept')}
+        onDecline={() => respond('reject')}
+        onClose={() => setReviewing(null)}
+      />
     </HostDashboardShell>
   );
 }

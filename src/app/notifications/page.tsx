@@ -9,12 +9,13 @@ import {
   requestBrowserNotifications,
   useNotifications,
 } from "@/context/NotificationContext";
-import { webRouteForNotification, type NotificationRow } from "@/lib/notificationRules";
+import { bookingIdOf, webRouteForNotification, type NotificationRow } from "@/lib/notificationRules";
+import BookingRequestCard from "@/components/features/BookingRequestCard";
 import Navbar from "@/components/layout/Navbar";
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, userId } = useAuth();
   const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = useNotifications();
 
   // Offer desktop alerts so bookings reach the host even when this tab is in the background.
@@ -69,30 +70,39 @@ export default function NotificationsPage() {
             <p className="py-10 text-center text-sm text-gray-500">Your inbox is empty.</p>
           ) : (
             <div className="divide-y divide-gray-100">
-              {notifications.map((n) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={() => open(n)}
-                  className="flex w-full items-start gap-3 py-4 text-left first:pt-0 last:pb-0"
-                >
-                  <span
-                    aria-hidden
-                    className={`mt-2 h-2 w-2 shrink-0 rounded-full ${n.is_read ? "bg-transparent" : "bg-figma-navy"}`}
-                  />
-                  <span className="min-w-0">
-                    <span className={`block text-gray-900 ${n.is_read ? "font-normal" : "font-semibold"}`}>
-                      {n.title}
-                    </span>
-                    <span className="mt-1 block text-sm text-gray-600">{n.message}</span>
-                    {n.created_at && (
-                      <time className="mt-2 block text-xs text-gray-400">
-                        {new Date(n.created_at).toLocaleString("en-IN")}
-                      </time>
+              {notifications.map((n) => {
+                // A paid request waiting on the host: accept / decline right here.
+                const requestBookingId =
+                  n.type === "booking_host" && n.metadata?.kind === "booking_request" && userId
+                    ? bookingIdOf(n)
+                    : null;
+                return (
+                  <div key={n.id} className="py-4 first:pt-0 last:pb-0">
+                    <button type="button" onClick={() => open(n)} className="flex w-full items-start gap-3 text-left">
+                      <span
+                        aria-hidden
+                        className={`mt-2 h-2 w-2 shrink-0 rounded-full ${n.is_read ? "bg-transparent" : "bg-figma-navy"}`}
+                      />
+                      <span className="min-w-0">
+                        <span className={`block text-gray-900 ${n.is_read ? "font-normal" : "font-semibold"}`}>
+                          {n.title}
+                        </span>
+                        <span className="mt-1 block text-sm text-gray-600">{n.message}</span>
+                        {n.created_at && (
+                          <time className="mt-2 block text-xs text-gray-400">
+                            {new Date(n.created_at).toLocaleString("en-IN")}
+                          </time>
+                        )}
+                      </span>
+                    </button>
+                    {requestBookingId && userId && (
+                      <div className="pl-5">
+                        <BookingRequestCard bookingId={requestBookingId} userId={userId} />
+                      </div>
                     )}
-                  </span>
-                </button>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

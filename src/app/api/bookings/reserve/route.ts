@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateAndPriceBooking } from "@/lib/services/admin-writes";
+import { assertNoOpenRequest, BookingRequestError, validateAndPriceBooking } from "@/lib/services/admin-writes";
 import { createRazorpayOrder } from "@/lib/billing/razorpay";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { GUEST_ID_REQUIRED, guestHasVerifiedId } from "@/lib/services/guestVerification";
@@ -116,7 +116,13 @@ export async function POST(req: NextRequest) {
       addonIds: normalizedAddonIds,
     };
 
-    // ALWAYS require payment - no unpaid bookings in dev or production
+    // A guest who already paid for these dates and is waiting on the host can't
+    // pay again (host-approval listings hold the dates for them).
+    await assertNoOpenRequest(bookingInput);
+
+    // ALWAYS require payment up front - no unpaid bookings in dev or production.
+    // Listings with host approval take the same payment; the booking is then
+    // held as a pending request (see finalizeBookingFromRazorpayOrder).
     const priced = await validateAndPriceBooking(bookingInput);
 
     // Everything finalizeBookingFromRazorpayOrder() will need to actually
@@ -150,6 +156,9 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     if (err instanceof DatesUnavailableError || isDatabaseAvailabilityError(err)) {
       return NextResponse.json({ error: "These dates are blocked or already booked. Please choose different dates.", code: "DATES_UNAVAILABLE", blockedDates: err.blockedDates ?? [] }, { status: 409 });
+    }
+    if (err instanceof BookingRequestError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
     if (err instanceof HostPayoutMissingError) {
       return NextResponse.json({ error: err.message, code: "HOST_PAYOUT_MISSING" }, { status: 409 });

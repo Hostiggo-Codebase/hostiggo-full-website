@@ -106,7 +106,7 @@ export default function HostAccountPage() {
   if (error || !profile) {
     return (
       <HostDashboardShell active="settings">
-        <div className="bg-white rounded-3xl p-8 shadow-card border border-gray-200 text-center">
+        <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-card border border-gray-200 text-center">
           <p className="text-red-500 font-bold">{error || 'Failed to load profile'}</p>
         </div>
       </HostDashboardShell>
@@ -139,7 +139,7 @@ export default function HostAccountPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Profile card */}
-        <div className="lg:col-span-5 bg-white rounded-3xl p-8 shadow-card border border-gray-200">
+        <div className="lg:col-span-5 bg-white rounded-3xl p-5 sm:p-8 shadow-card border border-gray-200">
           <div className="flex flex-col items-center text-center">
             <div className="relative w-32 h-32 mb-6">
               <UserAvatar

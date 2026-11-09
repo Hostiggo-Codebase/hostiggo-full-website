@@ -69,6 +69,9 @@ interface Booking {
   refundStatus?: string | null;
   priceWeekday: number | null;
   priceWeekend: number | null;
+  // Set while this is an unpaid booking request (host to respond / guest to pay).
+  requestPhase?: 'awaiting_host' | null;
+  requestDeadline?: number | null;
 }
 
 const today = new Date();
@@ -1252,7 +1255,15 @@ function BookingCard({
             </div>
 
             {/* Action Button */}
-            {booking.status === 'upcoming' ? (
+            {booking.status === 'upcoming' && booking.requestPhase ? (
+              <button
+                type="button"
+                onClick={() => router.push(`/booking-confirmation/${booking.id}`)}
+                className="w-full sm:w-[254px] h-[47px] rounded-[12px] bg-[#004772] hover:bg-[#003859] text-white text-[17px] font-semibold flex items-center justify-center transition-all shadow-sm font-['Poppins'] cursor-pointer"
+              >
+                View request
+              </button>
+            ) : booking.status === 'upcoming' ? (
               <button
                 type="button"
                 onClick={onManage}
@@ -1280,10 +1291,14 @@ function BookingCard({
               <div className="p-7 sm:p-8 flex flex-col justify-between h-full">
                 <div>
                   <div className="text-[30px] sm:text-[32px] font-semibold text-[#1A1A1A] leading-tight font-['Poppins']">
-                    {daysLeft > 0 ? `${daysLeft} days left` : daysLeft === 0 ? 'Today!' : 'Ongoing'}
+                    {booking.requestPhase === 'awaiting_host'
+                      ? 'Waiting for host'
+                      : daysLeft > 0 ? `${daysLeft} days left` : daysLeft === 0 ? 'Today!' : 'Ongoing'}
                   </div>
                   <div className="text-[17px] text-[#1A1A1A]/70 font-normal font-['Poppins'] mt-1">
-                    For a happy journey
+                    {booking.requestPhase === 'awaiting_host'
+                      ? "The host has 2 hours to accept. If they don't, you're refunded in full."
+                      : 'For a happy journey'}
                   </div>
                 </div>
 

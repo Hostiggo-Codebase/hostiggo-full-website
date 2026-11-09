@@ -64,9 +64,9 @@ export default function WizardShell({
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f0f2f5] text-gray-800">
+    <div className="host-dashboard min-h-screen flex flex-col bg-[#f0f2f5] text-gray-800">
       {/* Top bar */}
-      <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 md:px-16 lg:px-20 h-20 bg-white shadow-sm border-b border-gray-100">
+      <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-4 sm:px-6 md:px-16 lg:px-20 h-16 sm:h-20 bg-white shadow-sm border-b border-gray-100">
         <Link
           href="/"
           className="text-xl font-extrabold tracking-tight text-gray-900 flex items-center"
@@ -91,7 +91,7 @@ export default function WizardShell({
       </header>
 
       {/* Progress bar */}
-      <div className="fixed top-20 left-0 w-full h-1 bg-gray-200 z-40">
+      <div className="fixed top-16 sm:top-20 left-0 w-full h-1 bg-gray-200 z-40">
         <div
           className="h-full bg-figma-navy transition-all duration-500"
           style={{ width: `${progress}%` }}
@@ -102,17 +102,17 @@ export default function WizardShell({
       </div>
 
       {/* Content */}
-      <main className="flex-grow pt-32 pb-32 px-4 md:px-12 w-full">
+      <main className="flex-grow pt-28 sm:pt-32 pb-28 sm:pb-32 px-4 md:px-12 w-full">
         <div className="max-w-5xl mx-auto">
           <div className="mb-8">
             <p className="text-xs font-semibold uppercase tracking-wider text-figma-navy mb-2">
               Step {step} of {WIZARD_TOTAL}
             </p>
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">
               {title}
             </h1>
             {subtitle && (
-              <p className="text-lg md:text-xl text-gray-600 max-w-3xl leading-relaxed">
+              <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-3xl leading-relaxed">
                 {subtitle}
               </p>
             )}
@@ -122,13 +122,13 @@ export default function WizardShell({
       </main>
 
       {/* Footer nav */}
-      <footer className="fixed bottom-0 left-0 w-full z-50 flex justify-between items-center px-6 md:px-16 lg:px-20 py-5 bg-white border-t border-gray-200 shadow-lg">
+      <footer className="fixed bottom-0 left-0 w-full z-50 flex justify-between items-center px-4 sm:px-6 md:px-16 lg:px-20 py-3 sm:py-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white border-t border-gray-200 shadow-lg">
         <button
           type="button"
           onClick={() =>
             prev ? router.push(`/host/list/${prev.slug}`) : setShowExitConfirm(true)
           }
-          className="px-6 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
+          className="px-5 sm:px-6 py-3 sm:py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
         >
           Back
         </button>
@@ -148,7 +148,7 @@ export default function WizardShell({
               else submit();
             }}
             className={cn(
-              'rounded-lg px-8 py-2.5 text-sm font-bold text-white transition-all active:scale-95 shadow-sm flex items-center gap-2',
+              'rounded-lg px-6 sm:px-8 py-3 sm:py-2.5 text-sm font-bold text-white transition-all active:scale-95 shadow-sm flex items-center gap-2',
               nextDisabled || submitting
                 ? 'bg-gray-300 cursor-not-allowed'
                 : 'bg-figma-navy hover:bg-figma-navy/90',

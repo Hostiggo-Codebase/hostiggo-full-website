@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cancelBookingWithRefund, retryFailedRefund, CancellationValidationError } from "@/lib/billing/cancelBooking";
 import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
+import { BookingRequestError, cancelPendingRequestIfAny } from "@/lib/services/admin-writes";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,10 @@ export async function POST(req: NextRequest) {
       const retried = await retryFailedRefund({ bookingId: Number(bookingId), requestingUserId });
       return NextResponse.json({ data: retried });
     }
+    // A request still waiting on the host is refunded in full (no cancellation policy), not via the policy engine.
+    const cancelledRequest = await cancelPendingRequestIfAny(Number(bookingId), requestingUserId);
+    if (cancelledRequest) return NextResponse.json({ data: { cancelled: true, refunded: true } });
+
     const result = await cancelBookingWithRefund({
       bookingId: Number(bookingId),
       requestingUserId,
@@ -35,6 +40,9 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     if (err instanceof UnauthorizedError) {
       return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    if (err instanceof BookingRequestError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
     const status = err instanceof CancellationValidationError ? 400 : 500;
     console.error("[/api/bookings/cancel-with-refund] error:", err?.message);
