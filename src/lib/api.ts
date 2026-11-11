@@ -561,6 +561,10 @@ export const api = {
       state: string;
       postal_code: string;
       status: "submitted" | "onboarding" | "active" | "rejected";
+      // Who payouts are made out to: a person, or a registered business (e.g. "llp").
+      business_type?: string;
+      signatory_name?: string | null;
+      signatory_pan?: string;
       created_at: string;
       updated_at: string;
       bank_name: string | null;
@@ -575,6 +579,9 @@ export const api = {
   // PATCH: send only the fields that changed; each is updated independently.
   // Bank and PAN changes are re-verified with SurePass server-side.
   updatePayoutMethod: (payload: Partial<{
+    businessType: string;
+    signatoryName: string;
+    signatoryPan: string;
     accountHolderName: string;
     bankAccountNumber: string;
     bankIfsc: string;

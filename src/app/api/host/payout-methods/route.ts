@@ -5,6 +5,12 @@ import { getAuthenticatedUserId, UnauthorizedError } from "@/lib/auth-server";
 import { maskMiddle, sha256Hex } from "@/lib/surepass";
 import { samePerson, verifyBankAccount, verifyPanNumber } from "@/lib/services/kycVerify";
 import { findPayoutConflict } from "@/lib/services/payoutIdentity";
+import {
+  isBusinessType,
+  isCompanyType,
+  panProblemForBusiness,
+  type BusinessType,
+} from "@/lib/payoutBusiness";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +94,7 @@ export async function GET(req: NextRequest) {
       supabaseAdmin
         .from("host_payout_methods")
         .select(
-          "account_holder_name, bank_account_number, bank_ifsc, pan_number, address_line1, city, state, postal_code, status, created_at, updated_at",
+          "account_holder_name, bank_account_number, bank_ifsc, pan_number, address_line1, city, state, postal_code, status, created_at, updated_at, business_type, signatory_name, signatory_pan",
         )
         .eq("host_uuid", hostUuid)
         .maybeSingle();
@@ -125,6 +131,7 @@ export async function GET(req: NextRequest) {
     const masked = {
       ...data,
       bank_account_number: data.bank_account_number ? `••••${data.bank_account_number.slice(-4)}` : "",
+      signatory_pan: data.signatory_pan ? maskMiddle(data.signatory_pan) : "",
       bank_name: bankVerification?.bank_name ?? null,
       bank_branch: bankProfile?.bank_branch_name ?? null,
       upi_id: bankProfile?.upi_id ?? null,
@@ -170,12 +177,38 @@ export async function PATCH(req: NextRequest) {
 
     const { data: existing } = await supabaseAdmin
       .from("host_payout_methods")
-      .select("account_holder_name, bank_account_number, bank_ifsc, pan_number, address_line1, city, state, postal_code")
+      .select(
+        "account_holder_name, bank_account_number, bank_ifsc, pan_number, address_line1, city, state, postal_code, business_type, signatory_name, signatory_pan, razorpay_account_id",
+      )
       .eq("host_uuid", hostUuid)
       .maybeSingle();
 
     // Columns that will actually change, keyed by DB column.
     const changes: Record<string, string> = {};
+
+    // Who the payouts are made out to: a person, or a registered business. Razorpay fixes this
+    // when the payout account is created, so it can't change afterwards.
+    const currentType: BusinessType = isBusinessType(existing?.business_type) ? existing.business_type : "individual";
+    let businessType: BusinessType = currentType;
+    if (provided("businessType")) {
+      const requested = text("businessType");
+      if (!isBusinessType(requested)) {
+        return NextResponse.json({ error: "Choose a valid account type." }, { status: 400 });
+      }
+      if (requested !== currentType) {
+        if (existing?.razorpay_account_id) {
+          return NextResponse.json(
+            {
+              error:
+                "The account type can't be changed once your payout account has been created. Contact support if it was set up wrongly.",
+            },
+            { status: 409 },
+          );
+        }
+        changes.business_type = requested;
+      }
+      businessType = requested;
+    }
 
     if (provided("accountHolderName")) {
       const name = text("accountHolderName");
@@ -280,6 +313,23 @@ export async function PATCH(req: NextRequest) {
       .map(([, label]) => label);
     if (missing.length > 0) {
       return NextResponse.json({ error: `Please fill in: ${missing.join(", ")}.` }, { status: 400 });
+    }
+
+    const panProblem = panProblemForBusiness(final.pan_number ?? "", businessType);
+    if (panProblem) return NextResponse.json({ error: panProblem }, { status: 400 });
+
+    // A business is represented by a person, who needs their own (personal) PAN.
+    if (isCompanyType(businessType) && (provided("signatoryName") || provided("signatoryPan"))) {
+      const signatoryName = provided("signatoryName") ? text("signatoryName") : existing?.signatory_name ?? "";
+      const signatoryPan = (provided("signatoryPan") ? text("signatoryPan") : existing?.signatory_pan ?? "").toUpperCase();
+      if (signatoryName.length < 2) {
+        return NextResponse.json({ error: "Enter the authorised signatory's full name." }, { status: 400 });
+      }
+      if (!PAN_RE.test(signatoryPan) || signatoryPan.charAt(3) !== "P") {
+        return NextResponse.json({ error: "Enter the signatory's personal PAN (e.g. ABCPE1234F)." }, { status: 400 });
+      }
+      if (signatoryName !== existing?.signatory_name) changes.signatory_name = signatoryName;
+      if (signatoryPan !== existing?.signatory_pan) changes.signatory_pan = signatoryPan;
     }
 
     // One person, one account: neither the PAN nor the bank account may

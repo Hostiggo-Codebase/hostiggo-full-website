@@ -83,6 +83,10 @@ export type CreateLinkedAccountParams = {
   postalCode: string;
   /** Hostiggo's own host_uuid, so the Linked Account can be traced back to it from the Razorpay dashboard. */
   referenceId: string;
+  /** Razorpay business_type (see src/lib/payoutBusiness.ts). Fixed at creation; Razorpay won't change it later. */
+  businessType: string;
+  /** The business's own PAN, sent as legal_info.pan for anything other than an individual. */
+  businessPan?: string;
 };
 
 export type LinkedAccountResult = { id: string; status: string };
@@ -100,7 +104,10 @@ export async function createLinkedAccount(
     // truncating is safe; collision odds across hosts are negligible.
     reference_id: params.referenceId.replace(/-/g, "").slice(0, 20),
     legal_business_name: params.legalBusinessName,
-    business_type: "individual",
+    business_type: params.businessType,
+    ...(params.businessType !== "individual" && params.businessPan
+      ? { legal_info: { pan: params.businessPan.toUpperCase() } }
+      : {}),
     contact_name: params.contactName,
     profile: {
       // Verified against a real test-mode account -- "hospitality" /
@@ -127,7 +134,10 @@ export async function createLinkedAccount(
   });
 }
 
-export type UpdateLinkedAccountParams = Omit<CreateLinkedAccountParams, "email" | "referenceId">;
+export type UpdateLinkedAccountParams = Omit<
+  CreateLinkedAccountParams,
+  "email" | "referenceId" | "businessType" | "businessPan"
+>;
 
 // The "update" half of the upsert in runRouteOnboarding: once a host has a
 // Linked Account, changed details are PATCHed onto it rather than creating
@@ -159,7 +169,10 @@ export async function updateLinkedAccount(
 export type CreateStakeholderParams = {
   name: string;
   email: string;
+  /** A person's PAN (4th character P) -- for a business, the signatory's own, never the business's. */
   panNumber: string;
+  /** Set for a business's signatory (director / designated partner). */
+  isBusinessSignatory?: boolean;
 };
 
 export async function createStakeholder(
@@ -177,6 +190,7 @@ export async function createStakeholder(
     name: params.name,
     email: params.email,
     kyc: { pan: params.panNumber },
+    ...(params.isBusinessSignatory ? { relationship: { director: true } } : {}),
   });
 }
 

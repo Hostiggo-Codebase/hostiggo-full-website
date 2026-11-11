@@ -9,8 +9,10 @@ import {
   fetchLinkedAccount,
   fetchRouteProduct,
 } from "@/lib/billing/razorpayRoute";
+import { isCompanyType, needsStakeholder } from "@/lib/payoutBusiness";
 import {
   authPhoneTenDigits,
+  cleanBusinessName,
   cleanPersonName,
   findPayoutConflict,
   verifiedBankRecord,
@@ -42,7 +44,7 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
   const { data: payout, error: payoutError } = await supabaseAdmin
     .from("host_payout_methods")
     .select(
-      "account_holder_name, bank_account_number, bank_ifsc, pan_number, address_line1, city, state, postal_code, razorpay_account_id, razorpay_stakeholder_id, razorpay_product_id, status",
+      "account_holder_name, bank_account_number, bank_ifsc, pan_number, address_line1, city, state, postal_code, razorpay_account_id, razorpay_stakeholder_id, razorpay_product_id, status, business_type, signatory_name, signatory_pan",
     )
     .eq("host_uuid", hostUuid)
     .maybeSingle();
@@ -50,9 +52,11 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
   if (!payout) {
     throw new Error("No payout details on file for this host yet.");
   }
+  const businessType = payout.business_type ?? "individual";
+  const company = isCompanyType(businessType);
   if (
     payout.razorpay_account_id &&
-    payout.razorpay_stakeholder_id &&
+    (payout.razorpay_stakeholder_id || !needsStakeholder(businessType)) &&
     payout.razorpay_product_id &&
     payout.status === "active"
   ) {
@@ -104,10 +108,17 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
   if (!bank) {
     throw new Error("Verify your bank account in Settings to finish payout setup.");
   }
-  const legalName = (await verifiedPanName(userId)) ?? bank.holderName ?? cleanPersonName(payout.account_holder_name);
+  // A business is paid under its own registered name (the account holder name, which was
+  // checked against both the company PAN and the bank account when it was saved).
+  const legalName = company
+    ? cleanBusinessName(payout.account_holder_name)
+    : ((await verifiedPanName(userId)) ?? bank.holderName ?? cleanPersonName(payout.account_holder_name));
   if (!legalName) {
     throw new Error("Verify your PAN in Settings to finish payout setup.");
   }
+  // A business's stakeholder is the person who signs for it, with their own PAN.
+  const signatoryName = company ? cleanPersonName(payout.signatory_name) : "";
+  const signatoryPan = company ? String(payout.signatory_pan ?? "").toUpperCase() : "";
 
   let accountId = payout.razorpay_account_id;
   let stakeholderId = payout.razorpay_stakeholder_id;
@@ -116,7 +127,7 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
   const accountDetails = {
     phone,
     legalBusinessName: legalName,
-    contactName: legalName,
+    contactName: company ? signatoryName || legalName : legalName,
     addressLine1: payout.address_line1,
     city: payout.city,
     state: payout.state,
@@ -129,9 +140,21 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
   };
 
   if (accountId) {
-    await updateLinkedAccount(accountId, accountDetails);
+    try {
+      await updateLinkedAccount(accountId, accountDetails);
+    } catch (err) {
+      // Once Razorpay's team has locked an account's activation form it can't be edited
+      // any more; the product and settlement steps below still go through.
+      if (!(err instanceof Error && /locked/i.test(err.message))) throw err;
+    }
   } else {
-    const account = await createLinkedAccount({ ...accountDetails, email: userRow.email, referenceId: hostUuid });
+    const account = await createLinkedAccount({
+      ...accountDetails,
+      email: userRow.email,
+      referenceId: hostUuid,
+      businessType,
+      businessPan: company ? payout.pan_number : undefined,
+    });
     accountId = account.id;
     await supabaseAdmin
       .from("host_payout_methods")
@@ -139,10 +162,17 @@ export async function runRouteOnboarding(hostUuid: string, userId: string) {
       .eq("host_uuid", hostUuid);
   }
 
-  if (stakeholderId) {
-    await updateStakeholder(accountId, stakeholderId, stakeholderDetails);
+  const stakeholderFields = company
+    ? { name: signatoryName, email: userRow.email, panNumber: signatoryPan, isBusinessSignatory: true }
+    : stakeholderDetails;
+  // An individual is their own stakeholder, always. A business only gets one when a signatory
+  // was provided; without one, Razorpay activates it from the business PAN and bank account.
+  if (company && !(signatoryName && signatoryPan)) {
+    // nothing to create
+  } else if (stakeholderId) {
+    await updateStakeholder(accountId, stakeholderId, stakeholderFields);
   } else {
-    const stakeholder = await createStakeholder(accountId, stakeholderDetails);
+    const stakeholder = await createStakeholder(accountId, stakeholderFields);
     stakeholderId = stakeholder.id;
     await supabaseAdmin
       .from("host_payout_methods")
@@ -361,7 +391,7 @@ export async function maybeAutoOnboardHostToRoute(userId: string): Promise<strin
 
     const { data: payout } = await supabaseAdmin
       .from("host_payout_methods")
-      .select("razorpay_account_id, razorpay_stakeholder_id, bank_account_number, status")
+      .select("razorpay_account_id, razorpay_stakeholder_id, bank_account_number, status, business_type")
       .eq("host_uuid", hostUuid)
       .maybeSingle();
     // No bank details on file yet, or already onboarded with nothing new to
@@ -370,7 +400,7 @@ export async function maybeAutoOnboardHostToRoute(userId: string): Promise<strin
     if (
       !payout ||
       (payout.razorpay_account_id &&
-        payout.razorpay_stakeholder_id &&
+        (payout.razorpay_stakeholder_id || !needsStakeholder(payout.business_type)) &&
         (payout.status === "active" || payout.status === "onboarding"))
     ) {
       return null;

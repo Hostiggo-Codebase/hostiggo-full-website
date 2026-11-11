@@ -131,6 +131,16 @@ describe("getHostPayoutReadiness", () => {
     expect((await getHostPayoutReadiness("u1")).blockers).toEqual(["bank", "payout"]);
   });
 
+  it("does not ask a registered business for a stakeholder, but still asks an individual", async () => {
+    const noStakeholder = { ...fullPayout, razorpay_stakeholder_id: null, status: "active" };
+    tables.payout = { ...noStakeholder, business_type: "llp" };
+    expect((await getHostPayoutReadiness("u1")).ready).toBe(true);
+    tables.payout = { ...noStakeholder, business_type: "individual" };
+    expect((await getHostPayoutReadiness("u1")).blockers).toEqual(["payout"]);
+    tables.payout = { ...noStakeholder, business_type: "llp", razorpay_product_id: null };
+    expect((await getHostPayoutReadiness("u1")).blockers).toEqual(["payout"]);
+  });
+
   it("treats a user who is not a host yet as not ready", async () => {
     tables.host = null;
     tables.payout = null;
