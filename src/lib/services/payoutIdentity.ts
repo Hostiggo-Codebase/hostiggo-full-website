@@ -21,6 +21,14 @@ export function cleanPersonName(raw: string | null | undefined): string {
     .trim();
 }
 
+/** A registered business's name: keeps digits and the usual punctuation (Pvt. Ltd., &, -). */
+export function cleanBusinessName(raw: string | null | undefined): string {
+  return String(raw ?? "")
+    .replace(/[^A-Za-z0-9\s.,&'()/-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * Returns the user-facing reason if the PAN or bank account is already used by
  * a different host's payout setup, otherwise null.

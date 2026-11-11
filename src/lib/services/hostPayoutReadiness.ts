@@ -1,5 +1,6 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { needsStakeholder } from "@/lib/payoutBusiness";
 
 export type PayoutBlocker = "kyc" | "bank" | "payout" | "phone";
 
@@ -59,7 +60,7 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
     hostRow?.host_uuid
       ? supabaseAdmin
           .from("host_payout_methods")
-          .select("razorpay_account_id, razorpay_stakeholder_id, razorpay_product_id, status")
+          .select("razorpay_account_id, razorpay_stakeholder_id, razorpay_product_id, status, business_type")
           .eq("host_uuid", hostRow.host_uuid)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
@@ -77,7 +78,7 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
   const p = payout.data;
   const payoutCreated =
     !!p?.razorpay_account_id &&
-    !!p?.razorpay_stakeholder_id &&
+    (!!p?.razorpay_stakeholder_id || !needsStakeholder(p?.business_type)) &&
     !!p?.razorpay_product_id &&
     p.status !== "rejected";
 
@@ -106,13 +107,13 @@ export async function getHostPayoutReadiness(userId: string): Promise<HostPayout
 export async function hostHasPayoutAccount(hostUuid: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin
     .from("host_payout_methods")
-    .select("razorpay_account_id, razorpay_stakeholder_id, razorpay_product_id, status")
+    .select("razorpay_account_id, razorpay_stakeholder_id, razorpay_product_id, status, business_type")
     .eq("host_uuid", hostUuid)
     .maybeSingle();
   if (error) throw error;
   return (
     !!data?.razorpay_account_id &&
-    !!data?.razorpay_stakeholder_id &&
+    (!!data?.razorpay_stakeholder_id || !needsStakeholder(data?.business_type)) &&
     !!data?.razorpay_product_id &&
     data.status !== "rejected"
   );

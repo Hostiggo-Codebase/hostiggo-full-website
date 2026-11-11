@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { formatPanInput } from '@/lib/pan';
 import { supabase } from '@/lib/supabase';
+import { BUSINESS_TYPES, isCompanyType } from '@/lib/payoutBusiness';
 
 const NAV: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'personal', label: 'Personal Info', icon: User },
@@ -179,6 +180,9 @@ export default function HostSettingsPage() {
   const [loadingPayoutMethod, setLoadingPayoutMethod] = useState(true);
   const [editingPayoutMethod, setEditingPayoutMethod] = useState(false);
   const [payoutForm, setPayoutForm] = useState({
+    businessType: 'individual' as string,
+    signatoryName: '',
+    signatoryPan: '',
     accountHolderName: '',
     bankAccountNumber: '',
     bankIfsc: '',
@@ -198,6 +202,9 @@ export default function HostSettingsPage() {
 
   const fillPayoutForm = (m: NonNullable<typeof payoutMethod>) =>
     setPayoutForm({
+      businessType: m.business_type ?? 'individual',
+      signatoryName: m.signatory_name ?? '',
+      signatoryPan: '', // masked on read; re-enter to change
       accountHolderName: m.account_holder_name,
       bankAccountNumber: '', // never re-shown in full; re-enter to change
       bankIfsc: m.bank_ifsc,
@@ -275,7 +282,16 @@ export default function HostSettingsPage() {
         toast.error('Enter a valid 6-digit postal code.');
         return;
       }
+      const company = isCompanyType(f.businessType);
+      if (company && f.signatoryPan && !/^[A-Z]{3}P[A-Z]\d{4}[A-Z]$/.test(f.signatoryPan)) {
+        toast.error("Enter the signatory's personal PAN (e.g. ABCPE1234F).");
+        return;
+      }
       const diff: Parameters<typeof api.updatePayoutMethod>[0] = {};
+      if (f.businessType !== (m?.business_type ?? 'individual')) diff.businessType = f.businessType;
+      if (company && f.signatoryName.trim() && f.signatoryName.trim() !== (m?.signatory_name ?? ''))
+        diff.signatoryName = f.signatoryName.trim();
+      if (company && f.signatoryPan) diff.signatoryPan = f.signatoryPan;
       if (f.accountHolderName.trim() && f.accountHolderName.trim() !== m?.account_holder_name)
         diff.accountHolderName = f.accountHolderName.trim();
       if (f.bankAccountNumber) diff.bankAccountNumber = f.bankAccountNumber;
@@ -842,7 +858,33 @@ export default function HostSettingsPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="sm:col-span-2">
                         <label className="block text-xs font-bold text-gray-500 mb-1">
-                          Account holder name (exactly as on your bank account and PAN) <span className="text-red-500">*</span>
+                          Receive payouts as <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={payoutForm.businessType}
+                          disabled={payoutMethod?.status === 'active' || payoutMethod?.status === 'onboarding'}
+                          onChange={(e) => setPayoutForm((f) => ({ ...f, businessType: e.target.value }))}
+                          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all bg-white disabled:bg-gray-50 disabled:text-gray-500"
+                        >
+                          {BUSINESS_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          {isCompanyType(payoutForm.businessType)
+                            ? "Payouts go to your business's bank account, using the business's own PAN."
+                            : 'Payouts go to a bank account in your own name, using your personal PAN.'}{' '}
+                          This can&apos;t be changed after your payout account is created.
+                        </p>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-gray-500 mb-1">
+                          {isCompanyType(payoutForm.businessType)
+                            ? 'Registered business name (exactly as on the bank account and business PAN)'
+                            : 'Account holder name (exactly as on your bank account and PAN)'}{' '}
+                          <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="text"
@@ -920,6 +962,37 @@ export default function HostSettingsPage() {
                           </>
                         )}
                       </div>
+                      {isCompanyType(payoutForm.businessType) && (
+                        <>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Authorised signatory name</label>
+                            <input
+                              type="text"
+                              value={payoutForm.signatoryName}
+                              onChange={(e) => setPayoutForm((f) => ({ ...f, signatoryName: e.target.value }))}
+                              placeholder="Director / designated partner"
+                              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Signatory&apos;s personal PAN</label>
+                            <input
+                              type="text"
+                              value={payoutForm.signatoryPan}
+                              onChange={(e) =>
+                                setPayoutForm((f) => ({ ...f, signatoryPan: formatPanInput(e.target.value) }))
+                              }
+                              placeholder={payoutMethod?.signatory_pan || 'ABCPE1234F'}
+                              maxLength={10}
+                              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-figma-navy/40 focus:ring-2 focus:ring-figma-navy/10 transition-all uppercase"
+                            />
+                          </div>
+                          <p className="sm:col-span-2 text-[11px] text-gray-400 -mt-2">
+                            Optional unless Razorpay asks for it. It is the person who signs for the business, so it is
+                            their own PAN, not the business&apos;s.
+                          </p>
+                        </>
+                      )}
                       <div>
                         <label className="block text-xs font-bold text-gray-500 mb-1">Postal code <span className="text-red-500">*</span></label>
                         <input
