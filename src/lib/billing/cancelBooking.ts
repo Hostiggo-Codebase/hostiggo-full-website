@@ -362,11 +362,9 @@ export async function cancelBookingWithRefund(params: {
     try {
       const { notify, notifyWhatsApp, hostUserId, resolveUserPhone } = await import("@/lib/services/notifications");
       const refundText =
-        refundStatus === "processed"
-          ? ` A refund of ₹${refundCalc.refundAmountRupees} has been initiated. ${REFUND_ARRIVAL_NOTE}`
-          : refundStatus === "failed" || refundStatus === "flagged_for_manual_settlement"
-            ? " Your refund could not be processed automatically; our team will follow up."
-            : "";
+        refundStatus === "not_applicable"
+          ? ""
+          : ` Your refund of ₹${refundCalc.refundAmountRupees} is in process and will be sent to your account automatically. ${REFUND_ARRIVAL_NOTE}`;
       const metadata = { booking_id: bookingId, listing_id: booking.listing_id };
       
       const { data: guest } = await supabaseAdmin

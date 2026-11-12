@@ -64,3 +64,7 @@ export function plural(count: number, singular: string, pluralForm = `${singular
 /** Shown wherever a refund is promised: the bank, not us, sets the final timing. */
 export const REFUND_ARRIVAL_NOTE =
   "Refunds take 5-7 banking days to reach your account, depending on your bank.";
+
+/** Longer explanation for the booking page: what "refunded" means and what to do if it's late. */
+export const REFUND_ARRIVAL_DETAIL =
+  "Your refund is in process and will be sent to your account automatically; there's nothing you need to do. It takes 5-7 banking days (weekends and bank holidays don't count) and depends on your bank or card issuer. If it hasn't arrived after 7 banking days, email support@hostiggo.com with your booking reference.";
