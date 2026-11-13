@@ -41,9 +41,10 @@ export function getProfileCompletion(input: CompletionInput): {
   }
 
   if (!input.phone?.trim()) {
-    missing.push({ key: 'phone', label: 'Phone number', todo: 'Add your phone number and verify it with an OTP.' });
+    missing.push({ key: 'phone', label: 'Phone number', todo: 'Add your phone number here, then verify it in the Hostiggo app.' });
   } else if (!input.phoneVerified) {
-    missing.push({ key: 'phone', label: 'Phone number', todo: 'Verify your phone number with an OTP.' });
+    // Phone OTP verification is done only in the mobile app, never on the web.
+    missing.push({ key: 'phone', label: 'Phone number', todo: 'Verify your phone number in the Hostiggo app.' });
   }
 
   if (!input.dateOfBirth?.trim()) {

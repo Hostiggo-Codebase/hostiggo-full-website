@@ -21,7 +21,7 @@ describe("getProfileCompletion (mirrors the app)", () => {
     const r = getProfileCompletion({ ...full, gender: "", photoUrl: null, phoneVerified: false });
     expect(r.percentage).toBe(50);
     expect(r.missing.map((m) => m.key)).toEqual(["phone", "gender", "photo"]);
-    expect(r.missing[0].todo).toMatch(/Verify your phone/);
+    expect(r.missing[0].todo).toMatch(/in the Hostiggo app/);
   });
 
   it("requires verified email and phone, not just filled in", () => {

@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import ProfileCompletionModal from '@/components/features/ProfileCompletionModal';
 import { Camera, ShieldCheck, Loader2, Pencil } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -30,36 +32,27 @@ export default function GuestProfilePage() {
 
   // Same rule as the mobile app (see src/lib/profileCompletion.ts).
   const authIdentity = useAuthIdentity(userId);
-  const { percentage, missing } = useMemo(
-    () =>
-      getProfileCompletion({
-        name: user?.name,
-        email: user?.email,
-        emailVerified: authIdentity.emailVerified,
-        phone: user?.phone,
-        phoneVerified: authIdentity.phoneVerified,
-        dateOfBirth: authIdentity.dateOfBirth,
-        gender: authIdentity.gender,
-        photoUrl: user?.profile_pic_url,
-      }),
+  const completionInput = useMemo(
+    () => ({
+      name: user?.name,
+      email: user?.email,
+      emailVerified: authIdentity.emailVerified,
+      phone: user?.phone,
+      phoneVerified: authIdentity.phoneVerified,
+      dateOfBirth: authIdentity.dateOfBirth,
+      gender: authIdentity.gender,
+      photoUrl: user?.profile_pic_url,
+    }),
     [user, authIdentity.emailVerified, authIdentity.phoneVerified, authIdentity.dateOfBirth, authIdentity.gender],
   );
+  const { percentage, missing } = useMemo(() => getProfileCompletion(completionInput), [completionInput]);
 
+  // Continue opens the "what is left" modal; a complete profile goes to Edit.
+  const [completionOpen, setCompletionOpen] = useState(false);
+  const router = useRouter();
   const handleContinue = () => {
-    if (missing.length === 0) return;
-    toast.info(`${missing.length} step${missing.length > 1 ? 's' : ''} left to complete your profile`, {
-      id: 'profile-completion',
-      duration: 10000,
-      description: (
-        <ul className="mt-1 list-disc space-y-0.5 pl-4">
-          {missing.map((m) => (
-            <li key={m.key + m.todo}>
-              <span className="font-semibold">{m.label}:</span> {m.todo}
-            </li>
-          ))}
-        </ul>
-      ),
-    });
+    if (missing.length === 0) router.push('/account/profile/edit');
+    else setCompletionOpen(true);
   };
 
   // Seed the form from the real user once it loads.
@@ -189,7 +182,7 @@ export default function GuestProfilePage() {
                       <span className="text-gray-500">
                         {authIdentity.loaded ? `Your profile is ${percentage}% complete` : 'Checking your profile…'}
                       </span>
-                      <Link href="/account/profile/edit" onClick={handleContinue} className="text-[#0396EF] font-bold hover:underline">Continue</Link>
+                      <button type="button" onClick={handleContinue} disabled={!authIdentity.loaded} className="text-[#0396EF] font-bold hover:underline disabled:opacity-50">Continue</button>
                     </div>
                   </div>
                 </div>
@@ -262,6 +255,21 @@ export default function GuestProfilePage() {
 
         )}
       </main>
+
+      {userId && (
+        <ProfileCompletionModal
+          open={completionOpen}
+          onOpenChange={setCompletionOpen}
+          userId={userId}
+          completion={completionInput}
+          uploadingPhoto={uploadingPhoto}
+          onPickPhoto={() => fileInputRef.current?.click()}
+          onSaved={async () => {
+            authIdentity.refresh();
+            await refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
