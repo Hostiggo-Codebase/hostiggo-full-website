@@ -24,7 +24,7 @@ const formatTime = (iso: string) => {
 
 export default function SupportLiveChat() {
   const { userId } = useAuth();
-  const { messages, connected, send, retry } = useSupportChat(userId);
+  const { messages, connected, send, retry, tickets, activeTicketId, unread, selectTicket, newTicket } = useSupportChat(userId);
   const [text, setText] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -61,10 +61,48 @@ export default function SupportLiveChat() {
         </span>
       </header>
 
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-gray-100 bg-white px-5 py-2.5" aria-label="Your open tickets">
+        {tickets.map((t) => {
+          const active = t.ticket_id === activeTicketId;
+          const snippet = (t.description ?? t.subject ?? "").trim();
+          return (
+            <button
+              key={t.ticket_id}
+              type="button"
+              onClick={() => selectTicket(t.ticket_id)}
+              aria-pressed={active}
+              title={snippet}
+              className={cn(
+                "relative flex-shrink-0 rounded-full border px-3 py-1 text-xs font-medium",
+                active ? "border-figma-navy bg-figma-navy text-white" : "border-gray-200 bg-white text-gray-700 hover:border-figma-navy",
+              )}
+            >
+              #{t.ticket_number ?? t.ticket_id.slice(0, 6)}
+              {snippet && <span className="ml-1.5 hidden max-w-[10rem] truncate align-bottom sm:inline-block">· {snippet}</span>}
+              {!active && (unread[t.ticket_id] ?? 0) > 0 && (
+                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500" aria-label="New reply" />
+              )}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={newTicket}
+          aria-pressed={!activeTicketId}
+          className={cn(
+            "flex-shrink-0 rounded-full border border-dashed px-3 py-1 text-xs font-medium",
+            !activeTicketId ? "border-figma-navy text-figma-navy" : "border-gray-300 text-gray-600 hover:border-figma-navy",
+          )}
+        >
+          + New ticket
+        </button>
+      </div>
+
       <div ref={listRef} className="h-72 space-y-3 overflow-y-auto bg-gray-50 px-5 py-4" aria-live="polite">
         {messages.length === 0 && (
           <div className="flex flex-col items-center gap-2 pt-4">
             <p className="text-sm text-gray-500">Start the conversation</p>
+            <p className="text-xs text-gray-400">Sending a message raises a support ticket for our team.</p>
             {STARTERS.map((starter) => (
               <button
                 key={starter}

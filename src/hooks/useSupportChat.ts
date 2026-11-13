@@ -19,6 +19,16 @@ import {
 
 // A sent message that the server has not echoed back after this long is shown as failed.
 const SEND_TIMEOUT_MS = 12_000;
+const TICKET_REFRESH_MS = 30_000;
+
+export interface SupportTicket {
+  ticket_id: string;
+  ticket_number: string | null;
+  subject: string | null;
+  description: string | null;
+  status: string;
+  created_at: string;
+}
 
 // Support tables live in the `public` schema; the site client defaults to the app schema.
 const publicDb = () => (supabase as any).schema("public");
@@ -32,6 +42,12 @@ export function useSupportChat(userId: string | null | undefined, enabled = true
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const [ticketId, setTicketId] = useState<string | undefined>();
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [unread, setUnread] = useState<Record<string, number>>({});
+  const ticketsRef = useRef<SupportTicket[]>([]);
+  // True once the customer chose "New ticket": stops the list refresh from jumping back to an old ticket.
+  const draftRef = useRef(false);
+  const createdRef = useRef<Set<string>>(new Set());
   const socketRef = useRef<Socket | null>(null);
   const ticketIdRef = useRef<string | undefined>(undefined);
   const creatingRef = useRef<Promise<string> | null>(null);
@@ -63,30 +79,56 @@ export function useSupportChat(userId: string | null | undefined, enabled = true
     [userId],
   );
 
-  // Find the customer's open ticket.
+  /** Makes `id` the open conversation (undefined = a blank draft; the next message raises a new ticket). */
+  const switchTo = useCallback((id: string | undefined) => {
+    if (ticketIdRef.current === id) return;
+    ticketIdRef.current = id;
+    setTicketId(id);
+    setMessages([]);
+    if (id) setUnread((u) => (u[id] ? { ...u, [id]: 0 } : u));
+  }, []);
+
+  // Every open ticket the customer has (not just the newest), so none is hidden from them.
+  const refreshTickets = useCallback(async () => {
+    if (!userId) return;
+    const { data, error } = await publicDb()
+      .from("support_tickets")
+      .select("ticket_id, ticket_number, subject, description, status, created_at")
+      .eq("user_id", userId)
+      .not("status", "in", "(CLOSED,RESOLVED)")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.warn("[support-chat] ticket lookup failed:", error.message);
+      return;
+    }
+    const list = (data ?? []) as SupportTicket[];
+    ticketsRef.current = list;
+    setTickets(list);
+    const current = ticketIdRef.current;
+    list.forEach((t) => createdRef.current.delete(t.ticket_id));
+    // The open ticket was closed or resolved by an agent: move on to the newest one that is still open.
+    // (A ticket created a moment ago may be missing from a lookup that started before it existed.)
+    if (current && !list.some((t) => t.ticket_id === current) && !createdRef.current.has(current)) {
+      switchTo(list[0]?.ticket_id);
+    } else if (!current && !draftRef.current && list.length) {
+      switchTo(list[0].ticket_id);
+    }
+  }, [userId, switchTo]);
+
   useEffect(() => {
-    if (!userId || !enabled || ticketId) return;
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await publicDb()
-        .from("support_tickets")
-        .select("ticket_id")
-        .eq("user_id", userId)
-        .not("status", "in", "(CLOSED,RESOLVED)")
-        .order("created_at", { ascending: false })
-        .limit(1);
-      if (cancelled) return;
-      if (error) {
-        console.warn("[support-chat] ticket lookup failed:", error.message);
-        return;
-      }
-      const found = data?.[0]?.ticket_id as string | undefined;
-      if (found) setTicketId(found);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, enabled, ticketId]);
+    if (!userId || !enabled) return;
+    void refreshTickets();
+    // Agents close tickets from the admin portal; poll so closed ones drop off the list.
+    const interval = setInterval(() => void refreshTickets(), TICKET_REFRESH_MS);
+    return () => clearInterval(interval);
+  }, [userId, enabled, refreshTickets]);
+
+  // Listen on every open ticket's room, so a reply on a ticket that isn't on screen still shows as unread.
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+    tickets.forEach((t) => socket.emit(SUPPORT_EVENTS.joinTicket, { ticket_id: t.ticket_id }));
+  }, [tickets]);
 
   // Join the ticket's room and load its history once the ticket is known.
   useEffect(() => {
@@ -115,15 +157,24 @@ export function useSupportChat(userId: string | null | undefined, enabled = true
         setConnected(true);
         // Rooms are lost on reconnect: rejoin, and catch up on anything missed while offline.
         const id = ticketIdRef.current;
+        ticketsRef.current.forEach((t) => socket.emit(SUPPORT_EVENTS.joinTicket, { ticket_id: t.ticket_id }));
         if (id) {
           socket.emit(SUPPORT_EVENTS.joinTicket, { ticket_id: id });
           void loadHistory(id);
         }
+        void refreshTickets();
       });
       socket.on("disconnect", () => setConnected(false));
       socket.on("connect_error", () => setConnected(false));
       socket.on(SUPPORT_EVENTS.newMessage, (payload: SupportPayload) => {
-        if (payload.ticket_id !== ticketIdRef.current) return;
+        if (payload.ticket_id !== ticketIdRef.current) {
+          // A reply on another open ticket: flag it so the customer notices.
+          const other = payload.ticket_id;
+          if (other && payload.sender_type !== "user" && !payload.is_internal_note && payload.body?.trim()) {
+            setUnread((u) => ({ ...u, [other]: (u[other] ?? 0) + 1 }));
+          }
+          return;
+        }
         setMessages((prev) => {
           const next = applyIncoming(prev, payload, userId);
           // An echo confirmed a send: stop that message's failure timer.
@@ -155,7 +206,7 @@ export function useSupportChat(userId: string | null | undefined, enabled = true
       setConnected(false);
       setMessages([]);
     };
-  }, [userId, enabled, loadHistory]);
+  }, [userId, enabled, loadHistory, refreshTickets]);
 
   /** The open ticket's id, creating the ticket (once, even for concurrent sends) if there is none yet. */
   const ensureTicket = useCallback(
@@ -169,8 +220,12 @@ export function useSupportChat(userId: string | null | undefined, enabled = true
             .select("ticket_id")
             .single();
           if (error || !data) throw new Error(error?.message ?? "Could not open a support ticket");
+          draftRef.current = false;
+          createdRef.current.add(data.ticket_id as string);
           ticketIdRef.current = data.ticket_id as string;
           setTicketId(data.ticket_id as string);
+          // Show the new ticket in the list straight away.
+          void refreshTickets();
           return data.ticket_id as string;
         })().finally(() => {
           creatingRef.current = null;
@@ -178,10 +233,10 @@ export function useSupportChat(userId: string | null | undefined, enabled = true
       }
       return creatingRef.current;
     },
-    [userId],
+    [userId, refreshTickets],
   );
 
-  const fail = useCallback((localId: string) => {
+  const fail =useCallback((localId: string) => {
     const t = timersRef.current.get(localId);
     if (t) clearTimeout(t);
     timersRef.current.delete(localId);
@@ -234,5 +289,19 @@ export function useSupportChat(userId: string | null | undefined, enabled = true
     [messages, deliver],
   );
 
-  return { messages, connected, send, retry };
+  const selectTicket = useCallback(
+    (id: string) => {
+      draftRef.current = false;
+      switchTo(id);
+    },
+    [switchTo],
+  );
+
+  /** Starts a blank conversation; the first message sent in it raises a new ticket. */
+  const newTicket = useCallback(() => {
+    draftRef.current = true;
+    switchTo(undefined);
+  }, [switchTo]);
+
+  return { messages, connected, send, retry, tickets, activeTicketId: ticketId, unread, selectTicket, newTicket };
 }
