@@ -55,8 +55,8 @@ function CancelInner() {
       // the guest in full and reverses the host's Route transfer.
       const result = await api.cancelBookingWithRefund(id, userId, reasonLabel);
       toast.success(
-        result?.refundStatus === 'processed'
-          ? `Reservation cancelled. The guest will be refunded ${formatINR(Number(result.refundAmountRupees))} (5-7 banking days, depending on their bank).`
+        result && Number(result.refundAmountRupees) > 0 && result.refundStatus !== 'flagged_for_manual_settlement'
+          ? `Reservation cancelled. The guest's refund of ${formatINR(Number(result.refundAmountRupees))} is in process (5-7 banking days, depending on their bank).`
           : 'Reservation cancelled.',
       );
       router.push('/host/bookings');

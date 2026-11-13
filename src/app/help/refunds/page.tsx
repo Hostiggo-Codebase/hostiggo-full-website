@@ -105,8 +105,8 @@ export default function RefundsHelpPage() {
               <List
                 items={[
                   <>Only confirmed bookings can be cancelled, and a refund can only be started once per booking.</>,
-                  <>If the host has already been paid for the booking when you cancel, the refund isn&apos;t sent automatically. It&apos;s flagged for our team to settle manually.</>,
-                  <>If the refund fails at the payment provider, the booking is still cancelled and the refund is marked as failed for our team to follow up. Email <a href="mailto:support@hostiggo.com" className="text-figma-navy underline">support@hostiggo.com</a> if you haven&apos;t received it.</>,
+                  <>Your refund shows as &ldquo;in process&rdquo; until it reaches your account. You don&apos;t need to do anything: it is sent to your original payment method automatically, even if our team needs to step in behind the scenes.</>,
+                  <>Refunds take 5-7 banking days to arrive, depending on your bank. Email <a href="mailto:support@hostiggo.com" className="text-figma-navy underline">support@hostiggo.com</a> if you haven&apos;t received it after that.</>,
                 ]}
               />
               <Note>

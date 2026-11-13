@@ -39,7 +39,7 @@ import {
   type PolicyName,
 } from '@/lib/billing/policyTimeline';
 import { downloadBookingReceipt, type ReceiptLine } from '@/lib/bookingReceipt';
-import { formatINR, formatStayDate, formatTime12h, plural, REFUND_ARRIVAL_NOTE } from '@/lib/format';
+import { formatINR, formatStayDate, formatTime12h, plural, REFUND_ARRIVAL_DETAIL, REFUND_ARRIVAL_NOTE } from '@/lib/format';
 import { todayInIndia } from '@/lib/booking-config';
 import { formatTimeLeft, requestDeadline, requestPhase } from '@/lib/billing/bookingRequest';
 
@@ -427,27 +427,11 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
           <p className="text-[15px] font-semibold text-[#BC0024]">This booking was cancelled</p>
           <p className="text-[13px] text-[#1A1A1A]/65">
             {booking.refund_amount && Number(booking.refund_amount) > 0
-              ? `Refund of ${formatINR(booking.refund_amount)} ${
-                  booking.refund_status === 'processed' ? 'has been processed' : 'is on its way'
-                } to your original payment method. ${REFUND_ARRIVAL_NOTE}`
+              ? `Refund of ${formatINR(booking.refund_amount)} is in process and on its way to your original payment method. ${REFUND_ARRIVAL_NOTE}`
               : 'No refund was due under the cancellation policy.'}
           </p>
-          {booking.refund_status === 'failed' && (
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await api.retryRefund(booking.booking_id);
-                  toast.success('Refund initiated.');
-                  window.location.reload();
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Couldn't retry the refund.");
-                }
-              }}
-              className="mt-2 text-[13px] font-semibold text-[#BC0024] underline"
-            >
-              Retry refund
-            </button>
+          {booking.refund_amount && Number(booking.refund_amount) > 0 && (
+            <p className="mt-1.5 text-[12px] leading-relaxed text-[#1A1A1A]/55">{REFUND_ARRIVAL_DETAIL}</p>
           )}
         </div>
       </div>
@@ -671,7 +655,10 @@ function BookingView({ booking, viewerId }: { booking: BookingDetail; viewerId: 
           </div>
           {status === STATUS_CANCELLED && booking.refund_amount != null && Number(booking.refund_amount) > 0 && (
             <div className="flex items-center justify-between gap-4 text-[#0E7A45]">
-              <dt>Refund{booking.refund_status ? ` (${booking.refund_status})` : ''}</dt>
+              <dt>
+                Refund
+                {' (in process, 5-7 banking days)'}
+              </dt>
               <dd className="font-semibold">-{formatINR(booking.refund_amount)}</dd>
             </div>
           )}

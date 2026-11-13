@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyRazorpayWebhookSignature } from "@/lib/billing/razorpay";
 import { finalizeBookingFromRazorpayOrder, PaymentRefundedError } from "@/lib/services/admin-writes";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { REFUND_ARRIVAL_NOTE } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -278,8 +279,8 @@ async function processEvent(event: string | undefined, payload: any): Promise<Ne
         userId: b.user_id,
         type: "booking_guest",
         category: "bookings",
-        title: "Refund delayed",
-        message: `Your refund for booking #${b.booking_id} hit a problem. We're on it and you can also retry it from your booking.`,
+        title: "Refund in process",
+        message: `Your refund for booking #${b.booking_id} is in process and will be sent to your account automatically. ${REFUND_ARRIVAL_NOTE}`,
         metadata: { booking_id: b.booking_id, role: "guest" },
       });
     }

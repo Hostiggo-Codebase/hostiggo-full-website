@@ -30,7 +30,7 @@ export const CATEGORIES: Category[] = [
       },
       {
         q: 'How long do refunds take?',
-        a: 'Refunds are calculated automatically based on the cancellation policy and initiated right away — it takes 5-7 banking days to reach your account, depending on your bank or card issuer.',
+        a: 'Refunds are calculated automatically based on the cancellation policy and sent to your bank as soon as you cancel. Your bank then credits it to the original payment method, which takes 5-7 banking days depending on your bank or card issuer. It is not instant.',
       },
       {
         q: 'Can a host refuse to refund me?',

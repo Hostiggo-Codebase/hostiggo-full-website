@@ -1091,10 +1091,8 @@ async function noticeRequestEnded(
   refundStatus: "processed" | "failed",
 ) {
   const ctx = await requestContext(booking);
-  const refundLine =
-    refundStatus === "processed"
-      ? `A full refund of ${ctx.amount} has been initiated. ${REFUND_ARRIVAL_NOTE}`
-      : `Your refund of ${ctx.amount} hit a problem and our team is on it; you can also retry it from your booking.`;
+  void refundStatus; // guests see the same "in process" message either way
+  const refundLine = `Your full refund of ${ctx.amount} is in process and will be sent to your account automatically. ${REFUND_ARRIVAL_NOTE}`;
   const copy = {
     declined: {
       guest: `The host declined your request for ${ctx.title} (${ctx.dates}). ${refundLine}`,
