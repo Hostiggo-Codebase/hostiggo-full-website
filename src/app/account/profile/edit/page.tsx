@@ -4,6 +4,9 @@ import Navbar from '@/components/layout/Navbar';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
+import { useAuthIdentity } from '@/hooks/useAuthIdentity';
+import { ageFromDateOfBirth } from '@/lib/profileCompletion';
 import { ArrowLeft, Camera, ChevronRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -26,27 +29,62 @@ export default function EditProfilePage() {
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { name, email, phone, age, emergencyContact } = form;
+  const { name, email, phone, emergencyContact } = form;
   const setField = (key: keyof ProfileForm) => (value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  // Date of birth + gender live on the Supabase auth user (same as the app).
+  const authIdentity = useAuthIdentity(userId);
+  const [dob, setDob] = useState('');
+  const [gender, setGender] = useState('');
+  const [dobError, setDobError] = useState('');
 
   useEffect(() => {
     if (user) setForm(profileFormFromUser(user));
   }, [user]);
 
+  useEffect(() => {
+    if (authIdentity.loaded) {
+      setDob(authIdentity.dateOfBirth);
+      setGender(authIdentity.gender);
+    }
+  }, [authIdentity.loaded, authIdentity.dateOfBirth, authIdentity.gender]);
+
   const handleSave = async () => {
     if (!userId || saving) return;
     const found = validateProfileForm(form);
     setErrors(found);
-    if (Object.keys(found).length > 0) return;
-    const patch = buildProfilePatch(form, user);
-    if (Object.keys(patch).length === 0) {
+    let dobErr = '';
+    let derivedAge: number | null = null;
+    if (dob) {
+      derivedAge = ageFromDateOfBirth(dob);
+      if (derivedAge === null || derivedAge < 18 || derivedAge > 120) {
+        dobErr = 'Enter a valid date of birth (you must be 18 or older).';
+      }
+    }
+    setDobError(dobErr);
+    if (Object.keys(found).length > 0 || dobErr) return;
+
+    // Age is derived from date of birth, as in the app.
+    const patch = buildProfilePatch(
+      derivedAge !== null ? { ...form, age: String(derivedAge) } : form,
+      user,
+    );
+    const identityChanged = dob !== authIdentity.dateOfBirth || gender !== authIdentity.gender;
+    if (Object.keys(patch).length === 0 && !identityChanged) {
       toast.info('No changes to save.', { id: 'profile-save' });
       return;
     }
     setSaving(true);
     try {
-      await updateProfile(patch);
+      if (identityChanged) {
+        const { error } = await supabase.auth.updateUser({
+          data: { date_of_birth: dob || null, gender: gender || null },
+        });
+        if (error) throw error;
+        authIdentity.refresh();
+      }
+      if (Object.keys(patch).length > 0) await updateProfile(patch);
       toast.success('Profile updated.', { id: 'profile-save' });
       router.push('/account/profile');
     } catch (err) {
@@ -220,19 +258,31 @@ export default function EditProfilePage() {
                   </div>
                   <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
                     <input
-                      type="number"
-                      value={age}
-                      onChange={(e) => setField('age')(e.target.value)}
-                      inputMode="numeric"
-                      min={18}
-                      max={120}
-                      aria-invalid={!!errors.age}
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      max={new Date().toISOString().slice(0, 10)}
+                      aria-invalid={!!dobError}
                       className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative"
                     />
-                    <label className={`absolute left-5 transition-all duration-200 pointer-events-none z-0 ${
-                      age ? 'top-2 text-[12px] text-[#434343]' : 'top-1/2 -translate-y-1/2 text-[15px] text-gray-400'
-                    } peer-focus:top-2 peer-focus:translate-y-0 peer-focus:text-[12px] peer-focus:text-[#434343]`}>
-                      Age
+                    <label className="absolute left-5 top-2 text-[12px] text-[#434343] pointer-events-none z-0">
+                      Date of birth
+                    </label>
+                  </div>
+                  <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
+                    <select
+                      value={gender}
+                      onChange={(e) => setGender(e.target.value)}
+                      className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative"
+                    >
+                      <option value="">Select</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Transgender">Transgender</option>
+                      <option value="Prefer Not To Say">Prefer Not To Say</option>
+                    </select>
+                    <label className="absolute left-5 top-2 text-[12px] text-[#434343] pointer-events-none z-0">
+                      Gender
                     </label>
                   </div>
                   <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
@@ -247,16 +297,17 @@ export default function EditProfilePage() {
                     <label className={`absolute left-5 transition-all duration-200 pointer-events-none z-0 ${
                       emergencyContact ? 'top-2 text-[12px] text-[#434343]' : 'top-1/2 -translate-y-1/2 text-[15px] text-gray-400'
                     } peer-focus:top-2 peer-focus:translate-y-0 peer-focus:text-[12px] peer-focus:text-[#434343]`}>
-                      Emergency contact (name and mobile)
+                      Emergency contact (optional)
                     </label>
                   </div>
-                  {Object.values(errors).some(Boolean) && (
+                  {(Object.values(errors).some(Boolean) || dobError) && (
                     <ul role="alert" className="space-y-1">
                       {Object.entries(errors).map(([key, msg]) =>
                         msg ? (
                           <li key={key} className="ml-1 text-xs font-medium text-red-600">{msg}</li>
                         ) : null,
                       )}
+                      {dobError && <li className="ml-1 text-xs font-medium text-red-600">{dobError}</li>}
                     </ul>
                   )}
                 </div>

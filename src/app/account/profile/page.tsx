@@ -8,6 +8,8 @@ import { Camera, ShieldCheck, Loader2, Pencil } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { useAuth } from '@/context/AuthContext';
 import { useKycStatus } from '@/hooks/useKycStatus';
+import { useAuthIdentity } from '@/hooks/useAuthIdentity';
+import { getProfileCompletion } from '@/lib/profileCompletion';
 import { api } from '@/lib/api';
 import { toE164Phone } from '@/lib/phoneFormat';
 
@@ -26,27 +28,39 @@ export default function GuestProfilePage() {
   const identityPending = kycStatus === 'pending';
   const identityRejected = kycStatus === 'rejected';
 
-  // Calculate profile completion percentage
-  const { percentage } = useMemo(() => {
-    let completed = 0;
-    let total = 0;
-    const check = (condition: any) => {
-      total++;
-      if (condition) completed++;
-    };
+  // Same rule as the mobile app (see src/lib/profileCompletion.ts).
+  const authIdentity = useAuthIdentity(userId);
+  const { percentage, missing } = useMemo(
+    () =>
+      getProfileCompletion({
+        name: user?.name,
+        email: user?.email,
+        emailVerified: authIdentity.emailVerified,
+        phone: user?.phone,
+        phoneVerified: authIdentity.phoneVerified,
+        dateOfBirth: authIdentity.dateOfBirth,
+        gender: authIdentity.gender,
+        photoUrl: user?.profile_pic_url,
+      }),
+    [user, authIdentity.emailVerified, authIdentity.phoneVerified, authIdentity.dateOfBirth, authIdentity.gender],
+  );
 
-    check(user?.profile_pic_url);
-    check(user?.name);
-    check(user?.email);
-    check(user?.phone);
-    check(user?.age);
-    check(user?.emergency_contact);
-    check(identityVerified);
-
-    return {
-      percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
-    };
-  }, [user, identityVerified]);
+  const handleContinue = () => {
+    if (missing.length === 0) return;
+    toast.info(`${missing.length} step${missing.length > 1 ? 's' : ''} left to complete your profile`, {
+      id: 'profile-completion',
+      duration: 10000,
+      description: (
+        <ul className="mt-1 list-disc space-y-0.5 pl-4">
+          {missing.map((m) => (
+            <li key={m.key + m.todo}>
+              <span className="font-semibold">{m.label}:</span> {m.todo}
+            </li>
+          ))}
+        </ul>
+      ),
+    });
+  };
 
   // Seed the form from the real user once it loads.
   useEffect(() => {
@@ -168,12 +182,14 @@ export default function GuestProfilePage() {
                     <div className="h-[4px] w-full bg-gray-100 rounded-full overflow-hidden mb-3">
                       <div 
                         className="h-full bg-primary-gradient rounded-full transition-all duration-300 ease-in-out" 
-                        style={{ width: `${percentage}%` }}
+                        style={{ width: `${authIdentity.loaded ? percentage : 0}%` }}
                       ></div>
                     </div>
                     <div className="flex items-center justify-between text-[13px] font-semibold tracking-wide">
-                      <span className="text-gray-500">Your profile is {percentage}% complete</span>
-                      <Link href="/account/profile/edit" className="text-[#0396EF] font-bold hover:underline">Continue</Link>
+                      <span className="text-gray-500">
+                        {authIdentity.loaded ? `Your profile is ${percentage}% complete` : 'Checking your profile…'}
+                      </span>
+                      <Link href="/account/profile/edit" onClick={handleContinue} className="text-[#0396EF] font-bold hover:underline">Continue</Link>
                     </div>
                   </div>
                 </div>
@@ -227,8 +243,10 @@ export default function GuestProfilePage() {
                   { label: 'Full name', value: name },
                   { label: 'Email', value: email },
                   { label: 'Phone', value: toE164Phone(phone) ?? '' },
+                  { label: 'Date of birth', value: authIdentity.dateOfBirth },
+                  { label: 'Gender', value: authIdentity.gender },
                   { label: 'Age', value: age },
-                  { label: 'Emergency contact', value: emergencyContact },
+                  { label: 'Emergency contact (optional)', value: emergencyContact },
                 ].map((row) => (
                   <div key={row.label} className="bg-white rounded-[14px] border border-gray-200 px-5 py-4">
                     <dt className="text-[12px] font-semibold text-gray-500">{row.label}</dt>
