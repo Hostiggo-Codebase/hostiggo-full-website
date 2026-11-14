@@ -12,6 +12,45 @@ export function blockedStayDates(start: Date, end: Date, blocked: ReadonlySet<st
   return dates;
 }
 
+export type PickerStep = "checkin" | "checkout";
+
+export interface PickerClickResult {
+  checkIn: Date | null;
+  checkOut: Date | null;
+  /** What the next click on the calendar means. */
+  step: PickerStep;
+  /** True once a full check-in / check-out range is chosen (the picker can close). */
+  done: boolean;
+  /** Set (and the selection left unchanged) when the stay would cross a blocked night. */
+  error?: string;
+}
+
+/**
+ * One click on a calendar day. The picker always starts a fresh range: the first
+ * click is the check-in (whichever field opened the picker), the second is the
+ * check-out. A second click on or before the check-in restarts from that day.
+ */
+export function applyDayClick(
+  state: { step: PickerStep; checkIn: Date | null; checkOut: Date | null },
+  date: Date,
+  blocked: ReadonlySet<string>,
+): PickerClickResult {
+  const { step, checkIn } = state;
+  if (step === "checkin" || !checkIn || date <= checkIn) {
+    return { checkIn: date, checkOut: null, step: "checkout", done: false };
+  }
+  if (blockedStayDates(checkIn, date, blocked).length) {
+    return {
+      checkIn: state.checkIn,
+      checkOut: state.checkOut,
+      step,
+      done: false,
+      error: "This stay includes blocked dates. Please choose another range.",
+    };
+  }
+  return { checkIn, checkOut: date, step: "checkin", done: true };
+}
+
 export function isISODate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00Z`);

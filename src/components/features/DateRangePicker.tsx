@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { blockedStayDates } from "@/lib/stayDates";
+import { applyDayClick, blockedStayDates } from "@/lib/stayDates";
 
 interface DateRangePickerProps {
   checkIn: Date | null;
@@ -163,7 +163,11 @@ export default function DateRangePicker({
   const today = new Date();
   const [baseYear, setBaseYear] = useState(today.getFullYear());
   const [baseMonth, setBaseMonth] = useState(today.getMonth());
-  const [selecting, setSelecting] = useState<"checkin" | "checkout">(checkIn ? "checkout" : "checkin");
+  // Always start a fresh range, even when dates are already set: the first day
+  // clicked is the new check-in and the second the check-out, whichever field
+  // (check-in or check-out) opened the picker. Starting in "checkout" mode made a
+  // click change only the checkout and kept the old check-in.
+  const [selecting, setSelecting] = useState<"checkin" | "checkout">("checkin");
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
   const [rangeError, setRangeError] = useState("");
   // Date flexibility (visual for now, "Exact dates" is the default).
@@ -249,24 +253,15 @@ export default function DateRangePicker({
       justDraggedRef.current = false;
       return;
     }
-    setRangeError("");
-    if (selecting === "checkin") {
-      onChange(date, null);
-      setSelecting("checkout");
-    } else {
-      if (checkIn && date <= checkIn) {
-        onChange(date, null);
-        setSelecting("checkout");
-      } else {
-        if (checkIn && blockedStayDates(checkIn, date, blockedDates).length) {
-          setRangeError("This stay includes blocked dates. Please choose another range.");
-          return;
-        }
-        onChange(checkIn, date);
-        setSelecting("checkin");
-        onClose();
-      }
+    const result = applyDayClick({ step: selecting, checkIn, checkOut }, date, blockedDates);
+    if (result.error) {
+      setRangeError(result.error);
+      return;
     }
+    setRangeError("");
+    onChange(result.checkIn, result.checkOut);
+    setSelecting(result.step);
+    if (result.done) onClose();
   };
 
   return (
