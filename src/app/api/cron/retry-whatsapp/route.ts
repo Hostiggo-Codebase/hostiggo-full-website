@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { retryFailedWhatsAppMessages } from "@/lib/services/whatsappRetry";
-import { sweepBookingRequests } from "@/lib/services/admin-writes";
+import { retryFailedRequestRefunds, sweepBookingRequests } from "@/lib/services/admin-writes";
 
 // Vercel Cron calls GET (with `Authorization: Bearer $CRON_SECRET`); POST is
 // kept for manual triggers.
@@ -34,7 +34,17 @@ export async function POST(request: NextRequest) {
       requests = { error: err?.message ?? "sweep failed" };
     }
 
-    return NextResponse.json({ success: true, results, requests });
+    // Refunds Razorpay refused on cancelled requests are retried here too (with
+    // back-off), so a guest's money is never left waiting on someone to notice.
+    let refundRetries: Awaited<ReturnType<typeof retryFailedRequestRefunds>> | { error: string };
+    try {
+      refundRetries = await retryFailedRequestRefunds();
+    } catch (err: any) {
+      console.error("[retry-whatsapp] failed-refund retry failed:", err);
+      refundRetries = { error: err?.message ?? "refund retry failed" };
+    }
+
+    return NextResponse.json({ success: true, results, requests, refundRetries });
   } catch (err: any) {
     console.error("[retry-whatsapp] Error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
