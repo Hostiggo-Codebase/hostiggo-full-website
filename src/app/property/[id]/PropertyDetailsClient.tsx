@@ -7,7 +7,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useWishlist } from "@/hooks/useWishlist";
 import { api, ApiError, mapListingToProperty } from "@/lib/api";
 import { track } from "@/lib/analytics";
-import { calculateBookingInvoice } from "@/lib/billing/invoice";
+import { allInNightlyPrice, calculateBookingInvoice } from "@/lib/billing/invoice";
+import { fromAllInNightly, summarizeStay, weekendAwareRates } from "@/lib/billing/stayQuote";
 import { CANCELLATION_POLICY_DEFAULTS } from "@/lib/billing/refund";
 import { loadGoogleMaps } from "@/lib/services/googleMaps";
 import { cn, toISODate } from "@/lib/utils";
@@ -897,11 +898,14 @@ function BookingWidget({
   property,
   onNightsChange,
   onGuestsChange,
+  onPerNightChange,
   selectedAddonIds,
 }: {
   property: Property;
   onNightsChange?: (n: number) => void;
   onGuestsChange?: (g: number) => void;
+  /** All-in average per night for the chosen dates, or null with no dates. */
+  onPerNightChange?: (perNight: number | null) => void;
   selectedAddonIds: number[];
 }) {
   const searchParams = useSearchParams();
@@ -1016,38 +1020,25 @@ function BookingWidget({
   // exactly what was charged instead of a flat "₹weekdayPrice × N nights"
   // that goes wrong (looks like a pricing bug) the moment a Fri/Sat night
   // is in the stay and bills at the weekend rate.
-  const { subtotal, weekdayNights, weekendNights, checkInNightPrice } = (() => {
-    if (!checkIn || !checkOut || nights === 0) {
-      return {
-        subtotal: property.price,
-        weekdayNights: 0,
-        weekendNights: 0,
-        checkInNightPrice: property.price,
-      };
-    }
-    const priceWeekend = property.priceWeekend ?? property.price;
-    let sum = 0;
-    let weekday = 0;
-    let weekend = 0;
-    const cur = new Date(checkIn);
-    for (let i = 0; i < nights; i++) {
-      const dow = cur.getDay();
-      const isWeekend = dow === 5 || dow === 6;
-      sum += isWeekend ? priceWeekend : property.price;
-      if (isWeekend) weekend++;
-      else weekday++;
-      cur.setDate(cur.getDate() + 1);
-    }
-    const checkInDow = checkIn.getDay();
-    const checkInNightPrice =
-      checkInDow === 5 || checkInDow === 6 ? priceWeekend : property.price;
-    return {
-      subtotal: sum,
-      weekdayNights: weekday,
-      weekendNights: weekend,
-      checkInNightPrice,
-    };
-  })();
+  const stayRates = weekendAwareRates({
+    checkIn,
+    nights: checkIn && checkOut ? nights : 0,
+    priceWeekday: property.price,
+    priceWeekend: property.priceWeekend,
+  });
+  const { subtotal, weekdayNights, weekendNights, checkInNightPrice } = stayRates;
+  // Headline price: the same all-in average per night the search card shows.
+  const staySummary = summarizeStay(stayRates);
+  const hasStayDates = staySummary.nights > 0;
+  const priceWeekendAll = property.priceWeekend ?? property.price;
+  const weekendDiffers = priceWeekendAll !== property.price;
+  const headlinePrice = hasStayDates
+    ? staySummary.perNight
+    : fromAllInNightly(property.price, property.priceWeekend);
+  const perNightForBar = hasStayDates ? staySummary.perNight : null;
+  useEffect(() => {
+    onPerNightChange?.(perNightForBar);
+  }, [perNightForBar]);
   // Real GST/service-fee invoice from src/lib/billing/invoice.ts, replacing
   // the old flat 8%/12% estimate. `subtotal` (the weekend-aware sum across
   // every night of the stay) is the amount actually taxed, but which GST
@@ -1272,13 +1263,13 @@ function BookingWidget({
     <div className="bg-white rounded-3xl p-6 border border-gray-200 shadow-sm w-full">
       {/* Price header */}
       <div className="flex items-baseline gap-2 mb-1">
-        {property.originalPrice && (
+        {property.originalPrice && (!hasStayDates || weekendNights === 0) && (
           <span className="text-[13px] text-gray-400 line-through">
-            {formatINR(property.originalPrice)}
+            {formatINR(allInNightlyPrice(property.originalPrice))}
           </span>
         )}
         <span className="text-[24px] font-extrabold text-figma-navy/90">
-          {formatINR(property.price)}
+          {formatINR(headlinePrice)}
         </span>
         <span className="text-[12px] text-gray-400">/night</span>
         {property.originalPrice && (
@@ -1292,6 +1283,15 @@ function BookingWidget({
           </span>
         )}
       </div>
+      <p className="text-[11px] text-gray-500 mb-1">
+        {hasStayDates
+          ? `All-in, incl. ${formatINR(staySummary.taxesAndFeesPerNight)} taxes & fees${
+              staySummary.nights > 1 ? ` · average over ${staySummary.nights} nights` : ""
+            }`
+          : `From, incl. taxes & fees${
+              weekendDiffers ? ` · Fri & Sat nights ${formatINR(allInNightlyPrice(priceWeekendAll))}` : ""
+            }`}
+      </p>
       {/* Discount badge, informational only. The booking price calc below
           doesn't apply this discount yet (that's a separate pricing-logic
           change), so it's shown honestly as a host-offered discount rather
@@ -1772,6 +1772,7 @@ function ReviewsModal({
 function StickyBookingBar({
   property,
   nights,
+  perNightAllIn,
   guests,
   onReserve,
   show,
@@ -1782,6 +1783,8 @@ function StickyBookingBar({
 }: {
   property: Property;
   nights: number;
+  /** All-in average per night for the chosen dates; null until dates are picked. */
+  perNightAllIn: number | null;
   guests: number;
   onReserve: () => void;
   show: boolean;
@@ -1819,10 +1822,13 @@ function StickyBookingBar({
 
         {/* Price + info */}
         <div className="flex items-center gap-1.5 min-w-0">
+          {perNightAllIn == null && (
+            <span className="text-[12px] text-gray-400">From</span>
+          )}
           <span className="text-[15px] font-extrabold text-gray-800">
-            {formatINR(property.price)}
+            {formatINR(perNightAllIn ?? fromAllInNightly(property.price, property.priceWeekend))}
           </span>
-          <span className="text-[12px] text-gray-400">/night</span>
+          <span className="text-[12px] text-gray-400">/night all-in</span>
           {nights > 0 && (
             <span className="text-[12px] text-gray-500 ml-2 font-medium">
               · for {nights} night{nights !== 1 ? "s" : ""}
@@ -1908,6 +1914,7 @@ export default function PropertyDetailsPage({ initialRow }: { initialRow?: any }
   const [descExpanded, setDescExpanded] = useState(false);
   const [stickyBar, setStickyBar] = useState(false);
   const [barNights, setBarNights] = useState(0);
+  const [barPerNight, setBarPerNight] = useState<number | null>(null);
   const [barGuests, setBarGuests] = useState(1);
   const galleryRef = useRef<HTMLDivElement>(null);
 
@@ -2060,6 +2067,7 @@ export default function PropertyDetailsPage({ initialRow }: { initialRow?: any }
       <StickyBookingBar
         property={property}
         nights={barNights}
+        perNightAllIn={barPerNight}
         guests={barGuests}
         onReserve={() =>
           document.getElementById("availability")?.scrollIntoView({ behavior: "smooth", block: "start" })
@@ -2341,6 +2349,7 @@ export default function PropertyDetailsPage({ initialRow }: { initialRow?: any }
             <BookingWidget
               property={property}
               onNightsChange={setBarNights}
+              onPerNightChange={setBarPerNight}
               onGuestsChange={setBarGuests}
               selectedAddonIds={selectedAddonIds}
             />
