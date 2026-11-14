@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useListingState } from "@/context/ListingFilterContext";
 import { useWishlist } from "@/hooks/useWishlist";
 import { allInNightlyPrice } from "@/lib/billing/invoice";
+import { fromAllInNightly, quoteStay } from "@/lib/billing/stayQuote";
 import { cn, toISODate } from "@/lib/utils";
 import type { Property } from "@/types";
 import { Car, Coffee, Heart, Star, Wifi } from "lucide-react";
@@ -33,9 +34,21 @@ export default function PropertyCardList({ property }: PropertyCardListProps) {
         )
       : null;
   const totalGuests = guests.adults + guests.children;
-  // All-in price for one night, same math as the checkout invoice.
-  const allInPerNight = allInNightlyPrice(property.price);
-  const feesAndTaxes = Math.max(0, Math.round((allInPerNight - property.price) * 100) / 100);
+  // All-in price from the same math as checkout. With dates chosen it is the
+  // real average per night for those dates (Fri/Sat nights bill at the weekend
+  // rate); with no dates it is a "from" price, because the rate depends on the
+  // night.
+  const stay = quoteStay({
+    checkIn: dates.checkIn ?? null,
+    checkOut: dates.checkOut ?? null,
+    priceWeekday: property.price,
+    priceWeekend: property.priceWeekend,
+  });
+  const hasStay = stay.nights > 0;
+  const allInPerNight = hasStay ? stay.perNight : fromAllInNightly(property.price, property.priceWeekend);
+  const feesAndTaxes = hasStay
+    ? stay.taxesAndFeesPerNight
+    : Math.max(0, Math.round((allInPerNight - Math.min(property.price, property.priceWeekend ?? property.price)) * 100) / 100);
   const { isAuthenticated, userId } = useAuth();
   const { isSaved } = useWishlist(userId);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -203,6 +216,9 @@ export default function PropertyCardList({ property }: PropertyCardListProps) {
                 {totalGuests === 1 ? "" : "s"}
               </p>
             )}
+            {!hasStay && (
+              <p className="text-[11px] text-figma-ink/50 font-medium">From</p>
+            )}
             {property.originalPrice && (
               <p className="text-[13px] text-figma-ink/40 font-medium line-through mb-0.5">
                 {formatINR(allInNightlyPrice(property.originalPrice))}
@@ -222,6 +238,11 @@ export default function PropertyCardList({ property }: PropertyCardListProps) {
             <p className="text-[11px] text-figma-ink/50">
               per night, incl. {formatINR(feesAndTaxes)} taxes &amp; fees
             </p>
+            {hasStay && (
+              <p className="text-[11px] text-figma-ink/70 font-medium mt-0.5">
+                {formatINR(stay.total)} total for {stay.nights} night{stay.nights === 1 ? "" : "s"}
+              </p>
+            )}
           </div>
         </div>
       </div>
