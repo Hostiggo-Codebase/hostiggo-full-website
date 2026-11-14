@@ -118,7 +118,7 @@ export default function ProfileCompletionModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[480px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[480px] max-h-[90vh] overflow-y-auto bg-white text-gray-900">
         <DialogHeader>
           <DialogTitle>
             {missing.length === 0 ? 'Your profile is complete' : `${missing.length} step${missing.length > 1 ? 's' : ''} left to complete your profile`}
