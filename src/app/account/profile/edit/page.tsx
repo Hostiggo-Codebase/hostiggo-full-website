@@ -43,6 +43,21 @@ export default function EditProfilePage() {
     if (user) setForm(profileFormFromUser(user));
   }, [user]);
 
+  // Arriving from the profile-completion modal (?focus=gender etc.): scroll to
+  // and focus that field. window.location is used on purpose -- useSearchParams
+  // would force a Suspense boundary around this page.
+  useEffect(() => {
+    if (loading || !isAuthenticated) return;
+    const key = new URLSearchParams(window.location.search).get('focus');
+    if (!key || !/^[A-Za-z]+$/.test(key)) return;
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(`pf-${key}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el?.focus({ preventScroll: true });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [loading, isAuthenticated]);
+
   useEffect(() => {
     if (authIdentity.loaded) {
       setDob(authIdentity.dateOfBirth);
@@ -177,7 +192,8 @@ export default function EditProfilePage() {
                     <Camera className="w-12 h-12 text-gray-400" />
                   )}
                 </div>
-                <button 
+                <button
+                  id="pf-photo"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingPhoto}
                   className="absolute -bottom-[24.5px] left-1/2 -translate-x-1/2 flex items-center justify-center font-bold transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed z-10"
@@ -210,8 +226,9 @@ export default function EditProfilePage() {
 
                 <div className="space-y-6">
                   <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
-                    <input 
-                      type="text" 
+                    <input
+                      id="pf-name"
+                      type="text"
                       value={name}
                       onChange={(e) => setField('name')(e.target.value)}
                       maxLength={80}
@@ -226,8 +243,9 @@ export default function EditProfilePage() {
                     </label>
                   </div>
                   <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
-                    <input 
-                      type="email" 
+                    <input
+                      id="pf-email"
+                      type="email"
                       value={email}
                       onChange={(e) => setField('email')(e.target.value)}
                       autoComplete="email"
@@ -241,8 +259,9 @@ export default function EditProfilePage() {
                     </label>
                   </div>
                   <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
-                    <input 
-                      type="tel" 
+                    <input
+                      id="pf-phone"
+                      type="tel"
                       value={phone}
                       onChange={(e) => setField('phone')(e.target.value)}
                       autoComplete="tel"
@@ -258,6 +277,7 @@ export default function EditProfilePage() {
                   </div>
                   <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
                     <input
+                      id="pf-dateOfBirth"
                       type="date"
                       value={dob}
                       onChange={(e) => setDob(e.target.value)}
@@ -271,6 +291,7 @@ export default function EditProfilePage() {
                   </div>
                   <div className="relative w-full h-[60px] bg-white border border-[#B8B8B8] rounded-[16px] focus-within:border-[#004772] focus-within:ring-1 focus-within:ring-[#004772] transition-colors">
                     <select
+                      id="pf-gender"
                       value={gender}
                       onChange={(e) => setGender(e.target.value)}
                       className="peer w-full h-full bg-transparent px-5 pt-6 pb-1 text-[15px] font-medium text-gray-900 outline-none z-10 relative"

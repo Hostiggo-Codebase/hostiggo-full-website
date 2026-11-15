@@ -6,7 +6,6 @@ const full = {
   email: "a@b.com",
   emailVerified: true,
   phone: "+919876543210",
-  phoneVerified: true,
   dateOfBirth: "2000-01-01",
   gender: "Male",
   photoUrl: "https://x/p.png",
@@ -18,14 +17,15 @@ describe("getProfileCompletion (mirrors the app)", () => {
   });
 
   it("lists exactly what is left", () => {
-    const r = getProfileCompletion({ ...full, gender: "", photoUrl: null, phoneVerified: false });
+    const r = getProfileCompletion({ ...full, gender: "", photoUrl: null, phone: "" });
     expect(r.percentage).toBe(50);
     expect(r.missing.map((m) => m.key)).toEqual(["phone", "gender", "photo"]);
-    expect(r.missing[0].todo).toMatch(/in the Hostiggo app/);
+    expect(r.missing[0].todo).toBe("Add your phone number.");
   });
 
-  it("requires verified email and phone, not just filled in", () => {
+  it("requires a verified email; a saved phone counts without verification", () => {
     expect(getProfileCompletion({ ...full, emailVerified: false }).percentage).toBe(83);
+    expect(getProfileCompletion(full).missing).toEqual([]);
   });
 });
 
