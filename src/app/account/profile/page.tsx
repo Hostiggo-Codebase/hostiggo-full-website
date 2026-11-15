@@ -256,20 +256,11 @@ export default function GuestProfilePage() {
         )}
       </main>
 
-      {userId && (
-        <ProfileCompletionModal
-          open={completionOpen}
-          onOpenChange={setCompletionOpen}
-          userId={userId}
-          completion={completionInput}
-          uploadingPhoto={uploadingPhoto}
-          onPickPhoto={() => fileInputRef.current?.click()}
-          onSaved={async () => {
-            authIdentity.refresh();
-            await refresh();
-          }}
-        />
-      )}
+      <ProfileCompletionModal
+        open={completionOpen}
+        onOpenChange={setCompletionOpen}
+        completion={completionInput}
+      />
     </div>
   );
 }
