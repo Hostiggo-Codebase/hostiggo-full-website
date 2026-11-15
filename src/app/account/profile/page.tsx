@@ -38,12 +38,11 @@ export default function GuestProfilePage() {
       email: user?.email,
       emailVerified: authIdentity.emailVerified,
       phone: user?.phone,
-      phoneVerified: authIdentity.phoneVerified,
       dateOfBirth: authIdentity.dateOfBirth,
       gender: authIdentity.gender,
       photoUrl: user?.profile_pic_url,
     }),
-    [user, authIdentity.emailVerified, authIdentity.phoneVerified, authIdentity.dateOfBirth, authIdentity.gender],
+    [user, authIdentity.emailVerified, authIdentity.dateOfBirth, authIdentity.gender],
   );
   const { percentage, missing } = useMemo(() => getProfileCompletion(completionInput), [completionInput]);
 

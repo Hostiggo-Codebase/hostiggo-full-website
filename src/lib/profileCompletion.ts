@@ -2,14 +2,15 @@
  * Profile completion -- the SAME rule as the mobile app
  * (hostiggo-frontend/src/hooks/useProfile.ts `calculateCompletionPercentage`).
  * Six equally weighted items; ID (KYC) verification and emergency contact are
- * deliberately NOT part of it. Keep the two in sync.
+ * deliberately NOT part of it. One deliberate difference: on the web the user
+ * only ENTERS a phone number -- OTP verification happens in the app -- so a
+ * saved phone counts as done here (the app also requires it to be confirmed).
  */
 export type CompletionInput = {
   name?: string | null;
   email?: string | null;
   emailVerified: boolean;
   phone?: string | null;
-  phoneVerified: boolean;
   dateOfBirth?: string | null;
   gender?: string | null;
   photoUrl?: string | null;
@@ -41,10 +42,7 @@ export function getProfileCompletion(input: CompletionInput): {
   }
 
   if (!input.phone?.trim()) {
-    missing.push({ key: 'phone', label: 'Phone number', todo: 'Add your phone number here, then verify it in the Hostiggo app.' });
-  } else if (!input.phoneVerified) {
-    // Phone OTP verification is done only in the mobile app, never on the web.
-    missing.push({ key: 'phone', label: 'Phone number', todo: 'Verify your phone number in the Hostiggo app.' });
+    missing.push({ key: 'phone', label: 'Phone number', todo: 'Add your phone number.' });
   }
 
   if (!input.dateOfBirth?.trim()) {

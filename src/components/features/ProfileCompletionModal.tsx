@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, CheckCircle2, Circle, Smartphone } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Circle } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getProfileCompletion, type CompletionInput, type CompletionTodo } from '@/lib/profileCompletion';
 
@@ -23,13 +23,12 @@ type Props = {
 /**
  * "What is left" for the profile-completion bar. Every missing item has a
  * button that opens the page where it is fixed (the edit page, scrolled to and
- * focused on that field via ?focus=). Phone OTP verification is app-only, so a
- * saved-but-unverified phone gets a "verify in the app" note instead of a link.
+ * focused on that field via ?focus=). The web only collects the phone number;
+ * OTP verification happens in the app and is not asked for here.
  */
 export default function ProfileCompletionModal({ open, onOpenChange, completion }: Props) {
   const { missing, percentage } = getProfileCompletion(completion);
   const todoFor = (key: string) => missing.find((m) => m.key === key)?.todo;
-  const phoneNeedsApp = Boolean(completion.phone?.trim()) && !completion.phoneVerified;
   const emailNeedsAdd = !completion.email?.trim();
 
   return (
@@ -49,7 +48,7 @@ export default function ProfileCompletionModal({ open, onOpenChange, completion 
         <ul className="divide-y divide-gray-100">
           {ITEMS.map(({ key, label, cta }) => {
             const isMissing = missing.some((m) => m.key === key);
-            const appOnly = (key === 'phone' && phoneNeedsApp) || (key === 'email' && !emailNeedsAdd);
+            const appOnly = key === 'email' && !emailNeedsAdd;
             return (
               <li key={key} className="flex items-start gap-3 py-3.5">
                 {isMissing ? (
@@ -62,11 +61,7 @@ export default function ProfileCompletionModal({ open, onOpenChange, completion 
                   <p className="text-[13px] text-gray-500">{isMissing ? todoFor(key) : 'Done'}</p>
                 </div>
                 {isMissing &&
-                  (key === 'phone' && phoneNeedsApp ? (
-                    <span className="mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600">
-                      <Smartphone className="h-3.5 w-3.5" /> In the app
-                    </span>
-                  ) : appOnly ? (
+                  (appOnly ? (
                     <Link
                       href={`/account/profile/edit?focus=${key}`}
                       className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-sm font-bold text-[#0396EF] hover:underline"
