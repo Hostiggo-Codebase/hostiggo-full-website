@@ -1,4 +1,5 @@
 import { formatINR, REFUND_ARRIVAL_NOTE } from '@/lib/format';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import { supabaseAdmin } from "../supabase-admin";
 import { todayInIndia } from "@/lib/booking-config";
 import { SCHEMA } from "../schema.constants";
@@ -1091,8 +1092,12 @@ async function noticeRequestEnded(
   refundStatus: "processed" | "failed",
 ) {
   const ctx = await requestContext(booking);
-  void refundStatus; // guests see the same "in process" message either way
-  const refundLine = `Your full refund of ${ctx.amount} is in process and will be sent to your account automatically. ${REFUND_ARRIVAL_NOTE}`;
+  // Be honest when Razorpay refused the refund: it is being retried automatically
+  // (retryFailedRequestRefunds), but the guest should not be told it is already on its way.
+  const refundLine =
+    refundStatus === "failed"
+      ? `Your full refund of ${ctx.amount} is taking longer than usual. We are retrying it automatically and our team has been alerted, so there is nothing you need to do. If it has not reached you within 3 working days, write to ${SUPPORT_EMAIL}.`
+      : `Your full refund of ${ctx.amount} is in process and will be sent to your account automatically. ${REFUND_ARRIVAL_NOTE}`;
   const copy = {
     declined: {
       guest: `The host declined your request for ${ctx.title} (${ctx.dates}). ${refundLine}`,
@@ -1287,6 +1292,93 @@ export async function sweepBookingRequests() {
     } catch (err) {
       result.errors++;
       console.error(`[sweepBookingRequests] booking ${row.booking_id} failed:`, err);
+    }
+  }
+  return result;
+}
+
+// Automatic retry of refunds Razorpay refused when a request was cancelled
+// (declined / expired / withdrawn / dates gone). Only requests that were never
+// confirmed: they are always a full refund with no transfer to reverse.
+// Attempts are counted on manual_settlement_flags (one row per failure, the first
+// written by refundAndCancelRequest) and back off 10m, 20m, 40m ... so a refund
+// Razorpay keeps refusing does not hammer it or spam ops; after
+// REFUND_RETRY_MAX_ATTEMPTS ops get one final critical alert and it is left for a
+// manual refund. retryFailedRefund looks for an existing live refund first, so a
+// retry can never pay the guest twice.
+const REFUND_RETRY_MAX_ATTEMPTS = 6;
+const REFUND_RETRY_FIRST_DELAY_MS = 10 * 60 * 1000;
+const REFUND_RETRY_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+
+export async function retryFailedRequestRefunds() {
+  const result = { due: 0, refunded: 0, failed: 0, gaveUp: 0, errors: 0 };
+  const since = new Date(Date.now() - REFUND_RETRY_LOOKBACK_MS).toISOString();
+  const { data: rows, error } = await supabaseAdmin
+    .from("bookings")
+    .select("booking_id, cancelled_at")
+    .eq("status_id", 3)
+    .eq("refund_status", "failed")
+    .not("razorpay_payment_id", "is", null)
+    .is("paid_at", null)
+    .gt("cancelled_at", since)
+    .limit(50);
+  if (error) throw error;
+  if (!rows?.length) return result;
+
+  const { retryFailedRefund, CancellationValidationError } = await import("../billing/cancelBooking");
+
+  for (const row of rows as { booking_id: number; cancelled_at: string | null }[]) {
+    try {
+      const { data: flags, error: flagErr } = await supabaseAdmin
+        .from("manual_settlement_flags")
+        .select("id, flagged_at")
+        .eq("booking_id", row.booking_id)
+        .is("resolved_at", null);
+      if (flagErr) throw flagErr;
+      const attempts = flags?.length ?? 0;
+      if (attempts >= REFUND_RETRY_MAX_ATTEMPTS) continue;
+
+      const lastAt = Math.max(
+        Date.parse(row.cancelled_at ?? "") || 0,
+        ...((flags ?? []).map((f: any) => Date.parse(f.flagged_at) || 0)),
+      );
+      const delay = REFUND_RETRY_FIRST_DELAY_MS * 2 ** Math.max(attempts - 1, 0);
+      if (Date.now() - lastAt < delay) continue;
+
+      result.due++;
+      try {
+        await retryFailedRefund({ bookingId: row.booking_id });
+        result.refunded++;
+        await supabaseAdmin
+          .from("manual_settlement_flags")
+          .update({ resolved_at: new Date().toISOString() })
+          .eq("booking_id", row.booking_id)
+          .is("resolved_at", null);
+      } catch (err) {
+        // Someone else (the guest's button, ops) is already handling it, or it is no longer failed.
+        if (err instanceof CancellationValidationError) continue;
+        result.failed++;
+        const message = err instanceof Error ? err.message : "unknown error";
+        console.error(`[retryFailedRequestRefunds] booking ${row.booking_id} attempt ${attempts + 1} failed:`, err);
+        await supabaseAdmin.from("manual_settlement_flags").insert({
+          booking_id: row.booking_id,
+          reason: `Automatic refund retry ${attempts + 1} of ${REFUND_RETRY_MAX_ATTEMPTS} failed at Razorpay: ${message}`,
+          flagged_at: new Date().toISOString(),
+        });
+        if (attempts + 1 >= REFUND_RETRY_MAX_ATTEMPTS) {
+          result.gaveUp++;
+          const { sendAdminAlert } = await import("./adminAlerts");
+          await sendAdminAlert({
+            severity: "critical",
+            category: "payment",
+            message: `Refund for cancelled booking request #${row.booking_id} still failing after ${REFUND_RETRY_MAX_ATTEMPTS} automatic attempts -- refund the guest manually.`,
+            details: { bookingId: row.booking_id },
+          });
+        }
+      }
+    } catch (err) {
+      result.errors++;
+      console.error(`[retryFailedRequestRefunds] booking ${row.booking_id} failed:`, err);
     }
   }
   return result;

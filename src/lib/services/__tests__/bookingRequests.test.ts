@@ -12,6 +12,8 @@ const h = vi.hoisted(() => ({
   alerts: [] as any[],
   transfers: [] as any[],
   seq: 0,
+  retries: [] as number[],
+  retryFail: false,
 }));
 
 vi.mock("@/lib/supabase-admin", () => ({
@@ -31,6 +33,17 @@ vi.mock("@/lib/billing/razorpay", () => ({
     if (h.refundFail) throw new Error("razorpay down");
     h.refunds.push(p);
     return { id: `rfnd_${h.refunds.length}` };
+  },
+}));
+vi.mock("@/lib/billing/cancelBooking", () => ({
+  CancellationValidationError: class CancellationValidationError extends Error {},
+  // Stands in for the real retry: marks the refund processed unless told to fail.
+  retryFailedRefund: async ({ bookingId }: any) => {
+    h.retries.push(bookingId);
+    if (h.retryFail) throw new Error("razorpay still down");
+    const row = h.db.table("bookings").find((b: any) => b.booking_id === bookingId);
+    row.refund_status = "processed";
+    return { bookingId };
   },
 }));
 vi.mock("@/lib/billing/razorpayRoute", () => ({
@@ -78,6 +91,7 @@ import {
   cancelPendingRequestIfAny,
   finalizeBookingFromRazorpayOrder,
   respondToBookingRequest,
+  retryFailedRequestRefunds,
   sweepBookingRequests,
   validateAndPriceBooking,
   withdrawBookingRequest,
@@ -129,6 +143,8 @@ beforeEach(() => {
   h.alerts.length = 0;
   h.transfers.length = 0;
   h.seq = 0;
+  h.retries.length = 0;
+  h.retryFail = false;
   const listing = {
     host_uuid: "h1",
     price_weekday: 1000,
@@ -456,5 +472,88 @@ describe("sweep", () => {
     h.db.client.from = orig;
     expect(res.errors + res.expired).toBeGreaterThanOrEqual(1);
     expect([a, b].map((x) => byId(x).status_id)).toContain(3);
+  });
+});
+
+
+describe("automatic retry of refunds Razorpay refused", () => {
+  /** A declined request whose refund failed at Razorpay (1 settlement flag, as in production). */
+  async function declinedWithFailedRefund() {
+    const id = await paid();
+    h.refundFail = true;
+    await respond(id, "reject");
+    h.refundFail = false;
+    expect(byId(id)).toMatchObject({ status_id: 3, refund_status: "failed" });
+    return id;
+  }
+  const flags = (id: number) => (h.db.table("manual_settlement_flags") as any[]).filter((f) => f.booking_id === id);
+
+  it("retries after 10 minutes, refunds the guest and clears the flags", async () => {
+    const id = await declinedWithFailedRefund();
+    advance(11 * MIN);
+    const res = await retryFailedRequestRefunds();
+    expect(res).toMatchObject({ due: 1, refunded: 1, failed: 0 });
+    expect(h.retries).toEqual([id]);
+    expect(byId(id).refund_status).toBe("processed");
+    expect(flags(id).every((f) => f.resolved_at)).toBe(true);
+    // Done: a later tick does not touch it again.
+    advance(HOUR);
+    expect((await retryFailedRequestRefunds()).due).toBe(0);
+  });
+
+  it("waits out the back-off instead of retrying on every tick", async () => {
+    await declinedWithFailedRefund();
+    advance(5 * MIN);
+    expect((await retryFailedRequestRefunds()).due).toBe(0);
+    expect(h.retries).toHaveLength(0);
+  });
+
+  it("backs off after a failed attempt and tells ops once when it gives up", async () => {
+    const id = await declinedWithFailedRefund();
+    h.retryFail = true;
+    let delay = 10 * MIN;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      advance(delay + MIN);
+      const res = await retryFailedRequestRefunds();
+      expect(res).toMatchObject({ due: 1, failed: 1 });
+      expect(flags(id)).toHaveLength(attempt + 1);
+      // Too soon for the next one.
+      advance(MIN);
+      expect((await retryFailedRequestRefunds()).due).toBe(0);
+      delay *= 2;
+    }
+    expect(h.retries).toHaveLength(5);
+    expect(byId(id).refund_status).toBe("failed");
+    expect(h.alerts.filter((a) => /manually/.test(a.message))).toHaveLength(1);
+    // Six failures recorded: it stops here for good.
+    advance(24 * HOUR);
+    expect((await retryFailedRequestRefunds()).due).toBe(0);
+    expect(h.retries).toHaveLength(5);
+  });
+
+  it("leaves confirmed-then-cancelled bookings and finished refunds alone", async () => {
+    const id = await declinedWithFailedRefund();
+    byId(id).paid_at = new Date().toISOString(); // was a real, confirmed stay: policy refund, not this job
+    advance(HOUR);
+    expect((await retryFailedRequestRefunds()).due).toBe(0);
+    const other = await paid("g2", 1, otherStay);
+    await respond(other, "reject"); // refund succeeded
+    advance(HOUR);
+    expect((await retryFailedRequestRefunds()).due).toBe(0);
+    expect(h.retries).toHaveLength(0);
+  });
+
+  it("tells the guest the truth when the refund failed, and the normal message when it did not", async () => {
+    await declinedWithFailedRefund();
+    const failedMsg = h.notified.find((n) => n.userId === "g1" && n.title === "Request declined")!.message;
+    expect(failedMsg).toMatch(/taking longer than usual/);
+    expect(failedMsg).toMatch(/retrying it automatically/);
+    expect(failedMsg).not.toMatch(/will be sent to your account automatically/);
+
+    h.notified.length = 0;
+    const ok = await paid("g2", 1, otherStay);
+    await respond(ok, "reject");
+    const okMsg = h.notified.find((n) => n.userId === "g2" && n.title === "Request declined")!.message;
+    expect(okMsg).toMatch(/in process and will be sent to your account automatically/);
   });
 });
