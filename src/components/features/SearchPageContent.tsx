@@ -25,7 +25,7 @@ type ViewMode = 'list' | 'map' | 'split';
 
 export default function SearchPageContent() {
   const searchParams = useSearchParams();
-  const { properties, loading, error, pagination, filters, sort, location, counts, dates, guests } =
+  const { properties, loading, error, pagination, filters, sort, location, counts, dates, guests, nearby } =
     useListingState();
   const router = useRouter();
   const pathname = usePathname();
@@ -245,6 +245,9 @@ export default function SearchPageContent() {
                   onHover={setHoveredId}
                   resetFilters={clearFilters}
                   totalCount={counts.total}
+                  nearby={nearby}
+                  place={displayDest}
+                  onPickPlace={(query, state) => setLocation({ query, state })}
                 />
               </div>
             </div>
@@ -335,6 +338,44 @@ interface ListResultsProps {
   resetFilters: () => void;
   loading: boolean;
   totalCount: number;
+  nearby: { place: string; radiusKm: number | null; exactCount: number; nearbyCount: number } | null;
+  place: string;
+  onPickPlace: (query: string, state?: string) => void;
+}
+
+/** Places that do have live stays, offered when a search comes up empty. */
+function PopularPlaces({ onPick }: { onPick: (query: string, state?: string) => void }) {
+  const [places, setPlaces] = useState<{ district?: string | null; state?: string | null }[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/locations?popular=1&limit=8')
+      .then((r) => r.json())
+      .then((j) => alive && setPlaces(Array.isArray(j?.data) ? j.data : []))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const shown = places.filter((p) => p.district).slice(0, 8);
+  if (!shown.length) return null;
+  return (
+    <div className="mt-5">
+      <p className="text-sm font-semibold text-gray-600 mb-3">Popular places with stays</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {shown.map((p) => (
+          <button
+            key={`${p.district}-${p.state}`}
+            type="button"
+            onClick={() => onPick(p.district as string, p.state ?? undefined)}
+            className="px-4 py-2 rounded-full bg-figma-navy/5 border border-figma-navy/20 text-sm font-medium text-figma-navy hover:bg-figma-navy/10 transition-colors"
+          >
+            {p.district}
+            {p.state ? <span className="text-figma-navy/60">, {p.state}</span> : null}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ListResults({
@@ -347,6 +388,9 @@ function ListResults({
   resetFilters,
   loading,
   totalCount,
+  nearby,
+  place,
+  onPickPlace,
 }: ListResultsProps) {
   const sentinelRef = useInfiniteScroll(onLoadMore, hasMore, loading, {
     threshold: 0.5,
@@ -393,10 +437,12 @@ function ListResults({
       >
         <div className="text-5xl mb-4">🏨</div>
         <h3 className="text-lg font-bold text-gray-700 mb-2">
-          No properties found
+          {nearby ? `No stays in ${nearby.place} or within ${nearby.radiusKm ?? 200} km yet` : 'No properties found'}
         </h3>
         <p className="text-gray-400 text-sm mb-4">
-          Try adjusting your filters or search for a different destination.
+          {nearby
+            ? 'We are adding new places all the time. In the meantime, try one of these, or loosen your filters.'
+            : 'Try adjusting your filters or search for a different destination.'}
         </p>
         <button
           onClick={resetFilters}
@@ -404,12 +450,26 @@ function ListResults({
         >
           Clear all filters
         </button>
+        <PopularPlaces onPick={onPickPlace} />
       </div>
     );
   }
 
+  const firstNearbyId = paginated.find((p) => p.isNearby)?.id;
+  const nearbyPlace = nearby?.place || place;
+
   return (
     <>
+      {nearby && nearby.nearbyCount > 0 && (
+        <div
+          role="status"
+          className="mb-4 rounded-xl border border-figma-navy/20 bg-figma-navy/5 px-4 py-3 text-sm text-figma-navy"
+        >
+          {nearby.exactCount === 0
+            ? `We don’t have stays in ${nearbyPlace} yet. Here ${nearby.nearbyCount === 1 ? 'is 1 stay' : `are ${nearby.nearbyCount} stays`} within ${nearby.radiusKm} km.`
+            : `${nearby.exactCount === 1 ? 'Only 1 stay' : `Only ${nearby.exactCount} stays`} in ${nearbyPlace}. We added ${nearby.nearbyCount} more within ${nearby.radiusKm} km.`}
+        </div>
+      )}
       <div className="space-y-3">
         {paginated.map((p) => (
           <div
@@ -417,6 +477,9 @@ function ListResults({
             onMouseEnter={() => onHover(p.id)}
             onMouseLeave={() => onHover(null)}
           >
+            {p.id === firstNearbyId && nearby && nearby.exactCount > 0 && (
+              <h3 className="mt-2 mb-3 text-base font-bold text-gray-700">Stays near {nearbyPlace}</h3>
+            )}
             <PropertyCardList property={p} />
           </div>
         ))}
