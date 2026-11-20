@@ -64,6 +64,10 @@ export interface Property {
   isFavorite?: boolean;
   isNew?: boolean;
   distanceFromCenter?: string;
+  /** True for a stay outside the searched place, shown because it is nearby. */
+  isNearby?: boolean;
+  /** The place the guest searched for, when this stay is a nearby result. */
+  nearbyFrom?: string;
   isInstantBook?: boolean;
   freeCancellation?: boolean;
   cancellationPolicy?: "flexible" | "moderate" | "strict";

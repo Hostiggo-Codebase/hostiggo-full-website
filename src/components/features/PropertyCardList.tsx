@@ -178,7 +178,9 @@ export default function PropertyCardList({ property }: PropertyCardListProps) {
           <p className="text-[14px] text-figma-ink/60 font-medium line-clamp-1 mb-3">
             {property.city}, {property.state}
             {property.distanceFromCenter
-              ? ` · ${property.distanceFromCenter} from centre`
+              ? property.isNearby && property.nearbyFrom
+                ? ` · ${property.distanceFromCenter} from ${property.nearbyFrom}`
+                : ` · ${property.distanceFromCenter} from centre`
               : ""}
           </p>
 

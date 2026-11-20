@@ -230,7 +230,13 @@ export function mapListingToProperty(input: any): Property {
     isFavorite: Boolean(row.isFavorite),
     isNew: Boolean(row.is_new),
     distanceFromCenter:
-      typeof input?.distance === "number" ? `${(input.distance / 1000).toFixed(1)} km` : row.distance,
+      typeof input?.distance === "number"
+        ? input.distance >= 10_000
+          ? `${Math.round(input.distance / 1000)} km`
+          : `${(input.distance / 1000).toFixed(1)} km`
+        : row.distance,
+    isNearby: input?.nearby === true,
+    nearbyFrom: typeof input?.nearbyFrom === "string" ? input.nearbyFrom : undefined,
     isInstantBook: row.booking_mode !== "manual",
     freeCancellation: Boolean(row.freeCancellation),
     cancellationPolicy: (row.cancellation_policy ?? "moderate") as Property["cancellationPolicy"],
@@ -801,6 +807,8 @@ export const api = {
       hasMore: boolean;
       totalCount: number | null;
       stateBounds?: any;
+      /** Set when the place had few or no stays and nearby ones were added. */
+      nearby?: { place: string; radiusKm: number | null; exactCount: number; nearbyCount: number };
       error?: string;
     };
     if (!res.ok || result.error) {
