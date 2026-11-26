@@ -3,6 +3,7 @@ import { supabase, supabaseCacheable } from '../supabase';
 import { todayInIndia } from "@/lib/booking-config";
 import { supabaseAdmin } from '../supabase-admin';
 import { resolveDestinationAlias } from '../destinationAliases';
+import { closestName, lookupPlace } from '../gazetteer';
 import {
   MIN_FUZZY_TERM_LENGTH,
   mergeScopePages,
@@ -41,6 +42,50 @@ export type ListingRow = {
     | { media_url?: string | null; is_cover?: boolean | null }[]
     | null;
 };
+
+// Districts and states that currently have at least one live stay (small list,
+// cached briefly) -- used to forgive typos and to keep suggestions honest.
+let liveNamesCache: { at: number; states: string[]; districts: string[] } | null = null;
+const LIVE_NAMES_TTL_MS = 60_000;
+
+async function liveSearchNames(): Promise<{ states: string[]; districts: string[] }> {
+  if (liveNamesCache && Date.now() - liveNamesCache.at < LIVE_NAMES_TTL_MS) return liveNamesCache;
+  const { data, error } = await supabase
+    .from('listings')
+    .select('locations!inner(state, district)')
+    .eq('is_active', true)
+    .limit(2000);
+  if (error) {
+    console.error('[liveSearchNames] failed:', error.message);
+    return liveNamesCache ?? { states: [], districts: [] };
+  }
+  const states = new Set<string>();
+  const districts = new Set<string>();
+  for (const r of (data ?? []) as any[]) {
+    const loc = Array.isArray(r.locations) ? r.locations[0] : r.locations;
+    if (loc?.state) states.add(String(loc.state).trim());
+    if (loc?.district) districts.add(String(loc.district).trim());
+  }
+  liveNamesCache = { at: Date.now(), states: [...states], districts: [...districts] };
+  return liveNamesCache;
+}
+
+/** Keeps only locations that have at least one live (active) listing. */
+async function keepLiveLocations<T extends { location_id: number }>(rows: T[]): Promise<T[]> {
+  if (!rows.length) return rows;
+  const { data, error } = await supabase
+    .from('listings')
+    .select('location_id')
+    .eq('is_active', true)
+    .in('location_id', rows.map((r) => r.location_id));
+  if (error) {
+    // Better a possibly-empty suggestion than none at all if this check fails.
+    console.error('[keepLiveLocations] failed:', error.message);
+    return rows;
+  }
+  const live = new Set((data ?? []).map((r: any) => r.location_id));
+  return rows.filter((r) => live.has(r.location_id));
+}
 
 export const HotelServiceApi = {
   // Only reached via the unstable_cache-wrapped getCachedHotelsTeaser
@@ -289,9 +334,13 @@ export const HotelServiceApi = {
     if (state) return [{ state, district }];
 
     const typed = district;
+    // Old names and alternate spellings ("Orissa", "Bombay") map to the name the
+    // locations table uses. Added AFTER what was typed, so a real place is never
+    // overridden -- the canonical name is only tried when the typed one matches nothing.
+    const canonical = lookupPlace(typed.split(',')[0])?.name;
     const terms = [
       ...new Set(
-        [typed, typed.split(',')[0]]
+        [typed, typed.split(',')[0], canonical ?? '']
           .map(sanitizeSearchTerm)
           .filter((t) => t.length > 0),
       ),
@@ -356,6 +405,16 @@ export const HotelServiceApi = {
         })),
       );
       if (matched.length) return matched;
+    }
+
+    // Misspelling of a place we DO have stays in ("Bhopl", "Gurugam"): match it
+    // to the closest live district or state, within a small typo budget.
+    const live = await liveSearchNames();
+    for (const term of terms) {
+      const guess = closestName(term, [...live.states, ...live.districts]);
+      if (!guess) continue;
+      if (live.states.some((s) => s.toLowerCase() === guess.toLowerCase())) return [{ state: guess, district: null }];
+      return [{ state: null, district: guess }];
     }
 
     return [{ state: null, district: typed }];
@@ -653,22 +712,37 @@ export const HotelServiceApi = {
     return data;
   },
 
+  // Destination suggestions. Only places with at least one live stay are
+  // offered: a suggestion that leads to "0 homestays" is a dead end. If the
+  // typed text matches nothing, retry with the place it most likely means
+  // (an old name or alias, or the closest spelling of a place we have stays in).
   searchLocations: async (searchTerm: string) => {
-    if (!searchTerm || !searchTerm.trim()) return [];
+    const term = searchTerm?.trim();
+    if (!term) return [];
 
-    const { data, error } = await supabase.rpc('search_locations_partial', {
-      search_term: searchTerm.trim(),
-    });
+    const run = async (t: string) => {
+      const { data, error } = await supabase.rpc('search_locations_partial', { search_term: t });
+      if (error) {
+        console.error('Search error (searchLocations - partial):', { error, searchTerm: t });
+        return [] as LocationRow[];
+      }
+      return ((data || []) as LocationRow[]).filter((r) => r?.location_id != null);
+    };
 
-    if (error) {
-      console.error('Search error (searchLocations - partial):', {
-        error,
-        searchTerm,
-      });
-      return [];
+    let rows = await keepLiveLocations(await run(term));
+    if (rows.length) return rows;
+
+    const alias = lookupPlace(term)?.name;
+    if (alias && alias.toLowerCase() !== term.toLowerCase()) {
+      rows = await keepLiveLocations(await run(alias));
+      if (rows.length) return rows;
     }
-
-    return data || [];
+    const live = await liveSearchNames();
+    const guess = closestName(term, [...live.districts, ...live.states]);
+    if (guess && guess.toLowerCase() !== term.toLowerCase()) {
+      rows = await keepLiveLocations(await run(guess));
+    }
+    return rows;
   },
 
   getUniqueRoomType: async () => {

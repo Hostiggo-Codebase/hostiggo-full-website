@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { HotelServiceApi } from "@/lib/services/hotel";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { lookupPlace } from "@/lib/gazetteer";
+import { NEARBY_MIN_EXACT, NEARBY_TARGET, centroid, pickNearby, type Point } from "@/lib/nearby";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +126,118 @@ const hasAmenity = (row: Row, needles: string[]) =>
     return needles.some((n) => name.includes(n));
   });
 
+/**
+ * Applies everything that narrows a candidate set beyond the place: dates
+ * (booked / blocked nights), stay type, cancellation, breakfast and amenity
+ * toggles -- and attaches the real rating, policy and age the cards and sorts
+ * need. Shared by the exact-place results and the nearby fallback pool, so a
+ * nearby stay always obeys the same filters the guest chose.
+ */
+async function prepareRows(all: Row[], filters: Record<string, any>): Promise<Row[]> {
+  let rows = all;
+  const ids = rows.map((r) => Number(r.listing?.listing_id)).filter(Number.isFinite);
+
+  if (filters.startDate && filters.endDate && ids.length) {
+    const taken = await unavailableIds(ids, String(filters.startDate), String(filters.endDate));
+    if (taken.size) rows = rows.filter((r) => !taken.has(Number(r.listing?.listing_id)));
+  }
+
+  const facts = ids.length ? await enrich(ids) : new Map();
+
+  // Refinements.
+  const stayTypes: string[] = (Array.isArray(filters.stayTypes) ? filters.stayTypes : []).map((s: string) =>
+    String(s).toLowerCase(),
+  );
+  if (filters.privateRoom) stayTypes.push("private room");
+  if (filters.sharedRoom) stayTypes.push("shared space");
+  if (stayTypes.length) {
+    rows = rows.filter((r) => {
+      const t = facts.get(Number(r.listing?.listing_id))?.stayType?.toLowerCase();
+      return !!t && stayTypes.includes(t);
+    });
+  }
+  if (filters.freeCancellation) {
+    // Flexible and Moderate both give a full refund if cancelled early enough.
+    rows = rows.filter((r) => {
+      const p = facts.get(Number(r.listing?.listing_id))?.policy ?? "moderate";
+      return p === "flexible" || p === "moderate";
+    });
+  }
+  if (filters.breakfast) rows = rows.filter((r) => facts.get(Number(r.listing?.listing_id))?.breakfast);
+  if (filters.wifi) rows = rows.filter((r) => hasAmenity(r, ["wifi", "wi-fi", "internet"]));
+  if (filters.parking) rows = rows.filter((r) => hasAmenity(r, ["parking"]));
+  if (filters.ac) rows = rows.filter((r) => hasAmenity(r, ["air condition", "a/c", " ac"]));
+
+  // Attach real rating/review count so cards and sorts use them.
+  for (const r of rows) {
+    const f = facts.get(Number(r.listing?.listing_id));
+    if (!f) continue;
+    r.listing.avg_rating = f.reviewCount ? f.ratingSum / f.reviewCount : 0;
+    r.listing.review_count = f.reviewCount;
+    r.listing.cancellation_policy = f.policy;
+    r.listing.created_at = f.createdAt;
+  }
+
+
+  return rows;
+}
+
+const listingPoint = (r: Row): Point | null => {
+  const lat = Number(r.listing?.latitude);
+  const lon = Number(r.listing?.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+};
+
+export interface NearbyNotice {
+  /** The place the guest searched for, as we understood it. */
+  place: string;
+  /** Radius needed to find the nearby stays; null when nothing is within the cap. */
+  radiusKm: number | null;
+  exactCount: number;
+  nearbyCount: number;
+}
+
+/**
+ * When the searched place has few (or no) stays, finds stays nearby by real
+ * distance (15 -> 200 km, smallest circle that supplies enough). The centre is
+ * the middle of the stays that matched; for a place with none, the place's own
+ * location from our list of Indian towns and states. Every filter the guest
+ * chose still applies. Returns null when the place can't be located at all.
+ */
+async function nearbyFallback(
+  exact: Row[],
+  filters: Record<string, any>,
+): Promise<{ rows: Row[]; notice: NearbyNotice } | null> {
+  const typed = String(filters.district || filters.state || "").trim();
+  if (!typed) return null;
+
+  const known = lookupPlace(String(filters.district ?? "").split(",")[0]) ?? lookupPlace(filters.state);
+  const place = known?.name ?? typed.split(",")[0].trim();
+  const ref: Point | null =
+    centroid(exact.map(listingPoint).filter((p): p is Point => !!p)) ?? (known ? { lat: known.lat, lon: known.lon } : null);
+  if (!ref) return null;
+
+  // Every stay that fits the guest's other filters, anywhere; then nearest first.
+  const { rows: pool } = await collectAll({ ...filters, state: undefined, district: undefined });
+  const have = new Set(exact.map((r) => Number(r.listing?.listing_id)));
+  const candidates = await prepareRows(
+    pool.filter((r) => !have.has(Number(r.listing?.listing_id))),
+    filters,
+  );
+  const pick = pickNearby(candidates, listingPoint, ref, Math.max(1, NEARBY_TARGET - exact.length));
+
+  const rows = pick.items.map(({ item, distanceKm }) => ({
+    ...item,
+    distance: Math.round(distanceKm * 1000), // metres, like the geo-sort rows
+    nearby: true,
+    nearbyFrom: place,
+  }));
+  return {
+    rows,
+    notice: { place, radiusKm: pick.radiusKm, exactCount: exact.length, nearbyCount: rows.length },
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
@@ -137,49 +251,7 @@ export async function POST(req: NextRequest) {
     const offset = Math.max(0, Math.floor(Number(body.cursor) || 0));
 
     const { rows: all, stateBounds } = await collectAll(filters);
-    let rows = all;
-    const ids = rows.map((r) => Number(r.listing?.listing_id)).filter(Number.isFinite);
-
-    if (filters.startDate && filters.endDate && ids.length) {
-      const taken = await unavailableIds(ids, String(filters.startDate), String(filters.endDate));
-      if (taken.size) rows = rows.filter((r) => !taken.has(Number(r.listing?.listing_id)));
-    }
-
-    const facts = ids.length ? await enrich(ids) : new Map();
-
-    // Refinements.
-    const stayTypes: string[] = (Array.isArray(filters.stayTypes) ? filters.stayTypes : []).map((s: string) =>
-      String(s).toLowerCase(),
-    );
-    if (filters.privateRoom) stayTypes.push("private room");
-    if (filters.sharedRoom) stayTypes.push("shared space");
-    if (stayTypes.length) {
-      rows = rows.filter((r) => {
-        const t = facts.get(Number(r.listing?.listing_id))?.stayType?.toLowerCase();
-        return !!t && stayTypes.includes(t);
-      });
-    }
-    if (filters.freeCancellation) {
-      // Flexible and Moderate both give a full refund if cancelled early enough.
-      rows = rows.filter((r) => {
-        const p = facts.get(Number(r.listing?.listing_id))?.policy ?? "moderate";
-        return p === "flexible" || p === "moderate";
-      });
-    }
-    if (filters.breakfast) rows = rows.filter((r) => facts.get(Number(r.listing?.listing_id))?.breakfast);
-    if (filters.wifi) rows = rows.filter((r) => hasAmenity(r, ["wifi", "wi-fi", "internet"]));
-    if (filters.parking) rows = rows.filter((r) => hasAmenity(r, ["parking"]));
-    if (filters.ac) rows = rows.filter((r) => hasAmenity(r, ["air condition", "a/c", " ac"]));
-
-    // Attach real rating/review count so cards and sorts use them.
-    for (const r of rows) {
-      const f = facts.get(Number(r.listing?.listing_id));
-      if (!f) continue;
-      r.listing.avg_rating = f.reviewCount ? f.ratingSum / f.reviewCount : 0;
-      r.listing.review_count = f.reviewCount;
-      r.listing.cancellation_policy = f.policy;
-      r.listing.created_at = f.createdAt;
-    }
+    const rows = await prepareRows(all, filters);
 
     const price = (r: Row) => Number(r.listing?.price_weekday ?? 0);
     const rating = (r: Row) => Number(r.listing?.avg_rating ?? 0);
@@ -216,13 +288,30 @@ export async function POST(req: NextRequest) {
         break; // RPC order
     }
 
-    const pageRows = sorted.slice(offset, offset + pageSize);
+    // Few or no stays in the searched place: add stays nearby, clearly marked,
+    // after the exact matches. A fallback failure must never break the search.
+    let ordered: Row[] = sorted;
+    let nearby: NearbyNotice | null = null;
+    if (sorted.length < NEARBY_MIN_EXACT && (filters.district || filters.state)) {
+      try {
+        const extra = await nearbyFallback(sorted, filters);
+        if (extra) {
+          ordered = [...sorted, ...extra.rows];
+          nearby = extra.notice;
+        }
+      } catch (err: any) {
+        console.error("[/api/search] nearby fallback failed:", err?.message);
+      }
+    }
+
+    const pageRows = ordered.slice(offset, offset + pageSize);
     const next = offset + pageRows.length;
     return NextResponse.json({
       data: pageRows,
-      cursor: next < sorted.length ? next : null,
-      hasMore: next < sorted.length,
-      totalCount: sorted.length,
+      cursor: next < ordered.length ? next : null,
+      hasMore: next < ordered.length,
+      totalCount: ordered.length,
+      ...(nearby ? { nearby } : {}),
       ...(stateBounds ? { stateBounds } : {}),
     });
   } catch (err: any) {

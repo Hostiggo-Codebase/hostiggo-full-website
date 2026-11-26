@@ -50,6 +50,8 @@ interface ListingState {
     west: number;
   } | null;
   allProperties: Property[];
+  /** Present when the searched place had few or no stays and nearby ones were added. */
+  nearby: { place: string; radiusKm: number | null; exactCount: number; nearbyCount: number } | null;
 }
 
 interface ListingActions {
@@ -169,6 +171,7 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [stateBounds, setStateBounds] = useState<any>(null);
+  const [nearby, setNearby] = useState<ListingState['nearby']>(null);
   const [amenityCatalogue, setAmenityCatalogue] = useState<
     { amenity_id: number; name: string }[]
   >([]);
@@ -254,6 +257,8 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
         // so drop the previous search's count and count what's loaded.
         if (response.totalCount != null) setTotalCount(response.totalCount);
         else if (cursorVal === null) setTotalCount(null);
+        if (response.nearby) setNearby(response.nearby);
+        else if (cursorVal === null) setNearby(null);
         if (response.stateBounds) {
           setStateBounds(response.stateBounds);
         }
@@ -437,6 +442,7 @@ export function ListingFilterProvider({ children }: { children: ReactNode }) {
     },
     stateBounds,
     allProperties,
+    nearby,
   };
 
   const actions: ListingActions = {
