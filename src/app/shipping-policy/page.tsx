@@ -12,7 +12,7 @@ const sections = [
   {
     id: "service-delivery",
     title: "2. How Your Booking Is Delivered",
-    body: `What Hostiggo delivers is a confirmed reservation, not a shipped item. As soon as payment for a booking is successfully processed, the reservation is confirmed instantly and a booking confirmation -- including the property address, host contact details, and check-in instructions -- is sent to the guest by email and made available in their Hostiggo account, typically within a few minutes of payment confirmation. The stay itself is provided by the host directly at the property on the scheduled check-in date.`,
+    body: `What Hostiggo delivers is a confirmed reservation, not a shipped item. After payment is successfully processed, the booking is confirmed, or, for properties that need host approval, once the host accepts it. Booking and property details are available in the guest's Hostiggo account, and the guest can contact the host about check-in. If an email address is on the account, a confirmation is also sent with the property name, dates, number of guests, amount paid, and booking reference. The stay itself is provided by the host directly at the property on the scheduled check-in date.`,
   },
   {
     id: "no-shipping-fees",
@@ -54,7 +54,7 @@ export default function ShippingPolicyPage() {
             Shipping Policy
           </h1>
           <p className="text-sm text-figma-ink/60 mb-6">
-            Last updated: August 26, 2026
+            Last updated: November 28, 2026
           </p>
           <p className="text-[15px] leading-7 text-figma-ink/80 max-w-3xl">
             Hostiggo connects guests with homestays and does not sell or ship
