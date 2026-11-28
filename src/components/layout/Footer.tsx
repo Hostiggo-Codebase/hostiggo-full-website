@@ -56,6 +56,7 @@ const footerSections: { title: string; links: FooterLink[] }[] = [
       { label: "Cancellation & refunds", href: "/cancellation" },
       { label: "Shipping policy", href: "/shipping-policy" },
       { label: "Cookie policy", href: "/cookies" },
+      { label: "Delete account", href: "/delete-account" },
     ],
   },
 ];
