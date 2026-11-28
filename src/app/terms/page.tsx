@@ -51,33 +51,38 @@ const sections = [
     body: `Users agree not to create fake accounts, misrepresent identity, engage in fraudulent transactions, manipulate payments, post false or misleading listings, harass or discriminate against other users, participate in illegal activities, bypass platform safeguards, scrape or copy platform content, or violate any intellectual property rights. Any such actions may result in immediate enforcement measures.`,
   },
   {
+    id: "user-content",
+    title: "9. User Content, Reporting & Blocking",
+    body: `Users can post messages, reviews, photos and listings. Hostiggo has zero tolerance for objectionable content or abusive behaviour, including content that is harassing, hateful, threatening, sexually explicit, violent, fraudulent or unlawful. In the Hostiggo mobile app, users can report another user or a review, and can block another user, which stops messages between them but does not cancel existing bookings. Reports can also be sent to support@hostiggo.com. Hostiggo reviews reports within 24 hours, may filter or remove content, and may suspend or permanently remove the account of a user who violates these Terms.`,
+  },
+  {
     id: "enforcement",
-    title: "9. Enforcement & Penalties",
+    title: "10. Enforcement & Penalties",
     body: `Hostiggo reserves the right, at its sole discretion, to investigate violations of these Terms and to take appropriate enforcement action, including account suspension, permanent termination, forfeiture of funds, and initiation of civil or criminal legal proceedings where applicable.`,
   },
   {
     id: "data-protection",
-    title: "10. Data Protection & Privacy",
+    title: "11. Data Protection & Privacy",
     body: `Hostiggo collects, processes, and protects personal data in accordance with the Digital Personal Data Protection Act, 2023, the Information Technology Act, 2000, and all other applicable Indian data protection laws. User data will not be shared with third parties without consent, except where disclosure is required by law or regulatory authorities.`,
   },
   {
     id: "intellectual-property",
-    title: "11. Intellectual Property Rights",
+    title: "12. Intellectual Property Rights",
     body: `All trademarks, logos, brand names, software, platform design, and proprietary content associated with Hostiggo are the exclusive intellectual property of Hostiggo and may not be copied, reproduced, modified, distributed, or used without prior written permission. By submitting any content to the platform, users grant Hostiggo a non-exclusive, worldwide, royalty-free license to use, display, distribute, modify, and reproduce such content for operational, promotional, and marketing purposes, and confirm that they have the legal rights to grant such license.`,
   },
   {
     id: "dispute-resolution",
-    title: "12. Dispute Resolution & Jurisdiction",
+    title: "13. Dispute Resolution & Jurisdiction",
     body: `These Terms and Conditions shall be governed by and construed in accordance with the laws of the Republic of India. All disputes arising from or relating to the use of Hostiggo shall be subject to the exclusive jurisdiction of the courts located in New Delhi, India. Users agree to first attempt resolution by contacting Hostiggo support before pursuing legal remedies.`,
   },
   {
     id: "amendments",
-    title: "13. Amendments",
+    title: "14. Amendments",
     body: `Hostiggo reserves the right to modify or update these Terms and Conditions at any time. Any changes shall become effective immediately upon publication on the platform. Continued use of Hostiggo following such updates constitutes acceptance of the revised terms.`,
   },
   {
     id: "support-contact",
-    title: "14. Support & Contact",
+    title: "15. Support & Contact",
     body: `For questions, support, or grievances related to the platform or these Terms and Conditions, users may contact Hostiggo Trips Private Limited at support@hostiggo.com or +91 84483 37674. The support team is available twenty-four (24) hours a day to assist with inquiries and concerns.
 
 Registered office: C-72, Plot H-584, Shivaji Park, Punjabi Bagh, West Delhi, New Delhi, Delhi, India – 110026.`,
@@ -107,7 +112,7 @@ export default function TermsPage() {
             Terms &amp; Conditions
           </h1>
           <p className="text-sm text-figma-ink/60">
-            Last updated: December 1, 2025
+            Last updated: November 28, 2026
           </p>
         </header>
 
